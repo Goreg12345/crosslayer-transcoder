@@ -178,3 +178,7 @@ clt
 wandb
 .vscode
 __pycache__
+
+
+# own dirs
+checkpoints/

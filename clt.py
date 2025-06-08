@@ -1,11 +1,13 @@
-import torch
+from typing import Tuple
+
 import lightning as L
+import torch
 import torch.nn as nn
 from einops import einsum
+from jaxtyping import Float
+
 from jumprelu import JumpReLU
 
-from typing import Tuple
-from jaxtyping import Float
 
 class CrossLayerTranscoder(L.LightningModule):
     def __init__(self, config, *args, **kwargs):
@@ -16,7 +18,7 @@ class CrossLayerTranscoder(L.LightningModule):
         d_acts = config.get("d_acts", 768)
         d_features = config.get("d_features", 768 * 8)
         n_layers = config.get("n_layers", 12)
-        self.bandwidth = config.get("bandwidth", 1.)
+        self.bandwidth = config.get("bandwidth", 1.0)
 
         # loss hyperparams:
         self._lambda = config.get("lambda", 0.1)
@@ -38,23 +40,36 @@ class CrossLayerTranscoder(L.LightningModule):
         enc_uniform_thresh = 1 / (self.config.get("d_features", 768 * 8) ** 0.5)
         self.W_enc.data.uniform_(-enc_uniform_thresh, enc_uniform_thresh)
 
-        dec_uniform_thresh = 1 / ((self.config.get("d_acts", 768) * self.config.get("n_layers", 12)) ** 0.5)
+        dec_uniform_thresh = 1 / (
+            (self.config.get("d_acts", 768) * self.config.get("n_layers", 12)) ** 0.5
+        )
         self.W_dec.data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
 
-
-
-    def forward(self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[Float[torch.Tensor, "batch_size n_layers d_features"], Float[torch.Tensor, "batch_size n_layers d_acts"]]:
+    def forward(
+        self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ) -> Tuple[
+        Float[torch.Tensor, "batch_size n_layers d_features"],
+        Float[torch.Tensor, "batch_size n_layers d_acts"],
+    ]:
         # NORMALIZE activations of each layer because different layers have different ranges
 
-        
-        features = einsum(acts_norm, self.W_enc, 'batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features')
+        features = einsum(
+            acts_norm,
+            self.W_enc,
+            "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
+        )
 
         # TODO: jump relu
         features = JumpReLU.apply(features, self.jump_thresh, self.bandwidth)
-        #features = self.relu(features)
+        # features = self.relu(features)
         # TODO: decoder
-        recons = einsum(features, self.W_dec, self.mask, 'batch_size from_layer d_features, from_layer to_layer d_features d_acts, ' \
-                                                            'from_layer to_layer -> batch_size to_layer d_acts')
+        recons = einsum(
+            features,
+            self.W_dec,
+            self.mask,
+            "batch_size from_layer d_features, from_layer to_layer d_features d_acts, "
+            "from_layer to_layer -> batch_size to_layer d_acts",
+        )
 
         return features, recons
 
@@ -63,7 +78,7 @@ class CrossLayerTranscoder(L.LightningModule):
         std = batch.std(dim=-1, keepdim=True)
         acts_norm = (batch - mean) / std
         resid, mlp_out = acts_norm[:, 0], batch[:, 1]
-        #mlp_out = resid.clone()
+        # mlp_out = resid.clone()
         features, recons = self.forward(resid)
 
         # MSE
@@ -72,7 +87,11 @@ class CrossLayerTranscoder(L.LightningModule):
         # Sparsity
         # W_dec: nlayers x dfeatures x dacts
         # features: batch_size x nlayers x dfeatures
-        masked_w = einsum(self.W_dec, self.mask, 'from_layer to_layer d_features d_acts, from_layer to_layer -> from_layer to_layer d_features d_acts')
+        masked_w = einsum(
+            self.W_dec,
+            self.mask,
+            "from_layer to_layer d_features d_acts, from_layer to_layer -> from_layer to_layer d_features d_acts",
+        )
         l1 = masked_w.norm(p=1, dim=[1, 3])  # l1: n_layers x d_features
         tanh = torch.tanh(features * l1 * self.c)
         sparsity = self._lambda * tanh.sum(dim=[1, 2]).mean()  # mean over batch
@@ -83,10 +102,13 @@ class CrossLayerTranscoder(L.LightningModule):
         self.log("train_mse", mse)
         self.log("train_sparsity", sparsity)
         self.log("L0 (%)", 100 * (features > 0).float().mean())
-        self.log("L0 (per layer)", (features > 0).float().sum() / (features.shape[0] * features.shape[1]))
+        self.log(
+            "L0 (per layer)",
+            (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
+        )
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config.get("lr", 1e-3))
-        #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
         return optimizer

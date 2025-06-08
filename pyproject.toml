@@ -1,28 +1,33 @@
-[tool.poetry]
+[project]
 name = "crosslayer-transcoder"
 version = "0.1.0"
 description = "An implementation of Anthropic's crosslayer transcoders"
-authors = ["Georg Lange"]
-license = "MIT"
+authors = [{name = "Georg Lange"}]
+license = {text = "MIT"}
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.12,<3.13"
 
-[tool.poetry.dependencies]
-python = "3.12.9"
-torch = "^2.7.0"
-nnsight = "^0.4.6"
-datasets = "^3.6.0"
-h5py = "^3.13.0"
-einops = "^0.8.1"
-jaxtyping = "^0.3.2"
-lightning = "^2.5.1.post0"
-wandb = "^0.19.11"
+dependencies = [
+    "torch>=2.7.0",
+    "nnsight>=0.4.6",
+    "datasets>=3.6.0",
+    "h5py>=3.13.0",
+    "einops>=0.8.1",
+    "jaxtyping>=0.3.2",
+    "lightning>=2.5.1",
+    "wandb>=0.19.11",
+    "seaborn>=0.13.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyterlab>=4.4.2",
+    "ipykernel>=6.29.5",
+]
 
 
-[tool.poetry.group.dev.dependencies]
-jupyterlab = "^4.4.2"
-ipykernel = "^6.29.5"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+dev-dependencies = [
+    "jupyterlab>=4.4.2",
+    "ipykernel>=6.29.5",
+]
