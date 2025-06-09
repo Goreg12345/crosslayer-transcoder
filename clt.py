@@ -31,7 +31,7 @@ class CrossLayerTranscoder(L.LightningModule):
         # the mask ensures that features can only contribute to reconstructions of same or later layers
         self.register_buffer("mask", torch.triu(torch.ones(n_layers, n_layers)))
 
-        self.replacement_model = ReplacementModelAccuracy()
+        # self.replacement_model = ReplacementModelAccuracy()
 
         # initialize parameters
         self.reset_parameters()
@@ -104,7 +104,7 @@ class CrossLayerTranscoder(L.LightningModule):
             (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
         )
 
-        if batch_idx % 100 == 0:
+        if False:  # batch_idx % 100 == 0:
             l0_per_layer = (features > 0).float().sum(dim=(0, 2)) / features.shape[0]
 
             if self.logger and isinstance(self.logger.experiment, wandb.wandb_run.Run):
@@ -130,6 +130,7 @@ class CrossLayerTranscoder(L.LightningModule):
     def on_validation_epoch_end(self):
         self.replacement_model.update(self)
         self.log("replacement_model_accuracy", self.replacement_model.compute())
+        print("exiting val epoch end")
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config.get("lr", 1e-3))

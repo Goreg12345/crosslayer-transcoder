@@ -86,6 +86,7 @@ class ReplacementModelAccuracy(Metric):
     def update(self, clt, max_batches=10):
         with torch.no_grad():
             for i, tokens in enumerate(self.loader):
+                print(f"computing replacement model", i)
                 tokens = self.handle_device(tokens)
                 if i > max_batches:
                     break
@@ -103,6 +104,8 @@ class ReplacementModelAccuracy(Metric):
                     .sum()
                 )
                 self.n_total += tokens.numel()
+
+        print("exiting update")
 
     def compute(self):
         return self.n_correct / self.n_total

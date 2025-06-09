@@ -1,7 +1,9 @@
 import os
 
 # select cuda 0
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["WANDB_DIR"] = f"{os.getcwd()}/wandb"
+os.environ["WANDB_CACHE_DIR"] = f"{os.getcwd()}/wandb_cache"
 import torch
 
 # Check if CUDA is available
@@ -33,37 +35,67 @@ buffer = DiscBuffer("/var/local/glang/activations/clt-activations-10M.h5", "tens
 loader = torch.utils.data.DataLoader(
     buffer,
     num_workers=20,
-    prefetch_factor=10,
-    batch_size=1000,
+    prefetch_factor=2,
+    batch_size=4000,
     shuffle=True,
+    persistent_workers=True,
+    pin_memory=True,
 )
 
 
 logger = WandbLogger(project="wandb_clt")
+
+clt = CrossLayerTranscoder(
+    config={
+        "d_acts": 768,
+        "d_features": 768 * 8,
+        "n_layers": 12,
+        "lambda": 0.0002,
+        "c": 0.1,
+        "lr": 1e-3,
+    },
+    nonlinearity=JumpReLU(theta=0.03, bandwidth=1.0, n_layers=12, d_features=768 * 8),
+)
+# clt = torch.compile(clt)
+
+
+class TBProfilerCallback(L.Callback):
+    def on_train_start(self, trainer, *_):
+        self.prof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=schedule(wait=4, warmup=4, active=16),
+            on_trace_ready=tensorboard_trace_handler("log/ddp"),
+            record_shapes=True,
+        )
+        self.prof.__enter__()
+
+    def on_train_batch_end(self, trainer, *_):
+        self.prof.step()  # one step per batch
+
+    def on_train_end(self, trainer, *_):
+        self.prof.__exit__(None, None, None)
+
+
 trainer = L.Trainer(
     logger=logger,
     max_steps=2000,
     limit_train_batches=2000,
-    val_check_interval=100,
+    val_check_interval=1000,
     limit_val_batches=1,
     check_val_every_n_epoch=None,
+    enable_checkpointing=False,
+    precision="16-mixed",
+    accelerator="gpu",
+    devices=4,
+    strategy="ddp",
+    # callbacks=[TBProfilerCallback()],
+    accumulate_grad_batches=4,
 )
+
 trainer.fit(
-    model=CrossLayerTranscoder(
-        config={
-            "d_acts": 768,
-            "d_features": 768 * 8,
-            "n_layers": 12,
-            "lambda": 0.0002,
-            "c": 0.1,
-            "lr": 1e-3,
-        },
-        nonlinearity=JumpReLU(
-            theta=0.03, bandwidth=1.0, n_layers=12, d_features=768 * 8
-        ),
-    ),
+    model=clt,
     train_dataloaders=loader,
-    val_dataloaders=loader,
+    # val_dataloaders=loader,
 )
 
 # Save checkpoint after training

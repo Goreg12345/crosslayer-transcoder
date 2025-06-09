@@ -178,6 +178,7 @@ clt
 wandb
 .vscode
 __pycache__
+wandb_cache/
 
 
 # own dirs
