@@ -6,11 +6,12 @@ import torch.nn as nn
 from einops import einsum
 from jaxtyping import Float
 
-from jumprelu import JumpReLU
+import wandb
+from metrics.replacement_model_accuracy import ReplacementModelAccuracy
 
 
 class CrossLayerTranscoder(L.LightningModule):
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, config, nonlinearity, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.save_hyperparameters(config)
 
@@ -18,25 +19,24 @@ class CrossLayerTranscoder(L.LightningModule):
         d_acts = config.get("d_acts", 768)
         d_features = config.get("d_features", 768 * 8)
         n_layers = config.get("n_layers", 12)
-        self.bandwidth = config.get("bandwidth", 1.0)
 
         # loss hyperparams:
         self._lambda = config.get("lambda", 0.1)
         self.c = config.get("c", 0.1)
 
+        self.nonlinearity = nonlinearity
+
         self.W_enc = nn.Parameter(torch.empty(n_layers, d_acts, d_features))
         self.W_dec = nn.Parameter(torch.empty(n_layers, n_layers, d_features, d_acts))
-        self.jump_thresh = nn.Parameter(torch.empty(1, n_layers, d_features))
-        self.relu = nn.ReLU()
         # the mask ensures that features can only contribute to reconstructions of same or later layers
         self.register_buffer("mask", torch.triu(torch.ones(n_layers, n_layers)))
+
+        self.replacement_model = ReplacementModelAccuracy()
 
         # initialize parameters
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.jump_thresh.data.fill_(self.config.get("jump_thresh", 0.03))
-
         enc_uniform_thresh = 1 / (self.config.get("d_features", 768 * 8) ** 0.5)
         self.W_enc.data.uniform_(-enc_uniform_thresh, enc_uniform_thresh)
 
@@ -59,10 +59,7 @@ class CrossLayerTranscoder(L.LightningModule):
             "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
         )
 
-        # TODO: jump relu
-        features = JumpReLU.apply(features, self.jump_thresh, self.bandwidth)
-        # features = self.relu(features)
-        # TODO: decoder
+        features = self.nonlinearity(features)
         recons = einsum(
             features,
             self.W_dec,
@@ -103,10 +100,36 @@ class CrossLayerTranscoder(L.LightningModule):
         self.log("train_sparsity", sparsity)
         self.log("L0 (%)", 100 * (features > 0).float().mean())
         self.log(
-            "L0 (per layer)",
+            "L0 (Avg. per layer)",
             (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
         )
+
+        if batch_idx % 100 == 0:
+            l0_per_layer = (features > 0).float().sum(dim=(0, 2)) / features.shape[0]
+
+            if self.logger and isinstance(self.logger.experiment, wandb.wandb_run.Run):
+                table = wandb.Table(
+                    data=[[i, v.item()] for i, v in enumerate(l0_per_layer.cpu())],
+                    columns=["layer", "L0"],
+                )
+                self.logger.experiment.log(
+                    {
+                        "L0 per layer": wandb.plot.bar(
+                            table, "layer", "L0", title="L0 per Layer"
+                        )
+                    },
+                    step=self.global_step,
+                )
+
         return loss
+
+    def validation_step(self, batch, batch_idx):
+        # we just need this here such that on_validation_epoch_end is called
+        pass
+
+    def on_validation_epoch_end(self):
+        self.replacement_model.update(self)
+        self.log("replacement_model_accuracy", self.replacement_model.compute())
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config.get("lr", 1e-3))
