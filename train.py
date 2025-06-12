@@ -36,7 +36,7 @@ loader = torch.utils.data.DataLoader(
     buffer,
     num_workers=20,
     prefetch_factor=2,
-    batch_size=4000,
+    batch_size=5000,
     shuffle=True,
     persistent_workers=True,
     pin_memory=True,
@@ -56,7 +56,15 @@ clt = CrossLayerTranscoder(
     },
     nonlinearity=JumpReLU(theta=0.03, bandwidth=1.0, n_layers=12, d_features=768 * 8),
 )
-# clt = torch.compile(clt)
+clt = torch.compile(clt)  # Disabled during debugging for faster startup
+
+from torch.profiler import (
+    ProfilerActivity,
+    profile,
+    record_function,
+    schedule,
+    tensorboard_trace_handler,
+)
 
 
 class TBProfilerCallback(L.Callback):
@@ -64,8 +72,10 @@ class TBProfilerCallback(L.Callback):
         self.prof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             schedule=schedule(wait=4, warmup=4, active=16),
-            on_trace_ready=tensorboard_trace_handler("log/ddp"),
+            on_trace_ready=tensorboard_trace_handler("log/ddp_new"),
             record_shapes=True,
+            with_stack=True,
+            profile_memory=True,
         )
         self.prof.__enter__()
 
@@ -86,10 +96,10 @@ trainer = L.Trainer(
     enable_checkpointing=False,
     precision="16-mixed",
     accelerator="gpu",
-    devices=4,
-    strategy="ddp",
+    devices=1,
+    # strategy="ddp",
     # callbacks=[TBProfilerCallback()],
-    accumulate_grad_batches=4,
+    accumulate_grad_batches=20,
 )
 
 trainer.fit(

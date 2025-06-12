@@ -52,7 +52,6 @@ class CrossLayerTranscoder(L.LightningModule):
         Float[torch.Tensor, "batch_size n_layers d_acts"],
     ]:
         # NORMALIZE activations of each layer because different layers have different ranges
-
         features = einsum(
             acts_norm,
             self.W_enc,

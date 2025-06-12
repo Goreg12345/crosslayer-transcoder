@@ -183,3 +183,4 @@ wandb_cache/
 
 # own dirs
 checkpoints/
+log/

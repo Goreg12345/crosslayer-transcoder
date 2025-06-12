@@ -2,6 +2,11 @@
 
 An implementation of Anthropic's crosslayer transcoders.
 
+
+# Claude Code
+
+/var/local/glang/.nvm/versions/node/v20.19.2/bin/claude
+
 ## Quick Setup
 
 **One command to set up everything:**

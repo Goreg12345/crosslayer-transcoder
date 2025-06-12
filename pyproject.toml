@@ -17,6 +17,7 @@ dependencies = [
     "lightning>=2.5.1",
     "wandb>=0.19.11",
     "seaborn>=0.13.2",
+    "tensorboard-plugin-profile>=2.19.9",
 ]
 
 [project.optional-dependencies]
