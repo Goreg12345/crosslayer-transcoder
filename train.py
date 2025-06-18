@@ -36,7 +36,7 @@ loader = torch.utils.data.DataLoader(
     buffer,
     num_workers=20,
     prefetch_factor=2,
-    batch_size=5000,
+    batch_size=1000,
     shuffle=True,
     persistent_workers=True,
     pin_memory=True,
@@ -56,7 +56,7 @@ clt = CrossLayerTranscoder(
     },
     nonlinearity=JumpReLU(theta=0.03, bandwidth=1.0, n_layers=12, d_features=768 * 8),
 )
-clt = torch.compile(clt)  # Disabled during debugging for faster startup
+# clt = torch.compile(clt)  # Disabled during debugging for faster startup
 
 from torch.profiler import (
     ProfilerActivity,
@@ -96,10 +96,10 @@ trainer = L.Trainer(
     enable_checkpointing=False,
     precision="16-mixed",
     accelerator="gpu",
-    devices=1,
-    # strategy="ddp",
-    # callbacks=[TBProfilerCallback()],
-    accumulate_grad_batches=20,
+    devices=4,
+    strategy="ddp",
+    callbacks=[TBProfilerCallback()],
+    # accumulate_grad_batches=20,
 )
 
 trainer.fit(
