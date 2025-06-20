@@ -25,9 +25,10 @@ else:
 
 import lightning.pytorch as L
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.strategies import ModelParallelStrategy
 
 from buffer import DiscBuffer
-from clt import CrossLayerTranscoder
+from clt_opt import CrossLayerTranscoder
 from jumprelu import JumpReLU
 
 buffer = DiscBuffer("/var/local/glang/activations/clt-activations-10M.h5", "tensor")
@@ -36,14 +37,15 @@ loader = torch.utils.data.DataLoader(
     buffer,
     num_workers=20,
     prefetch_factor=2,
-    batch_size=4000,
-    shuffle=True,
+    batch_size=1000,
+    shuffle=False,
     persistent_workers=True,
     pin_memory=True,
 )
 
 
-logger = WandbLogger(project="wandb_clt")
+# logger = WandbLogger(project="wandb_clt")
+logger = None
 
 clt = CrossLayerTranscoder(
     config={
@@ -57,6 +59,10 @@ clt = CrossLayerTranscoder(
     nonlinearity=JumpReLU(theta=0.03, bandwidth=1.0, n_layers=12, d_features=768 * 8),
 )
 # clt = torch.compile(clt)
+
+print("good afternoon")
+
+torch.autograd.set_detect_anomaly(True)
 
 
 class TBProfilerCallback(L.Callback):
@@ -76,6 +82,9 @@ class TBProfilerCallback(L.Callback):
         self.prof.__exit__(None, None, None)
 
 
+strategy = ModelParallelStrategy()
+precision = "32-true"
+
 trainer = L.Trainer(
     logger=logger,
     max_steps=2000,
@@ -84,10 +93,10 @@ trainer = L.Trainer(
     limit_val_batches=1,
     check_val_every_n_epoch=None,
     enable_checkpointing=False,
-    precision="16-mixed",
+    precision=precision,
     accelerator="gpu",
-    devices=4,
-    strategy="ddp",
+    devices=2,
+    strategy=strategy,
     # callbacks=[TBProfilerCallback()],
     accumulate_grad_batches=4,
 )

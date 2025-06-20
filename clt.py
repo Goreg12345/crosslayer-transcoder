@@ -5,11 +5,17 @@ import torch
 import torch.nn as nn
 from einops import einsum
 from jaxtyping import Float
+from torch.distributed.tensor.parallel import (
+    ColwiseParallel,
+    RowwiseParallel,
+    parallelize_module,
+)
 
 import wandb
 from metrics.replacement_model_accuracy import ReplacementModelAccuracy
 
 
+#
 class CrossLayerTranscoder(L.LightningModule):
     def __init__(self, config, nonlinearity, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -18,7 +24,7 @@ class CrossLayerTranscoder(L.LightningModule):
         self.config = config
         d_acts = config.get("d_acts", 768)
         d_features = config.get("d_features", 768 * 8)
-        n_layers = config.get("n_layers", 12)
+        n_layers = config.get("n_layers", 12)  #
 
         # loss hyperparams:
         self._lambda = config.get("lambda", 0.1)
@@ -28,6 +34,7 @@ class CrossLayerTranscoder(L.LightningModule):
 
         self.W_enc = nn.Parameter(torch.empty(n_layers, d_acts, d_features))
         self.W_dec = nn.Parameter(torch.empty(n_layers, n_layers, d_features, d_acts))
+
         # the mask ensures that features can only contribute to reconstructions of same or later layers
         self.register_buffer("mask", torch.triu(torch.ones(n_layers, n_layers)))
 
@@ -58,6 +65,7 @@ class CrossLayerTranscoder(L.LightningModule):
             self.W_enc,
             "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
         )
+        print(features.shape)
 
         features = self.nonlinearity(features)
         recons = einsum(
@@ -136,3 +144,11 @@ class CrossLayerTranscoder(L.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config.get("lr", 1e-3))
         # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
         return optimizer
+
+    def configure_model(self):
+        tp_mesh = self.device_mesh["tensor_parallel"]
+        plan = {
+            "W_enc": ColwiseParallel(),
+            "W_dec": RowwiseParallel(),
+        }
+        parallelize_module(self, tp_mesh, plan)
