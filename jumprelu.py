@@ -24,7 +24,8 @@ class _JumpReLUFunction(torch.autograd.Function):
         input, theta = ctx.saved_tensors
         bandwidth = ctx.bandwidth
         grad_input = grad_output.clone()
-        grad_input[input < 0] = 0
+        mask = input < 0
+        grad_input = grad_input.masked_fill(mask, 0.0)
 
         theta_grad = (
             -(theta / bandwidth) * rectangle((input - theta) / bandwidth) * grad_output

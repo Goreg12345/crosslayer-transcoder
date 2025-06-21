@@ -4,32 +4,26 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 os.environ["WANDB_DIR"] = f"{os.getcwd()}/wandb"
 os.environ["WANDB_CACHE_DIR"] = f"{os.getcwd()}/wandb_cache"
-import torch
-
-# Check if CUDA is available
-cuda_available = torch.cuda.is_available()
-print("CUDA available:", cuda_available)
-
-if cuda_available:
-    # Number of GPUs
-    num_gpus = torch.cuda.device_count()
-    print("Number of GPUs:", num_gpus)
-
-    # List each device’s name
-    for i in range(num_gpus):
-        name = torch.cuda.get_device_name(i)
-        print(f"GPU {i}: {name}")
-else:
-    print("No CUDA devices found")
-
-
 import lightning.pytorch as L
+import torch
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import ModelParallelStrategy
+from torch.profiler import (
+    ProfilerActivity,
+    profile,
+    schedule,
+    tensorboard_trace_handler,
+)
 
 from buffer import DiscBuffer
 from clt_opt import CrossLayerTranscoder
 from jumprelu import JumpReLU
+
+# Check if CUDA is available
+from utils import print_gpu_info
+
+# print_gpu_info()
+
 
 buffer = DiscBuffer("/var/local/glang/activations/clt-activations-10M.h5", "tensor")
 
@@ -37,7 +31,7 @@ loader = torch.utils.data.DataLoader(
     buffer,
     num_workers=20,
     prefetch_factor=2,
-    batch_size=1000,
+    batch_size=4000,
     shuffle=False,
     persistent_workers=True,
     pin_memory=True,
@@ -70,7 +64,7 @@ class TBProfilerCallback(L.Callback):
         self.prof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             schedule=schedule(wait=4, warmup=4, active=16),
-            on_trace_ready=tensorboard_trace_handler("log/ddp"),
+            on_trace_ready=tensorboard_trace_handler("log/ddp_new"),
             record_shapes=True,
         )
         self.prof.__enter__()
@@ -98,14 +92,37 @@ trainer = L.Trainer(
     devices=2,
     strategy=strategy,
     # callbacks=[TBProfilerCallback()],
-    accumulate_grad_batches=4,
+    # accumulate_grad_batches=4,
 )
 
-trainer.fit(
-    model=clt,
-    train_dataloaders=loader,
-    # val_dataloaders=loader,
-)
+import contextlib
+
+from torch.utils._python_dispatch import TorchDispatchMode
+
+
+@contextlib.contextmanager
+def debug_autograd_shapes():
+    old = torch.is_anomaly_enabled()
+    torch.autograd.set_detect_anomaly(True)
+    try:
+        yield
+    finally:
+        torch.autograd.set_detect_anomaly(old)
+
+
+class ShowBackward(TorchDispatchMode):
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        print("BACKWARD:", func.overloadpacket.__name__)
+        return func(*args, **(kwargs or {}))
+
+
+with ShowBackward(), debug_autograd_shapes():
+
+    trainer.fit(
+        model=clt,
+        train_dataloaders=loader,
+        # val_dataloaders=loader,
+    )
 
 # Save checkpoint after training
 checkpoint_path = "checkpoints/clt.ckpt"
