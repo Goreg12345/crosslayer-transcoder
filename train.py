@@ -56,7 +56,7 @@ clt = CrossLayerTranscoder(
     },
     nonlinearity=JumpReLU(theta=0.03, bandwidth=1.0, n_layers=12, d_features=768 * 8),
 )
-# clt = torch.compile(clt)
+clt = torch.compile(clt)
 
 
 class TBProfilerCallback(L.Callback):
@@ -86,10 +86,10 @@ trainer = L.Trainer(
     enable_checkpointing=False,
     precision="16-mixed",
     accelerator="gpu",
-    devices=4,
-    strategy="ddp",
+    devices=1,
+    # strategy="ddp",
     # callbacks=[TBProfilerCallback()],
-    accumulate_grad_batches=4,
+    accumulate_grad_batches=2,
 )
 
 trainer.fit(

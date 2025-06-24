@@ -89,7 +89,7 @@ class CrossLayerTranscoder(L.LightningModule):
             self.mask,
             "from_layer to_layer d_features d_acts, from_layer to_layer -> from_layer to_layer d_features d_acts",
         )
-        l1 = masked_w.norm(p=1, dim=[1, 3])  # l1: n_layers x d_features
+        l1 = masked_w.norm(p=2, dim=[1, 3])  # l1: n_layers x d_features
         tanh = torch.tanh(features * l1 * self.c)
         sparsity = self._lambda * tanh.sum(dim=[1, 2]).mean()  # mean over batch
 

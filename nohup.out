@@ -1,0 +1,48 @@
+2025-06-22 20:41:21,165 - __main__ - INFO - Starting activation server with config: test
+2025-06-22 20:41:21,165 - __main__ - INFO - Buffer size: 100,000 samples
+2025-06-22 20:41:21,165 - __main__ - INFO - Activation dimension: 768
+2025-06-22 20:41:21,165 - __main__ - INFO - Estimated memory usage: 6.87 GB
+2025-06-22 20:41:21,165 - __main__ - INFO - Host: 0.0.0.0:8000
+INFO:     Started server process [1153594]
+INFO:     Waiting for application startup.
+2025-06-22 20:41:21,186 - activation_server.server - INFO - Initializing shared memory buffer...
+2025-06-22 20:41:21,186 - activation_server.shared_memory - INFO - Creating shared PyTorch buffer: 100000 samples x 2 in/out x 12 layers x 768 dims
+2025-06-22 20:41:21,186 - activation_server.shared_memory - INFO - Total memory: 6.87 GB
+2025-06-22 20:41:23,487 - activation_server.shared_memory - INFO - Shared PyTorch activation buffer initialized successfully
+2025-06-22 20:41:23,487 - activation_server.server - INFO - Starting data generator process...
+2025-06-22 20:41:23,489 - activation_server.server - INFO - Background processes started successfully
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2025-06-22 20:41:23,490 - activation_server.server - INFO - Stopping background processes...
+2025-06-22 20:41:23,490 - activation_server.data_generator - INFO - Terminating data generator process...
+2025-06-22 20:41:24,720 - activation_server.shared_memory - INFO - Shared PyTorch tensors cleaned up successfully
+2025-06-22 20:41:24,720 - activation_server.server - INFO - Background processes stopped
+ERROR:    Traceback (most recent call last):
+  File "/var/metrics/g/py312/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/var/metrics/g/py312/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/var/metrics/g/py312/lib/python3.12/asyncio/runners.py", line 123, in run
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/var/metrics/g/crosslayer-transcoder/.venv/lib/python3.12/site-packages/starlette/routing.py", line 699, in lifespan
+    await receive()
+  File "/var/metrics/g/crosslayer-transcoder/.venv/lib/python3.12/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/metrics/g/py312/lib/python3.12/asyncio/queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+

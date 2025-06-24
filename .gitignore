@@ -183,3 +183,5 @@ wandb_cache/
 
 # own dirs
 checkpoints/
+lightning_logs/
+log
