@@ -12,8 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 import torch.multiprocessing as torch_mp
 
-# Change relative import to absolute import
-from activation_server.config import ServerConfig
+# No config imports needed in this module
 
 logger = logging.getLogger(__name__)
 

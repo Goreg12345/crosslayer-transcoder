@@ -1,5 +1,5 @@
 """
-Configuration settings for the activation server.
+Configuration settings for the data loader.
 """
 
 import os
@@ -10,8 +10,8 @@ import torch
 
 
 @dataclass
-class ServerConfig:
-    """Configuration for the activation server."""
+class DataLoaderConfig:
+    """Configuration for the data loader."""
 
     # Buffer settings
     buffer_size: int = 10000000  # 10M samples (adjust based on memory)
@@ -36,12 +36,8 @@ class ServerConfig:
 
     init_file: Optional[str] = None
 
-    # Server settings
-    host: str = "0.0.0.0"
-    port: int = 8000
-
     @classmethod
-    def from_env(cls) -> "ServerConfig":
+    def from_env(cls) -> "DataLoaderConfig":
         """Create config from environment variables."""
         config = cls()
 
@@ -60,12 +56,6 @@ class ServerConfig:
 
         if os.getenv("MAX_BATCH_SIZE"):
             config.max_batch_size = int(os.getenv("MAX_BATCH_SIZE"))
-
-        if os.getenv("HOST"):
-            config.host = os.getenv("HOST")
-
-        if os.getenv("PORT"):
-            config.port = int(os.getenv("PORT"))
 
         return config
 
@@ -111,9 +101,9 @@ class ServerConfig:
 # Default configurations for different use cases
 
 
-def get_test_config() -> ServerConfig:
+def get_test_config() -> DataLoaderConfig:
     """Get configuration for testing/development."""
-    return ServerConfig(
+    return DataLoaderConfig(
         buffer_size=100_000,  # Small buffer for testing
         n_in_out=2,
         n_layers=12,  # GPT-2 has 12 layers
@@ -126,9 +116,9 @@ def get_test_config() -> ServerConfig:
     )
 
 
-def get_production_config() -> ServerConfig:
+def get_production_config() -> DataLoaderConfig:
     """Get configuration for production use."""
-    return ServerConfig(
+    return DataLoaderConfig(
         buffer_size=1_000_000,  # 10M samples
         n_in_out=2,
         n_layers=12,  # GPT-2 has 12 layers

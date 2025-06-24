@@ -1,4 +1,5 @@
 """
+n
 Data generation process for creating activation data.
 Samples tokens from webtext, feeds through LLM, and stores activations in shared buffer.
 """
@@ -17,9 +18,9 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-from activation_server import text_dataset
-from activation_server.config import ServerConfig
-from activation_server.shared_memory import SharedActivationBuffer
+from data_loader import text_dataset
+from data_loader.config import DataLoaderConfig
+from data_loader.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class DataGeneratorProcess(mp.Process):
     Continuously samples text, processes through LLM, and updates shared buffer.
     """
 
-    def __init__(self, shared_buffer: SharedActivationBuffer, config: ServerConfig):
+    def __init__(self, shared_buffer: SharedActivationBuffer, config: DataLoaderConfig):
         super().__init__(
             daemon=False
         )  # Can't be daemon if we want to use DataLoader workers
