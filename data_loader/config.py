@@ -19,7 +19,7 @@ class DataLoaderConfig:
     n_layers: int = 12  # Number of layers in the model
     activation_dim: int = 768  # Dimension of activation vectors
     dtype: torch.dtype = torch.float32
-    max_batch_size: int = 500_000  # Allow larger batches for high-throughput clients
+    max_batch_size: int = 50_000  # Allow larger batches for high-throughput clients
 
     # Model settings
     model_name: str = "openai-community/gpt2"  # Smaller model for testing

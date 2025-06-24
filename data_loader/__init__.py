@@ -18,6 +18,14 @@ from data_loader.config import DataLoaderConfig, get_test_config, get_production
 from data_loader.dataset import SharedMemoryDataLoader, SharedMemoryDataset
 from data_loader.shared_memory import SharedActivationBuffer
 from data_loader.data_generator import DataGeneratorProcess
+from data_loader.factory import (
+    actvs_loader_from_config,
+    actvs_loader_from_test_config,
+    actvs_loader_from_production_config,
+)
+from data_loader.activation_sources import ActivationComputer, DiskActivationSource
+from data_loader.generation_loop import DataGenerationLoop
+from data_loader.process_monitor import ProcessMonitor
 
 __all__ = [
     "DataLoaderConfig",
@@ -27,4 +35,11 @@ __all__ = [
     "SharedMemoryDataset",
     "SharedActivationBuffer",
     "DataGeneratorProcess",
+    "actvs_loader_from_config",
+    "actvs_loader_from_test_config",
+    "actvs_loader_from_production_config",
+    "ActivationComputer",
+    "DiskActivationSource", 
+    "DataGenerationLoop",
+    "ProcessMonitor",
 ]
