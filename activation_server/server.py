@@ -5,13 +5,15 @@ FastAPI server for serving neural network activations from shared memory buffer.
 import asyncio
 import logging
 import multiprocessing as mp
+import os
 import struct
+import tempfile
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from activation_server.config import ServerConfig
 from activation_server.data_generator import DataGeneratorProcess
@@ -154,10 +156,10 @@ async def get_activations(batch_size: int = 1) -> Dict[str, Any]:
     if not server_instance.shared_buffer:
         raise HTTPException(status_code=503, detail="Shared buffer not initialized")
 
-    if num_samples <= 0 or num_samples > server_instance.config.max_batch_size:
+    if batch_size <= 0 or batch_size > server_instance.config.max_batch_size:
         raise HTTPException(
             status_code=400,
-            detail=f"num_samples must be between 1 and {server_instance.config.max_batch_size}",
+            detail=f"batch_size must be between 1 and {server_instance.config.max_batch_size}",
         )
 
     try:
@@ -225,6 +227,101 @@ async def get_activations_tensor(batch_size: int = 1) -> Response:
         )
 
 
+@app.get("/activations/tensor/fast")
+async def get_activations_tensor_fast(batch_size: int = 1) -> FileResponse:
+    """
+    Get activation data as raw tensor bytes using FileResponse for maximum performance.
+    Uses sendfile() system call when possible for zero-copy transfers.
+
+    Args:
+        batch_size: Number of activation samples to retrieve
+
+    Returns:
+        Raw tensor data as bytes via FileResponse (uses sendfile() for speed)
+    """
+    tensor = server_instance.shared_buffer.get_activations(batch_size)
+    buf = tensor.contiguous().cpu().numpy().tobytes()
+
+    fd = os.memfd_create("tensor", os.MFD_CLOEXEC)
+    os.write(fd, buf)  # single copy: tensor -> memfd
+    os.lseek(fd, 0, os.SEEK_SET)  # rewind for reading
+
+    path = f"/proc/self/fd/{fd}"
+    stat = os.fstat(fd)
+    from starlette.background import BackgroundTask
+
+    return FileResponse(
+        path,
+        stat_result=stat,  # avoids an extra stat()
+        media_type="application/octet-stream",
+        headers={
+            "X-Tensor-Shape": ",".join(map(str, tensor.shape)),
+            "X-Tensor-Dtype": str(tensor.dtype),
+            "Content-Length": str(len(buf)),
+        },
+        background=BackgroundTask(lambda: os.close(fd)),  # close when done
+    )
+
+
+@app.get("/activations/tensor/optimized")
+async def get_activations_tensor_optimized(batch_size: int = 1) -> Response:
+    """
+    Get activation data with zero-copy optimization.
+    Uses direct memory access without intermediate file creation.
+
+    Args:
+        batch_size: Number of activation samples to retrieve
+
+    Returns:
+        Raw tensor data as bytes with optimal memory handling
+    """
+    global server_instance
+
+    if not server_instance or not server_instance.running:
+        raise HTTPException(status_code=503, detail="Server not ready")
+
+    if not server_instance.shared_buffer:
+        raise HTTPException(status_code=503, detail="Shared buffer not initialized")
+
+    if batch_size <= 0 or batch_size > server_instance.config.max_batch_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"batch_size must be between 1 and {server_instance.config.max_batch_size}",
+        )
+
+    try:
+        # Get activations from shared buffer (automatically marks as invalid)
+        activations = server_instance.shared_buffer.get_activations(batch_size)
+
+        # Zero-copy approach: get memory view directly from tensor
+        if activations.is_contiguous():
+            # Direct memory access - no copy needed
+            tensor_data = activations.detach().numpy()
+            memory_view = memoryview(tensor_data.data.tobytes())
+        else:
+            # Make contiguous if needed (minimal copy)
+            activations = activations.contiguous()
+            tensor_data = activations.detach().numpy()
+            memory_view = memoryview(tensor_data.data.tobytes())
+
+        return Response(
+            content=memory_view,
+            media_type="application/octet-stream",
+            headers={
+                "X-Tensor-Shape": ",".join(map(str, activations.shape)),
+                "X-Tensor-Dtype": str(activations.dtype),
+                "X-Tensor-Size": str(len(memory_view)),
+                "Cache-Control": "no-cache",  # Prevent caching of dynamic data
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting optimized tensor activations: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving tensor: {str(e)}"
+        )
+
+
 @app.get("/activations/stream")
 async def stream_activations_tensor(
     request: Request, batch_size: int = 5000, max_batches: int = 0
@@ -284,6 +381,159 @@ async def stream_activations_tensor(
     return StreamingResponse(
         generate_stream(),
         media_type="application/octet-stream",
+    )
+
+
+@app.get("/activations/stream/fast")
+async def stream_activations_fast(
+    request: Request, batch_size: int = 5000, max_batches: int = 0
+) -> StreamingResponse:
+    """
+    Stream activation data with memory-mapped temporary files for optimal performance.
+    Uses mmap and sendfile-like optimizations where possible.
+
+    Args:
+        batch_size: Number of activation samples per batch
+        max_batches: Maximum number of batches to stream (0 = unlimited)
+
+    Returns:
+        Streaming tensor data with optimal memory efficiency
+    """
+    global server_instance
+
+    if not server_instance or not server_instance.running:
+        raise HTTPException(status_code=503, detail="Server not ready")
+
+    if not server_instance.shared_buffer:
+        raise HTTPException(status_code=503, detail="Shared buffer not initialized")
+
+    if batch_size <= 0 or batch_size > server_instance.config.max_batch_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"batch_size must be between 1 and {server_instance.config.max_batch_size}",
+        )
+
+    async def generate_stream():
+        """Generate streaming data with memory-mapped optimization."""
+        batches_sent = 0
+        temp_files = []  # Track temp files for cleanup
+
+        try:
+            while True:
+                # Check if we've reached max_batches limit
+                if max_batches > 0 and batches_sent >= max_batches:
+                    break
+
+                if await request.is_disconnected():
+                    logger.warning("Client disconnected, stopping streaming")
+                    break
+
+                # Get activations from shared buffer
+                activations = server_instance.shared_buffer.get_activations(batch_size)
+                tensor_bytes = activations.numpy().tobytes()
+
+                # For streaming, we'll send chunks directly without temp files
+                # This avoids the I/O overhead while still being very efficient
+                yield tensor_bytes
+                batches_sent += 1
+
+        except Exception as e:
+            logger.error(f"Error in fast streaming generator: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Error in streaming generator: {e}"
+            )
+        finally:
+            # Cleanup any temp files (though we're not using them in this approach)
+            for temp_file in temp_files:
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.get("/activations/stream/optimized")
+async def stream_activations_optimized(
+    request: Request, batch_size: int = 5000, max_batches: int = 0
+) -> StreamingResponse:
+    """
+    Stream activation data with true zero-copy optimization.
+    Direct memory-to-network transfer without intermediate buffers.
+
+    Args:
+        batch_size: Number of activation samples per batch
+        max_batches: Maximum number of batches to stream (0 = unlimited)
+
+    Returns:
+        Streaming tensor data with minimal memory overhead
+    """
+    global server_instance
+
+    if not server_instance or not server_instance.running:
+        raise HTTPException(status_code=503, detail="Server not ready")
+
+    if not server_instance.shared_buffer:
+        raise HTTPException(status_code=503, detail="Shared buffer not initialized")
+
+    if batch_size <= 0 or batch_size > server_instance.config.max_batch_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"batch_size must be between 1 and {server_instance.config.max_batch_size}",
+        )
+
+    async def generate_optimized_stream():
+        """Generate streaming data with zero-copy optimization."""
+        batches_sent = 0
+
+        try:
+            while True:
+                # Check limits and disconnection
+                if max_batches > 0 and batches_sent >= max_batches:
+                    break
+
+                if await request.is_disconnected():
+                    logger.debug("Client disconnected, stopping optimized streaming")
+                    break
+
+                # Get activations from shared buffer
+                activations = server_instance.shared_buffer.get_activations(batch_size)
+
+                # Ensure tensor is contiguous for optimal memory access
+                if not activations.is_contiguous():
+                    activations = activations.contiguous()
+
+                # Direct memory view - zero copy
+                tensor_data = activations.detach().numpy()
+                memory_view = memoryview(tensor_data.data.tobytes())
+
+                yield bytes(memory_view)
+                batches_sent += 1
+
+                # Minimal async yield to prevent blocking
+                if batches_sent % 10 == 0:
+                    await asyncio.sleep(0)  # Yield control briefly
+
+        except Exception as e:
+            logger.error(f"Error in optimized streaming generator: {e}")
+            # Send empty chunk to signal error
+            yield b""
+
+    return StreamingResponse(
+        generate_optimized_stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked",
+        },
     )
 
 

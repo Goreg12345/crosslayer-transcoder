@@ -75,6 +75,84 @@ class ActivationClient:
 
         return tensor, metadata
 
+    def get_activations_tensor_fast(
+        self, batch_size: int = 1000
+    ) -> Tuple[torch.Tensor, Dict]:
+        """
+        Get a batch of activation data as a tensor using the fast FileResponse endpoint.
+        This uses sendfile() system call for maximum performance.
+
+        Args:
+            batch_size: Number of samples to retrieve
+
+        Returns:
+            Tuple of (activations_tensor, metadata)
+        """
+        response = self.session.get(
+            f"{self.server_url}/activations/tensor/fast",
+            params={"batch_size": batch_size},
+        )
+        response.raise_for_status()
+
+        # Get shape from headers
+        shape_str = response.headers.get("X-Tensor-Shape")
+        if not shape_str:
+            raise ValueError("Missing tensor shape in response headers")
+
+        shape = tuple(map(int, shape_str.split(",")))
+
+        # Convert bytes to tensor
+        tensor_data = np.frombuffer(response.content, dtype=np.float32)
+        tensor = torch.from_numpy(tensor_data.reshape(shape).copy())
+
+        # Get metadata from headers
+        metadata = {
+            "shape": shape,
+            "dtype": response.headers.get("X-Tensor-Dtype", "float32"),
+            "device": response.headers.get("X-Tensor-Device", "cpu"),
+        }
+
+        return tensor, metadata
+
+    def get_activations_tensor_optimized(
+        self, batch_size: int = 1000
+    ) -> Tuple[torch.Tensor, Dict]:
+        """
+        Get a batch of activation data using zero-copy optimization.
+        Direct memory access without intermediate file operations.
+
+        Args:
+            batch_size: Number of samples to retrieve
+
+        Returns:
+            Tuple of (activations_tensor, metadata)
+        """
+        response = self.session.get(
+            f"{self.server_url}/activations/tensor/optimized",
+            params={"batch_size": batch_size},
+        )
+        response.raise_for_status()
+
+        # Get shape from headers
+        shape_str = response.headers.get("X-Tensor-Shape")
+        if not shape_str:
+            raise ValueError("Missing tensor shape in response headers")
+
+        shape = tuple(map(int, shape_str.split(",")))
+
+        # Convert bytes to tensor
+        tensor_data = np.frombuffer(response.content, dtype=np.float32)
+        tensor = torch.from_numpy(tensor_data.reshape(shape).copy())
+
+        # Get metadata from headers
+        metadata = {
+            "shape": shape,
+            "dtype": response.headers.get("X-Tensor-Dtype", "float32"),
+            "device": response.headers.get("X-Tensor-Device", "cpu"),
+        }
+
+        return tensor, metadata
+
     def stream_activations(
         self, batch_size: int = 5000, max_batches: int = 0
     ) -> Iterator[torch.Tensor]:
@@ -138,6 +216,146 @@ class ActivationClient:
 
         except Exception as e:
             logger.error(f"Error in stream processing: {e}")
+            raise
+        finally:
+            # Always close the response to clean up the connection
+            response.close()
+
+    def stream_activations_fast(
+        self, batch_size: int = 5000, max_batches: int = 0
+    ) -> Iterator[torch.Tensor]:
+        """
+        Stream activation data using the fast streaming endpoint.
+        Optimized for maximum throughput with minimal memory overhead.
+
+        Args:
+            batch_size: Number of samples per batch
+            max_batches: Maximum number of batches to stream (0 = unlimited)
+
+        Yields:
+            torch.Tensor: Activation batches
+        """
+        params = {"batch_size": batch_size}
+        if max_batches > 0:
+            params["max_batches"] = max_batches
+
+        response = self.session.get(
+            f"{self.server_url}/activations/stream/fast", params=params, stream=True
+        )
+        response.raise_for_status()
+
+        # Get expected tensor shape from a test request
+        try:
+            test_tensor, _ = self.get_activations_tensor(batch_size=1)
+            expected_shape = (batch_size,) + test_tensor.shape[1:]
+            expected_bytes_per_batch = (
+                batch_size * test_tensor.numel() * test_tensor.element_size()
+            )
+        except Exception as e:
+            logger.error(f"Could not determine expected tensor shape: {e}")
+            response.close()  # Clean up response
+            raise RuntimeError(f"Cannot stream without knowing tensor shape: {e}")
+
+        buffer = b""
+
+        try:
+            for chunk in response.iter_content(chunk_size=expected_bytes_per_batch):
+                if not chunk:
+                    break
+
+                buffer += chunk
+
+                # Process complete batches from buffer
+                while len(buffer) >= expected_bytes_per_batch:
+                    # Extract one batch worth of bytes
+                    batch_bytes = buffer[:expected_bytes_per_batch]
+
+                    # Convert to tensor (copy to make it writable)
+                    tensor = (
+                        torch.frombuffer(batch_bytes, dtype=torch.float32)
+                        .reshape(expected_shape)
+                        .clone()
+                    )
+
+                    yield tensor
+
+                    # Remove processed batch from buffer
+                    buffer = buffer[expected_bytes_per_batch:]
+
+        except Exception as e:
+            logger.error(f"Error in fast stream processing: {e}")
+            raise
+        finally:
+            # Always close the response to clean up the connection
+            response.close()
+
+    def stream_activations_optimized(
+        self, batch_size: int = 5000, max_batches: int = 0
+    ) -> Iterator[torch.Tensor]:
+        """
+        Stream activation data using zero-copy optimization.
+        Direct memory-to-network transfer for maximum performance.
+
+        Args:
+            batch_size: Number of samples per batch
+            max_batches: Maximum number of batches to stream (0 = unlimited)
+
+        Yields:
+            torch.Tensor: Activation batches
+        """
+        params = {"batch_size": batch_size}
+        if max_batches > 0:
+            params["max_batches"] = max_batches
+
+        response = self.session.get(
+            f"{self.server_url}/activations/stream/optimized",
+            params=params,
+            stream=True,
+        )
+        response.raise_for_status()
+
+        # Get expected tensor shape from a test request
+        try:
+            test_tensor, _ = self.get_activations_tensor(batch_size=1)
+            expected_shape = (batch_size,) + test_tensor.shape[1:]
+            expected_bytes_per_batch = (
+                batch_size * test_tensor.numel() * test_tensor.element_size()
+            )
+        except Exception as e:
+            logger.error(f"Could not determine expected tensor shape: {e}")
+            response.close()  # Clean up response
+            raise RuntimeError(f"Cannot stream without knowing tensor shape: {e}")
+
+        buffer = b""
+
+        try:
+            # Use larger chunk size for better performance
+            chunk_size = max(
+                expected_bytes_per_batch, 64 * 1024
+            )  # At least 64KB chunks
+
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if not chunk:
+                    break
+
+                buffer += chunk
+
+                # Process complete batches from buffer
+                while len(buffer) >= expected_bytes_per_batch:
+                    # Extract one batch worth of bytes
+                    batch_bytes = buffer[:expected_bytes_per_batch]
+
+                    # Convert to tensor using zero-copy when possible
+                    tensor_array = np.frombuffer(batch_bytes, dtype=np.float32)
+                    tensor = torch.from_numpy(tensor_array.reshape(expected_shape))
+
+                    yield tensor
+
+                    # Remove processed batch from buffer
+                    buffer = buffer[expected_bytes_per_batch:]
+
+        except Exception as e:
+            logger.error(f"Error in optimized stream processing: {e}")
             raise
         finally:
             # Always close the response to clean up the connection
