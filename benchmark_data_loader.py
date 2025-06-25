@@ -22,7 +22,9 @@ def benchmark_shared_memory_loader():
     batch_size = 5000
     duration = 30.0
 
-    loader = actvs_loader_from_production_config(batch_size=batch_size, timeout=120)
+    loader = actvs_loader_from_production_config(
+        batch_size=batch_size, timeout=12000, buffer_size=2000000
+    )
 
     print(f"Waiting 30 seconds for data generator to start...")
 
@@ -31,7 +33,7 @@ def benchmark_shared_memory_loader():
     print(f"   First batch loaded!")
     print(f"   Batch shape: {first_batch.shape}")
     print(f"   Batch dtype: {first_batch.dtype}")
-
+    time.sleep(60)
     # Calculate bytes per batch
     bytes_per_element = first_batch.element_size()
     elements_per_batch = first_batch.numel()

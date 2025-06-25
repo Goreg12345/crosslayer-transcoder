@@ -60,6 +60,7 @@ class DataGenerationLoop:
     def generation_loop(self):
         """Main generation loop - extracted from existing code."""
         self.monitor.log_generation_start()
+        last_time = time.time()
 
         while self.running:
             # Check for indices that need refreshing (invalid indices)
@@ -90,7 +91,9 @@ class DataGenerationLoop:
             self.shared_buffer.set_activations(indices_to_refresh, activations)
 
             # Calculate and update refresh rate
-            refresh_rate = len(indices_to_refresh) / gen_time if gen_time > 0 else 0
+            it_time = time.time() - last_time
+            last_time = time.time()
+            refresh_rate = len(indices_to_refresh) / it_time if it_time > 0 else 0
             self.monitor.set_refresh_rate(refresh_rate)
 
             # Update dashboard
@@ -177,10 +180,10 @@ class DataGenerationLoop:
     def refill_from_disk(self, batch_size: int = 10000) -> int:
         """
         Refill invalid indices using disk source if available.
-        
+
         Args:
             batch_size: Batch size for disk reads
-            
+
         Returns:
             Number of indices successfully refilled
         """
@@ -203,16 +206,16 @@ class DataGenerationLoop:
             try:
                 # Get samples from disk source
                 samples = self.disk_source.get_next_batch(samples_requested)
-                
+
                 # Only fill as many indices as we have samples
-                indices_to_fill = batch_indices[:len(samples)]
-                
+                indices_to_fill = batch_indices[: len(samples)]
+
                 # Update buffer
                 self.shared_buffer.set_activations(indices_to_fill, samples)
                 total_refilled += len(indices_to_fill)
-                
+
                 self.monitor.log_refill_progress(len(indices_to_fill), "disk")
-                
+
             except Exception as e:
                 self.monitor.log_error("disk refill", e)
                 break

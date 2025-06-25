@@ -7,8 +7,10 @@ import logging
 import multiprocessing as mp
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from multiprocessing import shared_memory
+from typing import Any, Dict, List, Tuple
 
+import numpy as np
 import torch
 import torch.multiprocessing as torch_mp
 
@@ -29,6 +31,7 @@ class SharedActivationBuffer:
         n_in_out: int,
         n_layers: int,
         activation_dim: int,
+        config: Any,  # Config is now mandatory
         dtype: torch.dtype = torch.float32,
     ):
         """
@@ -39,6 +42,7 @@ class SharedActivationBuffer:
             n_in_out: Number of in/out activations (typically 2)
             n_layers: Number of layers in the model
             activation_dim: Dimension of each activation vector
+            config: DataLoaderConfig for determining pinned buffer size (required)
             dtype: Data type for activations
         """
         self.buffer_size = buffer_size
@@ -53,6 +57,7 @@ class SharedActivationBuffer:
         self.total_size = (
             buffer_size * n_in_out * n_layers * activation_dim * self.element_size
         )
+        self.n_elems = buffer_size * n_in_out * n_layers * activation_dim
 
         logger.info(
             f"Creating shared PyTorch buffer: {buffer_size} samples x {n_in_out} in/out x {n_layers} layers x {activation_dim} dims"
@@ -60,15 +65,37 @@ class SharedActivationBuffer:
         logger.info(f"Total memory: {self.total_size / (1024**3):.2f} GB")
 
         # Create shared PyTorch tensor directly
-        self.buffer_tensor = torch.empty(self.shape, dtype=dtype, requires_grad=False)
+        # self.buffer_tensor = torch.empty(self.shape, dtype=dtype, requires_grad=False)
         # Make it shared across processes
-        self.buffer_tensor.share_memory_()
+        # self.buffer_tensor.share_memory_()
+        # Faster variant with proper pickling support:
+        self.shm = shared_memory.SharedMemory(create=True, size=self.total_size)
+        self.shm_name = self.shm.name  # Store name for pickle/unpickle
+        self.buffer_tensor = torch.frombuffer(
+            self.shm.buf, dtype=self.dtype, count=self.n_elems
+        ).view(self.shape)
 
         # Create shared validity mask tensor
         self.validity_tensor = torch.zeros(
             buffer_size, dtype=torch.bool, requires_grad=False
         )
         self.validity_tensor.share_memory_()
+
+        # OPTIMIZATION: Create pinned memory buffer for fast GPU->CPU transfers
+        # Size it for the maximum batch we'll process: generation_batch_size * max_sequence_length
+        max_batch_samples = config.generation_batch_size * config.max_sequence_length
+        pinned_shape = (max_batch_samples, n_in_out, n_layers, activation_dim)
+        pinned_size_gb = (
+            max_batch_samples * n_in_out * n_layers * activation_dim * self.element_size
+        ) / (1024**3)
+        logger.info(
+            f"Creating pinned memory buffer: {max_batch_samples} samples ({pinned_size_gb:.3f} GB)"
+        )
+
+        self.pinned_buffer = torch.empty(pinned_shape, dtype=dtype, pin_memory=True)
+        self.max_batch_samples = max_batch_samples
+
+        logger.info("Pinned memory buffer created successfully")
 
         # Queue for statistics updates (if needed in future)
         self.stats_queue = mp.Queue(maxsize=100)  # Statistics updates
@@ -87,7 +114,46 @@ class SharedActivationBuffer:
 
         logger.info("Shared PyTorch activation buffer initialized successfully")
 
-    def get_activations(self, batch_size: int, timeout: float = 10.0) -> torch.Tensor:
+    def __getstate__(self):
+        """
+        Custom pickling - only send metadata, not the large tensor.
+        This makes multiprocessing.Process.start() return immediately.
+        """
+        state = self.__dict__.copy()
+        # Remove the unpicklable objects - these will be recreated in child process
+        del state["buffer_tensor"]
+        del state["shm"]  # Don't pickle the buffer itself
+        del state["pinned_buffer"]  # Don't pickle pinned memory - recreate in child
+        # Keep shm_name so child process can reconnect to same shared memory
+        return state
+
+    def __setstate__(self, state):
+        """
+        Custom unpickling - reconnect to the same shared memory block.
+        Child process accesses the identical memory created by parent.
+        """
+        self.__dict__.update(state)
+        # Connect to EXISTING shared memory using the stored name
+        self.shm = shared_memory.SharedMemory(name=self.shm_name)
+        # Recreate tensor view of the SAME physical memory
+        self.buffer_tensor = torch.frombuffer(
+            self.shm.buf, dtype=self.dtype, count=self.n_elems
+        ).view(self.shape)
+
+        # Recreate pinned memory buffer in child process with correct size
+        pinned_shape = (
+            self.max_batch_samples,
+            self.n_in_out,
+            self.n_layers,
+            self.activation_dim,
+        )
+        self.pinned_buffer = torch.empty(
+            pinned_shape, dtype=self.dtype, pin_memory=True
+        )
+
+        # Now both parent and child processes access identical memory!
+
+    def get_activations(self, batch_size: int, timeout: float = 1000.0) -> torch.Tensor:
         """
         Get activation samples from the buffer and mark them as invalid.
 
@@ -134,7 +200,7 @@ class SharedActivationBuffer:
 
     def set_activations(self, indices: torch.Tensor, activations: torch.Tensor):
         """
-        Set activation data at specific indices.
+        Set activation data at specific indices using optimized pinned memory transfers.
 
         Args:
             indices: Tensor of indices to update
@@ -144,13 +210,32 @@ class SharedActivationBuffer:
             if len(indices) != len(activations):
                 raise ValueError("Number of indices must match number of activations")
 
-            # Ensure activations are on CPU and correct dtype
-            activations = activations.detach().cpu().to(self.dtype)
+            # Detach from computation graph and ensure correct dtype
+            activations = activations.detach().to(self.dtype)
+
+            # Optimized GPU->CPU transfer using pinned memory
+            batch_size = len(indices)
+            if activations.is_cuda:
+                if batch_size <= self.max_batch_samples:
+                    # Use pre-allocated pinned memory buffer for fast transfer
+                    pinned_slice = self.pinned_buffer[:batch_size]
+                    pinned_slice.copy_(activations, non_blocking=False)
+                    cpu_activations = pinned_slice
+                else:
+                    # Fallback to regular .cpu() for oversized batches
+                    logger.warning(
+                        f"Batch size {batch_size} exceeds pinned buffer capacity {self.max_batch_samples}, falling back to .cpu()"
+                    )
+                    cpu_activations = (
+                        activations.cpu()
+                    )  # .cpu() includes synchronization
+            else:
+                cpu_activations = activations
 
             # Update buffer directly
-            self.buffer_tensor[indices] = activations
+            self.buffer_tensor[indices] = cpu_activations
 
-            # Mark as valid
+            # Mark indices as valid
             with self.validity_lock:
                 self.validity_tensor[indices] = True
 
@@ -216,17 +301,33 @@ class SharedActivationBuffer:
     def cleanup(self):
         """Clean up shared memory resources."""
         try:
-            # PyTorch shared tensors are automatically cleaned up by the garbage collector
-            # when all references are removed. No manual cleanup needed.
+            # Clean up tensors
             if hasattr(self, "buffer_tensor"):
                 del self.buffer_tensor
             if hasattr(self, "validity_tensor"):
                 del self.validity_tensor
+            if hasattr(self, "pinned_buffer"):
+                del self.pinned_buffer
 
-            logger.info("Shared PyTorch tensors cleaned up successfully")
+            # Clean up shared memory properly
+            if hasattr(self, "shm"):
+                try:
+                    # Close our reference to shared memory
+                    self.shm.close()
+                    # Try to unlink (delete) the shared memory segment
+                    # This will only succeed from the creating process
+                    try:
+                        self.shm.unlink()
+                    except FileNotFoundError:
+                        # Already unlinked by another process, that's fine
+                        pass
+                except Exception as shm_error:
+                    logger.warning(f"Error cleaning up shared memory: {shm_error}")
+
+            logger.info("Shared memory resources cleaned up successfully")
 
         except Exception as e:
-            logger.error(f"Error cleaning up shared tensors: {e}")
+            logger.error(f"Error cleaning up shared memory: {e}")
 
     def __del__(self):
         """Destructor to ensure cleanup."""
@@ -244,6 +345,7 @@ class SharedMemoryManager:
         n_in_out: int,
         n_layers: int,
         activation_dim: int,
+        config: Any,
         dtype: torch.dtype = torch.float32,
     ):
         self.buffer_size = buffer_size
@@ -251,7 +353,8 @@ class SharedMemoryManager:
         self.n_layers = n_layers
         self.activation_dim = activation_dim
         self.dtype = dtype
-        self.buffer: Optional[SharedActivationBuffer] = None
+        self.config = config
+        self.buffer: SharedActivationBuffer | None = None
 
     def __enter__(self) -> SharedActivationBuffer:
         self.buffer = SharedActivationBuffer(
@@ -260,6 +363,7 @@ class SharedMemoryManager:
             n_layers=self.n_layers,
             activation_dim=self.activation_dim,
             dtype=self.dtype,
+            config=self.config,
         )
         return self.buffer
 

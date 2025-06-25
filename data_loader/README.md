@@ -146,10 +146,11 @@ The data loader uses a modular architecture with clean separation of responsibil
 
 #### 6. **Shared Memory Buffer** (`shared_memory.py`)
 **Responsibility**: High-performance inter-process data sharing
-- Lock-free circular buffer
-- Validity tracking for partial data
-- Memory-mapped tensor storage
-- **Key Feature**: Optimized for high-throughput access
+- Named shared memory segments for fast process startup
+- Custom pickling/unpickling for multiprocessing efficiency
+- Validity tracking for partial data  
+- Lock-safe tensor operations
+- **Key Feature**: Optimized for high-throughput access with millisecond process startup
 
 #### 7. **Data Loader Interface** (`dataset.py`)
 **Responsibility**: PyTorch-compatible interface
@@ -195,8 +196,9 @@ The data loader uses a modular architecture with clean separation of responsibil
 
 ### Performance Features
 
+- **Fast Process Startup**: Custom pickling ensures `start()` returns in milliseconds, not minutes
 - **Adaptive Device Selection**: Automatically switches between CPU/GPU based on buffer pressure
-- **Shared Memory**: Zero-copy data sharing between processes
+- **Shared Memory**: Zero-copy data sharing between processes using named shared memory segments
 - **Continuous Generation**: Background process keeps buffer filled
 - **Memory Optimization**: Efficient tensor storage and cleanup
 - **Real-time Monitoring**: Live dashboard shows throughput and buffer status
@@ -228,3 +230,38 @@ DataLoaderConfig(
 ```
 
 This architecture enables high-performance activation streaming while maintaining clean, testable, and maintainable code.
+
+## Technical Implementation Details
+
+### Fast Process Startup
+
+The data loader solves a critical performance issue with large shared memory buffers. Previously, `data_generator.start()` would take 30+ seconds for large buffers (>50GB) because Python was trying to pickle and transfer massive tensor objects between processes.
+
+**Solution**: Custom pickling using named shared memory segments:
+
+```python
+def __getstate__(self):
+    """Only pickle metadata, not the large tensors."""
+    state = self.__dict__.copy()
+    del state['buffer_tensor']  # Don't pickle 50GB+ tensor
+    del state['shm']           # Don't pickle buffer
+    return state  # Only send small metadata
+
+def __setstate__(self, state):
+    """Reconnect to existing shared memory in child process."""
+    self.__dict__.update(state)
+    # Connect to SAME memory block using stored name
+    self.shm = shared_memory.SharedMemory(name=self.shm_name)
+    # Recreate tensor view of identical physical memory
+    self.buffer_tensor = torch.frombuffer(self.shm.buf, ...).view(self.shape)
+```
+
+**Result**: Process startup now takes milliseconds instead of minutes, enabling practical use with large buffers.
+
+### Shared Memory Architecture
+
+- **Parent Process**: Creates named shared memory segment (`psm_abc123def`)
+- **Child Process**: Connects to existing segment by name
+- **Memory Access**: Both processes access identical physical RAM
+- **Synchronization**: Changes in one process immediately visible in other
+- **Cleanup**: Automatic cleanup when all processes release references

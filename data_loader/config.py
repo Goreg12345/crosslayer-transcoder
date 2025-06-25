@@ -18,7 +18,7 @@ class DataLoaderConfig:
     n_in_out: int = 2  # Input and output activations for each layer
     n_layers: int = 12  # Number of layers in the model
     activation_dim: int = 768  # Dimension of activation vectors
-    dtype: torch.dtype = torch.float32
+    dtype: torch.dtype = torch.float16
     max_batch_size: int = 50_000  # Allow larger batches for high-throughput clients
 
     # Model settings
@@ -86,9 +86,6 @@ class DataLoaderConfig:
 
         if self.activation_dim <= 0:
             raise ValueError("activation_dim must be positive")
-
-        if self.max_batch_size <= 0 or self.max_batch_size > self.buffer_size:
-            raise ValueError("max_batch_size must be positive and <= buffer_size")
 
         if self.generation_batch_size <= 0:
             raise ValueError("generation_batch_size must be positive")

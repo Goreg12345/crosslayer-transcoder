@@ -24,7 +24,6 @@ class SharedMemoryDataset(Dataset):
     def __init__(self, shared_buffer: SharedActivationBuffer, config: DataLoaderConfig):
         self.shared_buffer = shared_buffer
         self.config = config
-        self.timeout = 30.0  # Timeout for waiting for data
 
     def __len__(self) -> int:
         """Return the buffer size as dataset length."""
@@ -41,15 +40,15 @@ class SharedMemoryDataset(Dataset):
     def get_batch(self, batch_size: int) -> torch.Tensor:
         """
         Get a batch of activation data from shared memory.
-        
+
         Args:
             batch_size: Number of samples to retrieve
-            
+
         Returns:
             Tensor of shape [batch_size, n_in_out, n_layers, activation_dim]
         """
         try:
-            return self.shared_buffer.get_activations(batch_size, timeout=self.timeout)
+            return self.shared_buffer.get_activations(batch_size)
         except TimeoutError:
             logger.error(f"Timeout waiting for {batch_size} samples")
             raise
@@ -65,19 +64,17 @@ class SharedMemoryDataLoader:
     """
 
     def __init__(
-        self, 
+        self,
         shared_buffer: SharedActivationBuffer,
         dataset: SharedMemoryDataset,
         data_generator: DataGeneratorProcess,
         batch_size: int = 1000,
-        timeout: float = 30.0,
-        config: Optional[DataLoaderConfig] = None
+        config: Optional[DataLoaderConfig] = None,
     ):
         self.shared_buffer = shared_buffer
         self.dataset = dataset
         self.generator_process = data_generator
         self.batch_size = batch_size
-        self.timeout = timeout
         self.config = config or DataLoaderConfig()
 
     def __iter__(self):
@@ -95,20 +92,20 @@ class SharedMemoryDataLoader:
     def cleanup(self):
         """Clean up resources."""
         logger.info("Cleaning up SharedMemoryDataLoader...")
-        
+
         if self.generator_process and self.generator_process.is_alive():
             logger.info("Terminating generator process...")
             self.generator_process.terminate()
             self.generator_process.join(timeout=5.0)
-            
+
             if self.generator_process.is_alive():
                 logger.warning("Force killing generator process...")
                 self.generator_process.kill()
                 self.generator_process.join()
-                
+
         if self.shared_buffer:
             self.shared_buffer.cleanup()
-            
+
         logger.info("Cleanup complete")
 
     def __del__(self):

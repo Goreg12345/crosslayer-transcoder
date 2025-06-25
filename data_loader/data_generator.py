@@ -29,11 +29,7 @@ class DataGeneratorProcess(mp.Process):
     Now focused only on process lifecycle - delegates actual work to specialized components.
     """
 
-    def __init__(
-        self, 
-        shared_buffer: SharedActivationBuffer, 
-        config: DataLoaderConfig
-    ):
+    def __init__(self, shared_buffer: SharedActivationBuffer, config: DataLoaderConfig):
         super().__init__(
             daemon=False
         )  # Can't be daemon if we want to use DataLoader workers
@@ -52,10 +48,10 @@ class DataGeneratorProcess(mp.Process):
             logger.info("Starting data generator process...")
             self.setup()
             self.running = True
-            
+
             # Start the generation loop
             self.generation_loop.generation_loop()
-            
+
         except Exception as e:
             logger.error(f"Data generator process error: {e}")
         finally:
@@ -64,6 +60,13 @@ class DataGeneratorProcess(mp.Process):
     def setup(self):
         """Initialize components using the new architecture."""
         # 1. Create models in the process (avoid pickle issues)
+        # 7. Initial population from disk if available
+        if self.disk_source:
+            refilled_count = self.generation_loop.refill_from_disk()
+            logger.info(
+                f"Initial buffer population: {refilled_count} samples loaded from file"
+            )
+
         logger.info(f"Loading CPU model: {self.config.model_name}")
         cpu_model = nnsight.LanguageModel(
             self.config.model_name,
@@ -98,21 +101,20 @@ class DataGeneratorProcess(mp.Process):
             seq_len=self.config.max_sequence_length - 1,  # -1 for BOS token
         )
 
-        text_dataset_loader = iter(
-            DataLoader(
-                token_dataset,
-                batch_size=None,
-                shuffle=False,
-                num_workers=8,  # Optimal for performance
-                prefetch_factor=4,  # Optimal for performance
-                worker_init_fn=text_dataset.worker_init_fn,
-            )
+        text_dataset_loader = DataLoader(
+            token_dataset,
+            batch_size=None,
+            shuffle=False,
+            num_workers=0,  # Reduced from 8 - fewer workers = faster startup
+            # prefetch_factor=2,  # Reduced prefetch factor
+            # worker_init_fn=text_dataset.worker_init_fn,
         )
+        text_dataset_loader = iter(text_dataset_loader)
 
         # 4. Create components
         activation_computer = ActivationComputer(self.config)
         self.monitor = ProcessMonitor()
-        
+
         # 5. Setup disk source if available
         if self.config.init_file and os.path.exists(self.config.init_file):
             logger.info(f"Setting up disk source: {self.config.init_file}")
@@ -131,14 +133,9 @@ class DataGeneratorProcess(mp.Process):
             monitor=self.monitor,
             disk_source=self.disk_source,
         )
-        
+
         # Set dataset reference for the loop
         self.generation_loop.set_dataset(dataset)
-
-        # 7. Initial population from disk if available
-        if self.disk_source:
-            refilled_count = self.generation_loop.refill_from_disk()
-            logger.info(f"Initial buffer population: {refilled_count} samples loaded from file")
 
         logger.info("Data generator setup complete!")
 
@@ -162,6 +159,7 @@ class DataGeneratorProcess(mp.Process):
         # Kill any remaining child processes
         try:
             import psutil
+
             current_process = psutil.Process()
             children = current_process.children(recursive=True)
             for child in children:

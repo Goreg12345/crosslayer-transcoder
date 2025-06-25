@@ -47,6 +47,7 @@ def actvs_loader_from_config(
         n_layers=config.n_layers,
         activation_dim=config.activation_dim,
         dtype=config.dtype,
+        config=config,
     )
 
     # 2. Create data generator (models will be created inside the process)
@@ -56,8 +57,9 @@ def actvs_loader_from_config(
     )
 
     # 3. Start the data generator process
-    logger.info("Starting data generator process...")
+    print("Starting data generator process...")
     data_generator.start()
+    print("Data generator process started")
 
     # 4. Create shared memory dataset
     dataset = SharedMemoryDataset(shared_buffer, config)
@@ -68,7 +70,6 @@ def actvs_loader_from_config(
         dataset=dataset,
         data_generator=data_generator,
         batch_size=batch_size,
-        timeout=timeout,
         config=config,
     )
 
