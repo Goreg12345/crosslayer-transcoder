@@ -5,7 +5,7 @@ Handles all logging, progress reporting, and CLI dashboard updates.
 
 import logging
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +27,13 @@ class ProcessMonitor:
         """Update the current refresh rate for dashboard display."""
         self._last_refresh_rate = refresh_rate
 
-    def update_dashboard(self, status: str, buffer_stats: Dict[str, Any], current_device: str) -> None:
+    def update_dashboard(
+        self, status: str, buffer_stats: Dict[str, Any], current_device: str
+    ) -> None:
         """
         Update the CLI dashboard with current buffer stats.
         Extracted from existing _update_dashboard method.
-        
+
         Args:
             status: Current process status (e.g., "GENERATING", "SLEEPING")
             buffer_stats: Statistics from shared buffer
@@ -61,7 +63,12 @@ class ProcessMonitor:
             uptime_str = f"{int(uptime)}s"
 
         # Get current device info
-        device_str = "GPU" if current_device == "cuda" else "CPU"
+        if current_device == "disk":
+            device_str = "DISK"
+        elif current_device == "cuda":
+            device_str = "GPU"
+        else:
+            device_str = "CPU"
 
         # Create shorter dashboard line with fixed-width formatting
         dashboard = (
@@ -75,9 +82,14 @@ class ProcessMonitor:
         # Use ANSI escape codes to clear line and move cursor to beginning
         print(f"\033[2K\r{dashboard}", end="", flush=True)
 
-    def log_refill_progress(self, refilled_count: int, source: str) -> None:
-        """Log progress for buffer refilling operations."""
+    def log_refill_progress(
+        self, refilled_count: int, source: str, buffer_stats: Dict[str, Any]
+    ) -> None:
+        """Log progress for buffer refilling operations and update dashboard."""
         logger.info(f"Refilled {refilled_count} samples from {source}")
+
+        # Update dashboard to show refill status with disk device
+        self.update_dashboard("REFILLING", buffer_stats, source)
 
     def log_dataset_exhausted(self) -> None:
         """Log when dataset is exhausted and needs recreation."""

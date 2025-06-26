@@ -29,25 +29,18 @@ class DataGenerationLoop:
         self,
         shared_buffer: SharedActivationBuffer,
         config: DataLoaderConfig,
-        cpu_model: Any,
-        gpu_model: Any,
-        text_dataset_loader: Any,
-        activation_computer: ActivationComputer,
         monitor: ProcessMonitor,
         disk_source: Optional[DiskActivationSource] = None,
     ):
         self.shared_buffer = shared_buffer
         self.config = config
-        self.cpu_model = cpu_model
-        self.gpu_model = gpu_model
-        self.text_dataset_loader = text_dataset_loader
-        self.activation_computer = activation_computer
+        self.cpu_model = None
+        self.gpu_model = None
+        self.text_dataset_loader = None
+        self.activation_computer = None
         self.monitor = monitor
+        self.monitor.log_generation_start()
         self.disk_source = disk_source
-
-        # Current model and device state
-        self.current_model = cpu_model  # Start with CPU
-        self.current_device = "cpu"
 
         # Runtime state
         self.running = True
@@ -57,9 +50,23 @@ class DataGenerationLoop:
         """Set the dataset reference for text data loading."""
         self.dataset = dataset
 
-    def generation_loop(self):
+    def generation_loop(
+        self,
+        cpu_model: Any,
+        gpu_model: Any,
+        text_dataset_loader: Any,
+        activation_computer: ActivationComputer,
+    ):
         """Main generation loop - extracted from existing code."""
-        self.monitor.log_generation_start()
+        self.cpu_model = cpu_model
+        self.gpu_model = gpu_model
+        self.text_dataset_loader = text_dataset_loader
+        self.activation_computer = activation_computer
+
+        # Current model and device state
+        self.current_model = self.cpu_model  # Start with CPU
+        self.current_device = "cpu"
+
         last_time = time.time()
 
         while self.running:
@@ -177,7 +184,7 @@ class DataGenerationLoop:
         elif self._should_move_to_cpu(valid_percentage):
             self._move_model_to_device("cpu")
 
-    def refill_from_disk(self, batch_size: int = 10000) -> int:
+    def refill_from_disk(self, batch_size: int = 4_000):
         """
         Refill invalid indices using disk source if available.
 
@@ -189,21 +196,28 @@ class DataGenerationLoop:
         """
         if not self.disk_source or not self.disk_source.is_available():
             self.monitor.log_warning("No disk source available for refilling")
-            return 0
+            return
 
         # Get all invalid indices
         invalid_indices = self.shared_buffer._get_invalid_indices()
         if len(invalid_indices) == 0:
-            return 0
+            return
 
+        # Track refill timing and progress
+        refill_start_time = time.time()
         total_refilled = 0
 
         # Process in batches
         for i in range(0, len(invalid_indices), batch_size):
+            batch_start_time = time.time()
             batch_indices = invalid_indices[i : i + batch_size]
             samples_requested = len(batch_indices)
 
             try:
+                # Update dashboard to show refill in progress
+                stats = self.shared_buffer.get_stats()
+                self.monitor.update_dashboard("REFILLING", stats, "disk")
+
                 # Get samples from disk source
                 samples = self.disk_source.get_next_batch(samples_requested)
 
@@ -212,15 +226,24 @@ class DataGenerationLoop:
 
                 # Update buffer
                 self.shared_buffer.set_activations(indices_to_fill, samples)
-                total_refilled += len(indices_to_fill)
 
-                self.monitor.log_refill_progress(len(indices_to_fill), "disk")
+                # Calculate refill rate for this batch
+                batch_time = time.time() - batch_start_time
+                batch_refilled = len(indices_to_fill)
+                total_refilled += batch_refilled
+
+                # Calculate running average refill rate
+                total_time = time.time() - refill_start_time
+                refill_rate = total_refilled / total_time if total_time > 0 else 0
+                self.monitor.set_refresh_rate(refill_rate)
+
+                # Update dashboard with progress
+                updated_stats = self.shared_buffer.get_stats()
+                self.monitor.log_refill_progress(batch_refilled, "disk", updated_stats)
 
             except Exception as e:
                 self.monitor.log_error("disk refill", e)
                 break
-
-        return total_refilled
 
     def stop(self) -> None:
         """Stop the generation loop."""

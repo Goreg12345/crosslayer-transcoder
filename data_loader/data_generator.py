@@ -35,11 +35,9 @@ class DataGeneratorProcess(mp.Process):
         )  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
         self.config = config
-        self.running = False
 
         # Components will be created in the process
         self.generation_loop: Optional[DataGenerationLoop] = None
-        self.monitor: Optional[ProcessMonitor] = None
         self.disk_source: Optional[DiskActivationSource] = None
 
     def run(self):
@@ -47,10 +45,6 @@ class DataGeneratorProcess(mp.Process):
         try:
             logger.info("Starting data generator process...")
             self.setup()
-            self.running = True
-
-            # Start the generation loop
-            self.generation_loop.generation_loop()
 
         except Exception as e:
             logger.error(f"Data generator process error: {e}")
@@ -61,11 +55,27 @@ class DataGeneratorProcess(mp.Process):
         """Initialize components using the new architecture."""
         # 1. Create models in the process (avoid pickle issues)
         # 7. Initial population from disk if available
-        if self.disk_source:
-            refilled_count = self.generation_loop.refill_from_disk()
-            logger.info(
-                f"Initial buffer population: {refilled_count} samples loaded from file"
+        # 5. Setup disk source if available
+        if self.config.init_file and os.path.exists(self.config.init_file):
+            logger.info(f"Setting up disk source: {self.config.init_file}")
+            self.disk_source = DiskActivationSource(
+                self.config.init_file, dtype=self.config.dtype
             )
+        else:
+            self.disk_source = None
+        print("disk source available", self.disk_source is not None)
+
+        monitor = ProcessMonitor()
+
+        # 6. Create generation loop with all dependencies
+        self.generation_loop = DataGenerationLoop(
+            shared_buffer=self.shared_buffer,
+            config=self.config,
+            monitor=monitor,
+            disk_source=self.disk_source,
+        )
+
+        self.generation_loop.refill_from_disk()
 
         logger.info(f"Loading CPU model: {self.config.model_name}")
         cpu_model = nnsight.LanguageModel(
@@ -113,36 +123,21 @@ class DataGeneratorProcess(mp.Process):
 
         # 4. Create components
         activation_computer = ActivationComputer(self.config)
-        self.monitor = ProcessMonitor()
 
-        # 5. Setup disk source if available
-        if self.config.init_file and os.path.exists(self.config.init_file):
-            logger.info(f"Setting up disk source: {self.config.init_file}")
-            self.disk_source = DiskActivationSource(self.config.init_file)
-        else:
-            self.disk_source = None
-
-        # 6. Create generation loop with all dependencies
-        self.generation_loop = DataGenerationLoop(
-            shared_buffer=self.shared_buffer,
-            config=self.config,
+        # Set dataset reference for the loop
+        self.generation_loop.set_dataset(dataset)
+        self.generation_loop.generation_loop(
             cpu_model=cpu_model,
             gpu_model=gpu_model,
             text_dataset_loader=text_dataset_loader,
             activation_computer=activation_computer,
-            monitor=self.monitor,
-            disk_source=self.disk_source,
         )
-
-        # Set dataset reference for the loop
-        self.generation_loop.set_dataset(dataset)
 
         logger.info("Data generator setup complete!")
 
     def cleanup(self):
         """Clean up resources and terminate any child processes."""
         logger.info("Cleaning up data generator...")
-        self.running = False
 
         # Stop the generation loop
         if self.generation_loop:

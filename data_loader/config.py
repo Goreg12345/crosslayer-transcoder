@@ -123,4 +123,5 @@ def get_production_config() -> DataLoaderConfig:
         model_name="openai-community/gpt2",  # Production model
         dataset_name="Skylion007/openwebtext",
         generation_batch_size=2,
+        init_file="/var/local/glang/activations/clt-activations-10M-shuffled_fp16.h5",
     )

@@ -114,12 +114,18 @@ class DiskActivationSource(ActivationSource):
     Sequential access through the file.
     """
 
-    def __init__(self, file_path: str, accessor: str = "tensor"):
+    def __init__(
+        self,
+        file_path: str,
+        accessor: str = "tensor",
+        dtype: torch.dtype = torch.float32,
+    ):
         self.file_path = file_path
         self.accessor = accessor
         self.position = 0
         self.file_handle: Optional[h5py.File] = None
         self.tensor_handle: Optional[Any] = None
+        self.dtype = dtype
 
         if self.is_available():
             self._setup_file()
@@ -127,8 +133,16 @@ class DiskActivationSource(ActivationSource):
     def _setup_file(self) -> None:
         """Open the HDF5 file and get tensor handle."""
         try:
-            self.file_handle = h5py.File(self.file_path, "r")
+            fapl = h5py.h5p.create(h5py.h5p.FILE_ACCESS)
+            fapl.set_sieve_buf_size(32 * 1024 * 1024)  # 32 MB instead of 128 kB
+            fid = h5py.h5f.open(self.file_path.encode(), h5py.h5f.ACC_RDONLY, fapl)
+            self.file_handle = h5py.File(fid)
             self.tensor_handle = self.file_handle[self.accessor]
+
+            # self.file_handle = h5py.File(
+            #     self.file_path, "r", rdcc_nbytes=1024**3, rdcc_nslots=100003
+            # )
+            # self.tensor_handle = self.file_handle[self.accessor]
             self.position = 0
         except Exception as e:
             raise RuntimeError(f"Failed to open activation file {self.file_path}: {e}")
@@ -167,7 +181,7 @@ class DiskActivationSource(ActivationSource):
         self.position = end_pos
 
         # Convert to tensor and return
-        return torch.tensor(data, dtype=torch.float32)
+        return torch.tensor(data, dtype=self.dtype)
 
     def reset_position(self) -> None:
         """Reset file position to beginning."""
