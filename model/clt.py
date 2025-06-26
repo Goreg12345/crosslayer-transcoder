@@ -11,19 +11,42 @@ from metrics.replacement_model_accuracy import ReplacementModelAccuracy
 
 
 class CrossLayerTranscoder(L.LightningModule):
-    def __init__(self, config, nonlinearity, *args, **kwargs):
+    def __init__(
+        self,
+        nonlinearity: nn.Module,
+        d_acts: int = 768,
+        d_features: int = 6144,  # 768 * 8
+        n_layers: int = 12,
+        lambda_sparsity: float = 0.0002,
+        c_sparsity: float = 0.1,
+        learning_rate: float = 1e-3,
+        *args,
+        **kwargs
+    ):
+        """
+        CrossLayer Transcoder model.
+        
+        Args:
+            nonlinearity: Nonlinearity module (e.g., JumpReLU)
+            d_acts: Dimension of input activations
+            d_features: Dimension of sparse features
+            n_layers: Number of layers in the model
+            lambda_sparsity: L1 sparsity penalty weight
+            c_sparsity: Sparsity coefficient for tanh scaling
+            learning_rate: Learning rate for optimizer
+        """
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters(config)
-
-        self.config = config
-        d_acts = config.get("d_acts", 768)
-        d_features = config.get("d_features", 768 * 8)
-        n_layers = config.get("n_layers", 12)
-
-        # loss hyperparams:
-        self._lambda = config.get("lambda", 0.1)
-        self.c = config.get("c", 0.1)
-
+        
+        # Save all hyperparameters for Lightning checkpointing
+        self.save_hyperparameters(ignore=['nonlinearity'])
+        
+        # Store parameters
+        self.d_acts = d_acts
+        self.d_features = d_features
+        self.n_layers = n_layers
+        self._lambda = lambda_sparsity
+        self.c = c_sparsity
+        self.learning_rate = learning_rate
         self.nonlinearity = nonlinearity
 
         self.W_enc = nn.Parameter(torch.empty(n_layers, d_acts, d_features))
@@ -37,12 +60,10 @@ class CrossLayerTranscoder(L.LightningModule):
         self.reset_parameters()
 
     def reset_parameters(self):
-        enc_uniform_thresh = 1 / (self.config.get("d_features", 768 * 8) ** 0.5)
+        enc_uniform_thresh = 1 / (self.d_features ** 0.5)
         self.W_enc.data.uniform_(-enc_uniform_thresh, enc_uniform_thresh)
 
-        dec_uniform_thresh = 1 / (
-            (self.config.get("d_acts", 768) * self.config.get("n_layers", 12)) ** 0.5
-        )
+        dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         self.W_dec.data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
 
     def forward(
@@ -133,6 +154,5 @@ class CrossLayerTranscoder(L.LightningModule):
         print("exiting val epoch end")
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config.get("lr", 1e-3))
-        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer

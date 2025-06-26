@@ -5,12 +5,13 @@ PyTorch Dataset and DataLoader for shared memory activation data.
 import logging
 from typing import Optional
 
+import lightning as L
 import torch
 from torch.utils.data import Dataset
 
-from data_loader.config import DataLoaderConfig
-from data_loader.data_generator import DataGeneratorProcess
-from data_loader.shared_memory import SharedActivationBuffer
+# DataLoaderConfig no longer needed - using individual parameters
+from data.data_generator import DataGeneratorProcess
+from data.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +22,13 @@ class SharedMemoryDataset(Dataset):
     Works with DataGeneratorProcess to provide continuous data streaming.
     """
 
-    def __init__(self, shared_buffer: SharedActivationBuffer, config: DataLoaderConfig):
+    def __init__(self, shared_buffer: SharedActivationBuffer, buffer_size: int):
         self.shared_buffer = shared_buffer
-        self.config = config
+        self.buffer_size = buffer_size
 
     def __len__(self) -> int:
         """Return the buffer size as dataset length."""
-        return self.config.buffer_size
+        return self.buffer_size
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         """
@@ -69,13 +70,11 @@ class SharedMemoryDataLoader:
         dataset: SharedMemoryDataset,
         data_generator: DataGeneratorProcess,
         batch_size: int = 1000,
-        config: Optional[DataLoaderConfig] = None,
     ):
         self.shared_buffer = shared_buffer
         self.dataset = dataset
         self.generator_process = data_generator
         self.batch_size = batch_size
-        self.config = config or DataLoaderConfig()
 
     def __iter__(self):
         """Iterator interface for PyTorch DataLoader compatibility."""

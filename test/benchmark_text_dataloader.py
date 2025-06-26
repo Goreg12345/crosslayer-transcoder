@@ -11,7 +11,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-from data_loader import text_dataset
+from data import text_dataset
 
 
 def benchmark_textdataset(

@@ -3,7 +3,7 @@ import torch
 from einops import einsum
 from torchmetrics import Metric
 
-from utils import get_webtext_dataloader
+from utils.utils import get_webtext_dataloader
 
 
 class ReplacementModel(torch.nn.Module):

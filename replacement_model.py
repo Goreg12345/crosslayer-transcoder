@@ -6,8 +6,8 @@ import nnsight
 import torch
 from einops import einsum
 
-from clt import CrossLayerTranscoder
-from utils import get_webtext_dataloader
+from model.clt import CrossLayerTranscoder
+from utils.utils import get_webtext_dataloader
 
 
 class ReplacementModel(torch.nn.Module):

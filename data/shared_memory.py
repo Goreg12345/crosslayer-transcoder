@@ -31,8 +31,11 @@ class SharedActivationBuffer:
         n_in_out: int,
         n_layers: int,
         activation_dim: int,
-        config: Any,  # Config is now mandatory
         dtype: torch.dtype = torch.float32,
+        shared_memory_name: str = "activation_buffer",
+        timeout_seconds: int = 30,
+        generation_batch_size: int = 32,
+        max_sequence_length: int = 1024,
     ):
         """
         Initialize shared activation buffer.
@@ -42,8 +45,11 @@ class SharedActivationBuffer:
             n_in_out: Number of in/out activations (typically 2)
             n_layers: Number of layers in the model
             activation_dim: Dimension of each activation vector
-            config: DataLoaderConfig for determining pinned buffer size (required)
             dtype: Data type for activations
+            shared_memory_name: Name for shared memory buffer
+            timeout_seconds: Timeout for buffer operations
+            generation_batch_size: Batch size for activation generation (for pinned buffer sizing)
+            max_sequence_length: Max sequence length (for pinned buffer sizing)
         """
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
@@ -83,7 +89,7 @@ class SharedActivationBuffer:
 
         # OPTIMIZATION: Create pinned memory buffer for fast GPU->CPU transfers
         # Size it for the maximum batch we'll process: generation_batch_size * max_sequence_length
-        max_batch_samples = config.generation_batch_size * config.max_sequence_length
+        max_batch_samples = generation_batch_size * max_sequence_length
         pinned_shape = (max_batch_samples, n_in_out, n_layers, activation_dim)
         pinned_size_gb = (
             max_batch_samples * n_in_out * n_layers * activation_dim * self.element_size
@@ -345,15 +351,21 @@ class SharedMemoryManager:
         n_in_out: int,
         n_layers: int,
         activation_dim: int,
-        config: Any,
         dtype: torch.dtype = torch.float32,
+        shared_memory_name: str = "activation_buffer",
+        timeout_seconds: int = 30,
+        generation_batch_size: int = 32,
+        max_sequence_length: int = 1024,
     ):
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
         self.n_layers = n_layers
         self.activation_dim = activation_dim
         self.dtype = dtype
-        self.config = config
+        self.shared_memory_name = shared_memory_name
+        self.timeout_seconds = timeout_seconds
+        self.generation_batch_size = generation_batch_size
+        self.max_sequence_length = max_sequence_length
         self.buffer: SharedActivationBuffer | None = None
 
     def __enter__(self) -> SharedActivationBuffer:
@@ -363,7 +375,10 @@ class SharedMemoryManager:
             n_layers=self.n_layers,
             activation_dim=self.activation_dim,
             dtype=self.dtype,
-            config=self.config,
+            shared_memory_name=self.shared_memory_name,
+            timeout_seconds=self.timeout_seconds,
+            generation_batch_size=self.generation_batch_size,
+            max_sequence_length=self.max_sequence_length,
         )
         return self.buffer
 

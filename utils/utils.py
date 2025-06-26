@@ -2,7 +2,7 @@ import datasets
 import torch
 from torch.utils.data import DataLoader
 
-import activation_server.text_dataset as text_dataset
+import data.text_dataset as text_dataset
 
 
 def get_webtext_dataloader(model, batch_size=40):

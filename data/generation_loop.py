@@ -10,11 +10,12 @@ from typing import Any, Optional
 import torch
 from torch.utils.data import DataLoader
 
-from data_loader import text_dataset
-from data_loader.activation_sources import ActivationComputer, DiskActivationSource
-from data_loader.config import DataLoaderConfig
-from data_loader.process_monitor import ProcessMonitor
-from data_loader.shared_memory import SharedActivationBuffer
+from data import text_dataset
+from data.activation_sources import ActivationComputer, DiskActivationSource
+
+# DataLoaderConfig no longer needed - using individual parameters
+from data.process_monitor import ProcessMonitor
+from data.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,28 @@ class DataGenerationLoop:
     def __init__(
         self,
         shared_buffer: SharedActivationBuffer,
-        config: DataLoaderConfig,
+        buffer_size: int,
+        n_in_out: int,
+        n_layers: int,
+        activation_dim: int,
+        dtype: torch.dtype,
+        max_batch_size: int,
+        refresh_interval: float,
+        generation_batch_size: int,
+        max_sequence_length: int,
         monitor: ProcessMonitor,
         disk_source: Optional[DiskActivationSource] = None,
     ):
         self.shared_buffer = shared_buffer
-        self.config = config
+        self.buffer_size = buffer_size
+        self.n_in_out = n_in_out
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
+        self.dtype = dtype
+        self.max_batch_size = max_batch_size
+        self.refresh_interval = refresh_interval
+        self.generation_batch_size = generation_batch_size
+        self.max_sequence_length = max_sequence_length
         self.cpu_model = None
         self.gpu_model = None
         self.text_dataset_loader = None
@@ -77,7 +94,7 @@ class DataGenerationLoop:
                 # Update dashboard when sleeping
                 stats = self.shared_buffer.get_stats()
                 self.monitor.update_dashboard("SLEEPING", stats, self.current_device)
-                time.sleep(self.config.refresh_interval)
+                time.sleep(self.refresh_interval)
                 continue
 
             # Generate new activations
@@ -125,9 +142,9 @@ class DataGenerationLoop:
             token_dataset = text_dataset.TextDataset(
                 self.dataset,
                 self.cpu_model.tokenizer,  # Use CPU model tokenizer (consistent)
-                self.config.generation_batch_size,
+                self.generation_batch_size,
                 drop_last_batch=False,
-                seq_len=self.config.max_sequence_length - 1,
+                seq_len=self.max_sequence_length - 1,
             )
             self.text_dataset_loader = iter(
                 DataLoader(
@@ -184,7 +201,7 @@ class DataGenerationLoop:
         elif self._should_move_to_cpu(valid_percentage):
             self._move_model_to_device("cpu")
 
-    def refill_from_disk(self, batch_size: int = 4_000):
+    def refill_from_disk(self, batch_size: int = 40_000):
         """
         Refill invalid indices using disk source if available.
 

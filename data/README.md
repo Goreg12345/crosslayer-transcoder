@@ -7,7 +7,7 @@ High-performance activation data loader for neural network interpretability rese
 ### Basic Usage
 
 ```python
-from data_loader import actvs_loader_from_test_config
+from data import actvs_loader_from_test_config
 
 # Create a test data loader (small buffer, fast startup)
 loader = actvs_loader_from_test_config(batch_size=1000)
@@ -23,7 +23,7 @@ for batch in loader:
 ### Production Usage
 
 ```python
-from data_loader import actvs_loader_from_production_config
+from data import actvs_loader_from_production_config
 
 # Create a production data loader (large buffer, high throughput)
 loader = actvs_loader_from_production_config(
@@ -42,7 +42,7 @@ for batch in loader:
 ### Custom Configuration
 
 ```python
-from data_loader import actvs_loader_from_config, DataLoaderConfig
+from data import actvs_loader_from_config, DataLoaderConfig
 
 # Create custom config
 config = DataLoaderConfig(
@@ -60,7 +60,7 @@ loader = actvs_loader_from_config(config, batch_size=2000)
 ### Context Manager Usage
 
 ```python
-from data_loader import actvs_loader_from_production_config
+from data import actvs_loader_from_production_config
 
 # Automatic cleanup
 with actvs_loader_from_production_config(batch_size=1000) as loader:

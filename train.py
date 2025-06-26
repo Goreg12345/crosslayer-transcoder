@@ -26,9 +26,9 @@ else:
 import lightning.pytorch as L
 from lightning.pytorch.loggers import WandbLogger
 
-from buffer import DiscBuffer
-from clt import CrossLayerTranscoder
-from jumprelu import JumpReLU
+from utils.buffer import DiscBuffer
+from model.clt import CrossLayerTranscoder
+from model.jumprelu import JumpReLU
 
 buffer = DiscBuffer("/var/local/glang/activations/clt-activations-10M.h5", "tensor")
 
