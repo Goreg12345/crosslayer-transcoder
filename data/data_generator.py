@@ -18,7 +18,7 @@ from data.activation_sources import ActivationComputer, DiskActivationSource
 
 # DataLoaderConfig no longer needed - using individual parameters
 from data.generation_loop import DataGenerationLoop
-from data.process_monitor import ProcessMonitor
+from data.process_monitor import ProcessMonitor, WandBProcessMonitor
 from data.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ class DataGeneratorProcess(mp.Process):
         refresh_interval: float,
         init_file: Optional[str] = None,
         device_map: str = "auto",
+        wandb_logging: Optional[dict] = None,
     ):
         super().__init__(
             daemon=False
@@ -70,9 +71,14 @@ class DataGeneratorProcess(mp.Process):
         self.refresh_interval = refresh_interval
         self.init_file = init_file
         self.device_map = device_map
+
+        # WandB configuration
+        self.wandb_logging = wandb_logging or {}
+
         # Components will be created in the process
         self.generation_loop: Optional[DataGenerationLoop] = None
         self.disk_source: Optional[DiskActivationSource] = None
+        self.monitor: Optional[ProcessMonitor] = None
 
     def run(self):
         """Main process loop."""
@@ -97,7 +103,38 @@ class DataGeneratorProcess(mp.Process):
             self.disk_source = None
         print("disk source available", self.disk_source is not None)
 
-        monitor = ProcessMonitor()
+        # Create monitor based on WandB configuration
+        if self.wandb_logging.get("enabled", False):
+            # Create WandB configuration with data generation parameters
+            wandb_config = {
+                "buffer_size": self.buffer_size,
+                "n_in_out": self.n_in_out,
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+                "model_name": self.model_name,
+                "dataset_name": self.dataset_name,
+                "generation_batch_size": self.generation_batch_size,
+                "max_sequence_length": self.max_sequence_length,
+                "device_map": self.device_map,
+            }
+
+            self.monitor = WandBProcessMonitor(
+                project=self.wandb_logging.get("project", "crosslayer-transcoder"),
+                group=self.wandb_logging.get("group"),
+                run_name=self.wandb_logging.get("run_name", "data-generator"),
+                tags=self.wandb_logging.get("tags", ["data-generation"]),
+                config=wandb_config,
+                save_dir=self.wandb_logging.get("save_dir", "./wandb"),
+            )
+
+            # Update logging interval if specified
+            if "log_interval" in self.wandb_logging:
+                self.monitor._wandb_log_interval = self.wandb_logging["log_interval"]
+
+            logger.info("Using WandB process monitor")
+        else:
+            self.monitor = ProcessMonitor()
+            logger.info("Using standard process monitor")
 
         # 6. Create generation loop with all dependencies
         # Note: DataGenerationLoop will need to be updated to accept individual parameters too
@@ -110,7 +147,7 @@ class DataGeneratorProcess(mp.Process):
             dtype=self.dtype,
             max_batch_size=self.max_batch_size,
             refresh_interval=self.refresh_interval,
-            monitor=monitor,
+            monitor=self.monitor,
             disk_source=self.disk_source,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
@@ -181,6 +218,10 @@ class DataGeneratorProcess(mp.Process):
         # Stop the generation loop
         if self.generation_loop:
             self.generation_loop.stop()
+
+        # Finish WandB logging if using WandB monitor
+        if self.monitor and hasattr(self.monitor, "finish"):
+            self.monitor.finish()
 
         # Close disk source
         if self.disk_source:

@@ -57,6 +57,8 @@ class ActivationDataModule(L.LightningDataModule):
         # Advanced settings
         use_shared_memory: bool = True,  # Use shared memory streaming by default
         device_map: str = "auto",
+        # WandB logging configuration
+        wandb_logging: Optional[dict] = None,
         **kwargs,
     ):
         """
@@ -102,49 +104,58 @@ class ActivationDataModule(L.LightningDataModule):
             # Advanced settings
             use_shared_memory: Whether to use shared memory streaming
             device_map: Device map for model loading ("cpu", "auto", "cuda:0", "cuda:0,1,2,3")
+
+            # WandB logging configuration
+            wandb_logging: WandB logging configuration
         """
         super().__init__()
         self.save_hyperparameters()
 
-        # Convert string dtypes to torch dtypes
-        if dtype == "float16":
-            self.torch_dtype = torch.float16
-        elif dtype == "float32":
-            self.torch_dtype = torch.float32
-        else:
-            raise ValueError(f"Unsupported dtype: {dtype}")
-
-        if model_dtype == "float16":
-            self.model_torch_dtype = torch.float16
-        elif model_dtype == "float32":
-            self.model_torch_dtype = torch.float32
-        else:
-            raise ValueError(f"Unsupported model_dtype: {model_dtype}")
-
-        # Store all parameters
+        # Buffer settings
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
         self.n_layers = n_layers
         self.activation_dim = activation_dim
+        self.dtype = dtype
         self.max_batch_size = max_batch_size
+
+        # Model settings for activation generation
         self.model_name = model_name
+        self.model_dtype = model_dtype
+
+        # Dataset settings
         self.dataset_name = dataset_name
         self.dataset_split = dataset_split
         self.max_sequence_length = max_sequence_length
+
+        # Generation settings
         self.generation_batch_size = generation_batch_size
         self.refresh_interval = refresh_interval
+
+        # Memory settings
         self.shared_memory_name = shared_memory_name
         self.timeout_seconds = timeout_seconds
-        self.init_file = init_file
-        self.use_shared_memory = use_shared_memory
 
-        # DataLoader parameters
+        # File paths
+        self.init_file = init_file
+
+        # DataLoader settings
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
         self.shuffle = shuffle
         self.persistent_workers = persistent_workers
         self.pin_memory = pin_memory
+
+        # Advanced settings
+        self.use_shared_memory = use_shared_memory
+
+        # WandB configuration
+        self.wandb_logging = wandb_logging or {}
+
+        # Convert dtype string to torch.dtype
+        self.torch_dtype = getattr(torch, dtype)
+        self.model_torch_dtype = getattr(torch, model_dtype)
 
         # Will be created in setup
         self.data_loader = None
@@ -249,6 +260,7 @@ class ActivationDataModule(L.LightningDataModule):
             refresh_interval=self.refresh_interval,
             init_file=self.init_file,
             device_map=self.device_map,
+            wandb_logging=self.wandb_logging,
         )
 
         # 3. Start the data generator process
