@@ -3,6 +3,7 @@ Shared memory management for large PyTorch activation tensors.
 Handles inter-process communication via queues and shared memory buffers.
 """
 
+import atexit
 import logging
 import multiprocessing as mp
 import threading
@@ -76,6 +77,7 @@ class SharedActivationBuffer:
         # self.buffer_tensor.share_memory_()
         # Faster variant with proper pickling support:
         self.shm = shared_memory.SharedMemory(create=True, size=self.total_size)
+        atexit.register(lambda: self.shm.unlink())
         self.shm_name = self.shm.name  # Store name for pickle/unpickle
         self.buffer_tensor = torch.frombuffer(
             self.shm.buf, dtype=self.dtype, count=self.n_elems

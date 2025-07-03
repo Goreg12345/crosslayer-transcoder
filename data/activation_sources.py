@@ -44,8 +44,8 @@ class ActivationComputer(ActivationSource):
     Pure computation - takes model + tokens, returns activations.
     """
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, n_layers: int):
+        self.n_layers = n_layers
 
     def get_next_batch(self, model: Any, tokens: torch.Tensor) -> torch.Tensor:
         """
@@ -78,7 +78,7 @@ class ActivationComputer(ActivationSource):
             mlp_outs = []
 
             # Extract from all transformer layers
-            for i in range(self.config.n_layers):
+            for i in range(self.n_layers):
                 # MLP input (after layer norm)
                 mlp_in = model.transformer.h[i].ln_2.input.save()
                 mlp_ins.append(mlp_in)

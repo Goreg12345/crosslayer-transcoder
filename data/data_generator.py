@@ -161,7 +161,7 @@ class DataGeneratorProcess(mp.Process):
         text_dataset_loader = iter(text_dataset_loader)
 
         # 4. Create components
-        activation_computer = ActivationComputer(self.dtype)
+        activation_computer = ActivationComputer(self.n_layers)
 
         # Set dataset reference for the loop
         self.generation_loop.set_dataset(dataset)
