@@ -29,9 +29,19 @@ source .venv/bin/activate
 # Run Jupyter Lab
 .venv/bin/jupyter lab
 
-# Or run Python scripts directly
-.venv/bin/python main.py
+# Or start training via Lightning CLI
+.venv/bin/python cli.py fit --help
 ```
+
+## Project Structure
+
+- **`data/`** - High-performance data pipeline with shared memory streaming, background data generation, and activation loading from HDF5 files
+- **`model/`** - Core transcoder implementation (`clt.py`) and PyTorch Lightning wrapper (`clt_lightning.py`) with training logic  
+- **`metrics/`** - Model evaluation metrics including replacement model accuracy for interpretability analysis
+- **`config/`** - YAML configuration files for reproducible training runs via Lightning CLI
+- **`utils/`** - Utilities, callbacks, and helper functions for training and data processing
+- **`test/`** - Benchmarks and performance tests for the data loading pipeline
+- **`cli.py`** - Lightning CLI entry point for training with flexible configuration options
 
 ## Managing Dependencies
 
@@ -45,10 +55,3 @@ uv add --dev pytest black
 # Update all dependencies
 uv sync
 ```
-
-## Why uv?
-
-- 🚀 **10-100x faster** than pip/poetry
-- 🐍 **Manages Python versions** automatically
-- 📦 **No global installs** needed
-- 🔒 **Lockfile included** for reproducible builds
