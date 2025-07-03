@@ -56,6 +56,7 @@ class ActivationDataModule(L.LightningDataModule):
         pin_memory: bool = True,
         # Advanced settings
         use_shared_memory: bool = True,  # Use shared memory streaming by default
+        device_map: str = "auto",
         **kwargs,
     ):
         """
@@ -100,6 +101,7 @@ class ActivationDataModule(L.LightningDataModule):
 
             # Advanced settings
             use_shared_memory: Whether to use shared memory streaming
+            device_map: Device map for model loading ("cpu", "auto", "cuda:0", "cuda:0,1,2,3")
         """
         super().__init__()
         self.save_hyperparameters()
@@ -148,6 +150,9 @@ class ActivationDataModule(L.LightningDataModule):
         self.data_loader = None
         self.shared_buffer = None
         self.data_generator = None
+
+        # Device configuration
+        self.device_map = device_map
 
     def get_memory_estimate_gb(self) -> float:
         """Estimate total memory usage in GB."""
@@ -243,6 +248,7 @@ class ActivationDataModule(L.LightningDataModule):
             generation_batch_size=self.generation_batch_size,
             refresh_interval=self.refresh_interval,
             init_file=self.init_file,
+            device_map=self.device_map,
         )
 
         # 3. Start the data generator process

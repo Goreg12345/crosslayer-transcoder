@@ -32,6 +32,21 @@
             "cwd": "${workspaceFolder}",
             "justMyCode": false,
             "stopOnEntry": false
+        },
+        {
+            "name": "TRAIN",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "args": [
+                "fit",
+                "--config",
+                "config/default.yaml"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "noDebug": true
         }
     ]
 }

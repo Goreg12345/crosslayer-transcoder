@@ -47,6 +47,7 @@ class DataGeneratorProcess(mp.Process):
         generation_batch_size: int,
         refresh_interval: float,
         init_file: Optional[str] = None,
+        device_map: str = "auto",
     ):
         super().__init__(
             daemon=False
@@ -68,7 +69,7 @@ class DataGeneratorProcess(mp.Process):
         self.generation_batch_size = generation_batch_size
         self.refresh_interval = refresh_interval
         self.init_file = init_file
-
+        self.device_map = device_map
         # Components will be created in the process
         self.generation_loop: Optional[DataGenerationLoop] = None
         self.disk_source: Optional[DiskActivationSource] = None
@@ -129,7 +130,7 @@ class DataGeneratorProcess(mp.Process):
         logger.info(f"Loading GPU model: {self.model_name}")
         gpu_model = nnsight.LanguageModel(
             self.model_name,
-            device_map="auto",
+            device_map=self.device_map,
             dispatch=True,
             torch_dtype=self.model_dtype,
         )

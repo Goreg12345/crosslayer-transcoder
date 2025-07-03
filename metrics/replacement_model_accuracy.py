@@ -13,8 +13,8 @@ class ReplacementModel(torch.nn.Module):
         self.n_layers = self.gpt2.config.n_layer
 
     def forward(self, tokens, clt):
-        self.n_features = clt.config["d_features"]
-        self.n_layers = clt.config["n_layers"]
+        self.n_features = clt.d_features
+        self.n_layers = clt.n_layers
         with self.gpt2.trace(tokens):
             # features: batch_size x seq_len x n_layers x n_features
             features = torch.full(
@@ -54,18 +54,16 @@ class ReplacementModel(torch.nn.Module):
 
 
 class ReplacementModelAccuracy(Metric):
-    def __init__(self, gpt2=None, loader=None):
+    def __init__(
+        self, model_name="openai-community/gpt2", device_map="auto", loader_batch_size=5
+    ):
         super().__init__()
-        if not gpt2:
-            gpt2 = nnsight.LanguageModel(
-                "openai-community/gpt2", device_map="auto", dispatch=True
-            )
-            gpt2.requires_grad_(False)
-        if not loader:
-            loader = get_webtext_dataloader(gpt2, batch_size=5)
-        self.gpt2 = gpt2
-        self.replacement_model = ReplacementModel(gpt2)
-        self.loader = loader
+        self.gpt2 = nnsight.LanguageModel(
+            model_name, device_map=device_map, dispatch=True
+        )
+        self.gpt2.requires_grad_(False)
+        self.replacement_model = ReplacementModel(self.gpt2)
+        self.loader = get_webtext_dataloader(self.gpt2, batch_size=loader_batch_size)
         self.add_state("n_correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("n_total", default=torch.tensor(0), dist_reduce_fx="sum")
 
