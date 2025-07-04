@@ -24,11 +24,11 @@ class ReplacementModel(torch.nn.Module):
             )
 
             for layer in range(self.n_layers):
-                mlp_in = self.gpt2.transformer.h[layer].ln_2.input
+                mlp_in = self.gpt2.transformer.h[
+                    layer
+                ].ln_2.input  # (batch, seq, d_acts)
 
-                mean = mlp_in.mean(dim=-1, keepdim=True)
-                std = mlp_in.std(dim=-1, keepdim=True)
-                mlp_in_norm = (mlp_in - mean) / std
+                mlp_in_norm = clt.input_standardizer(mlp_in, layer=layer)
 
                 pre_actvs = einsum(
                     mlp_in_norm,
@@ -47,7 +47,9 @@ class ReplacementModel(torch.nn.Module):
                     "batch seq n_layers d_features, n_layers d_features d_acts -> batch seq d_acts",
                 )
 
-                self.gpt2.transformer.h[layer].mlp.output = recons
+                recons_norm = clt.output_standardizer(recons, layer=layer)
+
+                self.gpt2.transformer.h[layer].mlp.output = recons_norm
             logits = self.gpt2.lm_head.output.save()
 
         return logits

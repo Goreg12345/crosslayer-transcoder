@@ -47,13 +47,15 @@ class CrossLayerTranscoderModule(L.LightningModule):
         return self.model(acts_norm)
 
     def training_step(self, batch, batch_idx):
-        mean = batch.mean(dim=-1, keepdim=True)
-        std = batch.std(dim=-1, keepdim=True)
-        acts_norm = (batch - mean) / std
-        resid, mlp_out = acts_norm[:, 0], batch[:, 1]
-        features, recons = self.forward(resid)
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
 
-        mse = ((recons - mlp_out) ** 2).mean()
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        features, recons_norm, recons = self.forward(resid)
+
+        mse = (
+            (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
+        ).mean()
 
         masked_w = einsum(
             self.model.W_dec,
@@ -68,14 +70,16 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         self.log("train_loss", loss)
         self.log("train_mse", mse)
+        self.log("train_mse_rescaled", ((recons - mlp_out) ** 2).mean())
         self.log("train_sparsity", sparsity)
         self.log("L0 (%)", 100 * (features > 0).float().mean())
+        self.log("recons_standardized_std", recons_norm.std())
         self.log(
             "L0 (Avg. per layer)",
             (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
         )
 
-        if False:
+        if batch_idx % 500 == 1:
             l0_per_layer = (features > 0).float().sum(dim=(0, 2)) / features.shape[0]
 
             if self.logger and isinstance(self.logger.experiment, wandb.wandb_run.Run):

@@ -4,15 +4,16 @@
 seed_everything: 42
 
 trainer:
-  max_steps: 10_000
-  limit_train_batches: 10_000
-  val_check_interval: 500
+  max_steps: 5_0
+  #limit_train_batches: 10_000
+  val_check_interval: 200
   limit_val_batches: 1
   check_val_every_n_epoch: null
   enable_checkpointing: false  # We use custom end-of-training checkpoint
+  num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
   precision: "16-mixed"
   accelerator: "gpu"
-  devices: 1
+  devices: 1  # 4; [1] for cuda:1
   accumulate_grad_batches: 2
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
@@ -42,14 +43,27 @@ model:
             bandwidth: 1.0
             n_layers: 12
             d_features: 6144  # Must match model d_features
-        
+
+        # Standardizer component
+        input_standardizer:
+          class_path: model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+        output_standardizer:
+          class_path: model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
         # Model architecture
         d_acts: 768
         d_features: 6144  # 768 * 8
         n_layers: 12
     
     # Loss hyperparameters
-    lambda_sparsity: 0.0002
+    lambda_sparsity: 0.0004
     c_sparsity: 0.1
     
     # Optimization
