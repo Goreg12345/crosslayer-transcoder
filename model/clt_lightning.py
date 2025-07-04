@@ -1,3 +1,4 @@
+import time
 from typing import Tuple
 
 import lightning as L
@@ -24,7 +25,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
     ):
         super().__init__(*args, **kwargs)
 
-        self.save_hyperparameters(ignore=["model"])
+        self.save_hyperparameters()
 
         self.model = model
         self._lambda = lambda_sparsity

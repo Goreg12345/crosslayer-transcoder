@@ -4,7 +4,8 @@
 seed_everything: 42
 
 trainer:
-  max_steps: 5_0
+  # max_steps is number of gradient updates, not number of batches
+  max_steps: 2_500  # 20M tokens
   #limit_train_batches: 10_000
   val_check_interval: 200
   limit_val_batches: 1
@@ -24,9 +25,9 @@ trainer:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints"
-    # - class_path: utils.callbacks.TensorBoardProfilerCallback
-    #   init_args:
-    #     log_dir: "log/profiler"
+    - class_path: utils.callbacks.TensorBoardProfilerCallback
+      init_args:
+        log_dir: "log/profiler"
 
 model:
   class_path: model.clt_lightning.CrossLayerTranscoderModule
@@ -70,7 +71,7 @@ model:
     learning_rate: 1e-3
     
     # Compilation
-    compile: true
+    compile: false
 
     # Metrics
     replacement_model_accuracy:

@@ -6,14 +6,19 @@ import logging
 from pathlib import Path
 
 import lightning as L
-from torch.profiler import ProfilerActivity, profile, schedule, tensorboard_trace_handler
+from torch.profiler import (
+    ProfilerActivity,
+    profile,
+    schedule,
+    tensorboard_trace_handler,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TensorBoardProfilerCallback(L.Callback):
     """TensorBoard profiler callback."""
-    
+
     def __init__(self, log_dir: str = "log/profiler"):
         super().__init__()
         self.log_dir = log_dir
@@ -40,12 +45,12 @@ class TensorBoardProfilerCallback(L.Callback):
 
 class EndOfTrainingCheckpointCallback(L.Callback):
     """Save checkpoint only at end of training."""
-    
+
     def __init__(self, checkpoint_dir: str = "checkpoints"):
         super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
 
     def on_train_end(self, trainer, pl_module):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        checkpoint_path = self.checkpoint_dir / "final_model.ckpt"
+        checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)

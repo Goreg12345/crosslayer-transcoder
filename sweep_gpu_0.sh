@@ -1,0 +1,8 @@
+export PYTHONPATH="${PYTHONPATH}:${PWD}"
+
+#python cli.py fit --config ./config/default.yaml --trainer.devices [3] --model.lambda_sparsity 0.001 --model.init_args.replacement_model_accuracy.init_args.device_map "cuda:3" --model.init_args.model.init_args.nonlinearity.init_args.d_features 1024 --model.init_args.model.init_args.d_features 1024
+#python cli.py fit --config ./config/default.yaml --trainer.devices [3] --model.lambda_sparsity 0.001 --model.init_args.replacement_model_accuracy.init_args.device_map "cuda:3" --model.init_args.model.init_args.nonlinearity.init_args.d_features 2048 --model.init_args.model.init_args.d_features 2048
+#python cli.py fit --config ./config/default.yaml --trainer.devices [3] --model.lambda_sparsity 0.001 --model.init_args.replacement_model_accuracy.init_args.device_map "cuda:3" --model.init_args.model.init_args.nonlinearity.init_args.d_features 4096 --model.init_args.model.init_args.d_features 4096
+python cli.py fit --config ./config/default.yaml --trainer.devices [3] --model.lambda_sparsity 0.001 --model.init_args.replacement_model_accuracy.init_args.device_map "cuda:3" --model.init_args.model.init_args.nonlinearity.init_args.d_features 9000 --model.init_args.model.init_args.d_features 9000 --data.init_args.batch_size 500 --trainer.accumulate_grad_batches 16
+
+#python cli.py fit --config ./config/default.yaml --trainer.devices [3] --model.lambda_sparsity 0.001 --model.init_args.replacement_model_accuracy.init_args.device_map "cuda:3" --model.init_args.model.init_args.nonlinearity.init_args.d_features 8192 --model.init_args.model.init_args.d_features 8192 --data.init_args.batch_size 2000 --trainer.accumulate_grad_batches 4

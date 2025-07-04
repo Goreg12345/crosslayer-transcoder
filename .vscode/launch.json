@@ -55,7 +55,7 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "justMyCode": false,
-            //"noDebug": true
+            "noDebug": true
         }
     ]
 }

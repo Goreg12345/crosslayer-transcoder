@@ -4,6 +4,9 @@ Lightning CLI for CrossLayer Transcoder training.
 """
 
 import os
+import sys
+
+sys.path.append(os.getcwd())
 
 import lightning as L
 from lightning.pytorch.cli import LightningCLI
