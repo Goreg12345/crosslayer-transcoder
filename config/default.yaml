@@ -32,36 +32,17 @@ trainer:
 model:
   class_path: model.clt_lightning.CrossLayerTranscoderModule
   init_args:
-    # Model component
-    model:
-      class_path: model.clt.CrossLayerTranscoder
-      init_args:
-        # Nonlinearity component
-        nonlinearity:
-          class_path: model.jumprelu.JumpReLU
-          init_args:
-            theta: 0.03
-            bandwidth: 1.0
-            n_layers: 12
-            d_features: 6144  # Must match model d_features
-
-        # Standardizer component
-        input_standardizer:
-          class_path: model.standardize.DimensionwiseInputStandardizer
-          init_args:
-            n_layers: 12
-            activation_dim: 768
-
-        output_standardizer:
-          class_path: model.standardize.DimensionwiseOutputStandardizer
-          init_args:
-            n_layers: 12
-            activation_dim: 768
-
-        # Model architecture
-        d_acts: 768
-        d_features: 6144  # 768 * 8
-        n_layers: 12
+    # Model architecture parameters
+    d_acts: 768
+    d_features: 6144  # 768 * 8
+    n_layers: 12
+    
+    # Nonlinearity parameters
+    nonlinearity_theta: 0.03
+    nonlinearity_bandwidth: 1.0
+    
+    # Standardizer parameters
+    activation_dim: 768
     
     # Loss hyperparameters
     lambda_sparsity: 0.0004
@@ -71,15 +52,16 @@ model:
     learning_rate: 1e-3
     
     # Compilation
-    compile: false
+    compile: true
 
     # Metrics
-    replacement_model_accuracy:
-      class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
-      init_args:
-        model_name: "openai-community/gpt2"
-        device_map: "cuda:0"
-        loader_batch_size: 5
+    replacement_model_name: "openai-community/gpt2"
+    replacement_model_device_map: "cuda:0"
+    replacement_model_loader_batch_size: 5
+
+    # Dead features
+    compute_dead_features: true
+    compute_dead_features_every: 1000
 
 data:
   class_path: data.datamodule.ActivationDataModule

@@ -8,18 +8,40 @@ from einops import einsum
 from jaxtyping import Float
 
 import wandb
+from metrics.dead_features import DeadFeatures
 from metrics.replacement_model_accuracy import ReplacementModelAccuracy
+from model.clt import CrossLayerTranscoder
+from model.jumprelu import JumpReLU
+from model.standardize import (
+    DimensionwiseInputStandardizer,
+    DimensionwiseOutputStandardizer,
+)
 
 
 class CrossLayerTranscoderModule(L.LightningModule):
     def __init__(
         self,
-        model: nn.Module,
+        # Model architecture parameters
+        d_acts: int = 768,
+        d_features: int = 6144,
+        n_layers: int = 12,
+        # Nonlinearity parameters
+        nonlinearity_theta: float = 0.03,
+        nonlinearity_bandwidth: float = 1.0,
+        # Standardizer parameters
+        activation_dim: int = 768,
+        # Training parameters
         lambda_sparsity: float = 0.0002,
         c_sparsity: float = 0.1,
         learning_rate: float = 1e-3,
-        replacement_model_accuracy: ReplacementModelAccuracy = None,
         compile: bool = False,
+        # Replacement model parameters
+        replacement_model_name: str = "openai-community/gpt2",
+        replacement_model_device_map: str = "cuda:0",
+        replacement_model_loader_batch_size: int = 5,
+        # Dead features
+        compute_dead_features: bool = False,
+        compute_dead_features_every: int = 100,
         *args,
         **kwargs,
     ):
@@ -27,17 +49,79 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         self.save_hyperparameters()
 
-        self.model = model
+        # Store model parameters
+        self.d_acts = d_acts
+        self.d_features = d_features
+        self.n_layers = n_layers
+        self.nonlinearity_theta = nonlinearity_theta
+        self.nonlinearity_bandwidth = nonlinearity_bandwidth
+        self.activation_dim = activation_dim
+
+        # Store training parameters
         self._lambda = lambda_sparsity
         self.c = c_sparsity
         self.learning_rate = learning_rate
-        self.replacement_model = replacement_model_accuracy
         self.compile = compile
 
+        # Replacement model
+        self.replacement_model_name = replacement_model_name
+        self.replacement_model_device_map = replacement_model_device_map
+        self.replacement_model_loader_batch_size = replacement_model_loader_batch_size
+        self.replacement_model = None
+
+        # Dead features
+        self.compute_dead_features = compute_dead_features
+        self.compute_dead_features_every = compute_dead_features_every
+
+        # Model will be constructed in configure_model
+        self.model = None
+
     def configure_model(self):
+        if self.model:
+            return
+        # Construct nonlinearity
+        nonlinearity = JumpReLU(
+            theta=self.nonlinearity_theta,
+            bandwidth=self.nonlinearity_bandwidth,
+            n_layers=self.n_layers,
+            d_features=self.d_features,
+        )
+
+        # Construct standardizers
+        input_standardizer = DimensionwiseInputStandardizer(
+            n_layers=self.n_layers, activation_dim=self.activation_dim
+        )
+
+        output_standardizer = DimensionwiseOutputStandardizer(
+            n_layers=self.n_layers, activation_dim=self.activation_dim
+        )
+
+        # Construct the main model
+        self.model = CrossLayerTranscoder(
+            nonlinearity=nonlinearity,
+            input_standardizer=input_standardizer,
+            output_standardizer=output_standardizer,
+            d_acts=self.d_acts,
+            d_features=self.d_features,
+            n_layers=self.n_layers,
+        )
+
+        self.replacement_model = ReplacementModelAccuracy(
+            model_name=self.replacement_model_name,
+            device_map=self.replacement_model_device_map,
+            loader_batch_size=self.replacement_model_loader_batch_size,
+        )
+
+        if self.compute_dead_features:
+            self.dead_features = DeadFeatures(
+                n_features=self.d_features,
+                n_layers=self.n_layers,
+                return_per_layer=True,
+            )
+
         if self.compile:
             print("Compiling model")
-            self.model = torch.compile(self.model)
+            self = torch.compile(self)
 
     def forward(
         self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]
@@ -96,6 +180,18 @@ class CrossLayerTranscoderModule(L.LightningModule):
                     },
                     step=self.global_step,
                 )
+
+        self.dead_features.update(features)
+
+        if (
+            self.compute_dead_features
+            and self.global_step % self.compute_dead_features_every == 0
+        ):
+            dead_features_per_layer = self.dead_features.compute()
+            dead_features_per_layer = dead_features_per_layer.detach().cpu()
+            for i in range(self.n_layers):
+                self.log(f"dead_features_layer_{i}", dead_features_per_layer[i])
+            self.dead_features.reset()
 
         return loss
 
