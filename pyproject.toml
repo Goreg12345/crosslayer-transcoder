@@ -36,4 +36,5 @@ dev = [
 dev-dependencies = [
     "jupyterlab>=4.4.2",
     "ipykernel>=6.29.5",
+    "pytest>=8.4.1",
 ]

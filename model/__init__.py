@@ -4,5 +4,12 @@ Cross-layer transcoder model components.
 
 from .clt import CrossLayerTranscoder
 from .clt_lightning import CrossLayerTranscoderModule
+from .topk import BatchTopK, PerLayerTopK, PerSampleTopK
 
-__all__ = ["CrossLayerTranscoder", "CrossLayerTranscoderModule"]
+__all__ = [
+    "CrossLayerTranscoder",
+    "CrossLayerTranscoderModule",
+    "BatchTopK",
+    "PerLayerTopK",
+    "PerSampleTopK",
+]

@@ -25,9 +25,9 @@ trainer:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints"
-    - class_path: utils.callbacks.TensorBoardProfilerCallback
-      init_args:
-        log_dir: "log/profiler"
+    #- class_path: utils.callbacks.TensorBoardProfilerCallback
+    #  init_args:
+    #    log_dir: "log/profiler"
 
 model:
   class_path: model.clt_lightning.CrossLayerTranscoderModule
