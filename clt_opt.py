@@ -13,31 +13,21 @@ from einops import einsum, rearrange
 from jaxtyping import Float
 from torch.distributed._tensor.placement_types import Partial, Replicate, Shard
 from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.tensor import (
-    DeviceMesh,
-    DTensor,
-    Replicate,
-    Shard,
-    distribute_module,
-    distribute_tensor,
-)
+from torch.distributed.tensor import (DeviceMesh, DTensor, Replicate, Shard,
+                                      distribute_module, distribute_tensor)
 from torch.distributed.tensor._dtensor_spec import DTensorSpec
 from torch.distributed.tensor._op_schema import OpSchema  # OpSpec,
-from torch.distributed.tensor._op_schema import (
-    OpStrategy,
-    PlacementStrategy,
-    RuntimeSchemaInfo,
-    StrategyType,
-    _is_inplace_op,
-)
-from torch.distributed.tensor._ops.utils import (
-    is_tensor_dim_sharded,
-    normalize_dim,
-    register_op_strategy,
-)
-from torch.distributed.tensor.parallel import RowwiseParallel, parallelize_module
+from torch.distributed.tensor._op_schema import (OpStrategy, PlacementStrategy,
+                                                 RuntimeSchemaInfo,
+                                                 StrategyType, _is_inplace_op)
+from torch.distributed.tensor._ops.utils import (is_tensor_dim_sharded,
+                                                 normalize_dim,
+                                                 register_op_strategy)
+from torch.distributed.tensor.parallel import (RowwiseParallel,
+                                               parallelize_module)
 from torch.distributed.tensor.parallel.style import ParallelStyle
-from torch.distributed.tensor.placement_types import Placement, Replicate, Shard
+from torch.distributed.tensor.placement_types import (Placement, Replicate,
+                                                      Shard)
 from torch.nn.modules.activation import ReLU
 
 import wandb
@@ -220,6 +210,16 @@ class Encoder(nn.Module):
         )
 
 
+def debug_backward_hook(name):
+    def hook(grad):
+        print(f"BACKWARD HOOK [{name}]: grad.shape={grad.shape}")
+        if hasattr(grad, "placements"):
+            print(f"  grad placements: {grad.placements}")
+        return grad
+
+    return hook
+
+
 class Decoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -250,21 +250,38 @@ class Decoder(nn.Module):
     ) -> Float[torch.Tensor, "batch_size n_layers d_acts"]:
         recons = []
         dec_norms = torch.zeros_like(features[:1])  # 1 n_layers d_features
+        features.register_hook(debug_backward_hook("features"))
         for l in range(self.config.get("n_layers", 12)):
             W = self.get_parameter(f"W_{l}")
+            W.register_hook(debug_backward_hook(f"W_{l}"))
             selected_features = features[:, : l + 1]
+            selected_features.register_hook(
+                debug_backward_hook(f"selected_features_{l}")
+            )
+            # this slicing will call slice_backward() in autograd and this will force an all gather for some reason
+            # but features should be Shard(2) so
             l_recons = einsum(
                 selected_features,
                 W,
                 "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
             )
+            l_recons.register_hook(debug_backward_hook(f"l_recons_{l}"))
             l_recons = l_recons.sum(dim=1)
+            l_recons.register_hook(debug_backward_hook(f"l_recons_sum_{l}"))
             recons.append(l_recons)
-            dec_norms[:, : l + 1] = dec_norms[:, : l + 1] + W.norm(p=2, dim=-1)
+            # dec_norms_slice = dec_norms[:, : l + 1]
+            ##dec_norms_slice.register_hook(debug_backward_hook(f"dec_norms_slice_{l}"))
+            # norms = W.norm(p=2, dim=-1)
+            # norms.register_hook(debug_backward_hook(f"norms_{l}"))
+            # norms_slice_sum = dec_norms_slice + norms
+            # norms_slice_sum.register_hook(debug_backward_hook(f"norms_slice_sum_{l}"))
+            # dec_norms[:, : l + 1] = norms_slice_sum
+            # dec_norms.register_hook(debug_backward_hook(f"dec_norms_{l}"))
         # recons = rearrange(
         #    recons, "n_layers batch_size d_acts -> batch_size n_layers d_acts"
         # )  # stack + transpose
         recons = torch.stack(recons, dim=1)
+        recons.register_hook(debug_backward_hook("recons"))
         # recons = torch.zeros_like(torch.stack(recons, dim=1))
 
         # Sparsity -> l1 norm of l2 norms -> like in Anthropic's first implementation

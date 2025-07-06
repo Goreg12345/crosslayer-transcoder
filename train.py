@@ -4,6 +4,9 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 os.environ["WANDB_DIR"] = f"{os.getcwd()}/wandb"
 os.environ["WANDB_CACHE_DIR"] = f"{os.getcwd()}/wandb_cache"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,2"
+import logging
+
 import lightning.pytorch as L
 import torch
 from lightning.pytorch.loggers import WandbLogger
@@ -25,13 +28,22 @@ from utils import print_gpu_info
 # print_gpu_info()
 
 
+# Enable DTensor dispatch debug logging
+logging.basicConfig(level=logging.DEBUG)
+dtensor_logger = logging.getLogger("torch.distributed.tensor._dispatch")
+dtensor_logger.setLevel(logging.DEBUG)
+
+# Or more specifically, just the dispatch module
+logging.getLogger("torch.distributed.tensor._dispatch").setLevel(logging.DEBUG)
+
+
 buffer = DiscBuffer("/var/local/glang/activations/clt-activations-10M.h5", "tensor")
 
 loader = torch.utils.data.DataLoader(
     buffer,
-    num_workers=20,
+    num_workers=4,
     prefetch_factor=2,
-    batch_size=4000,
+    batch_size=1000,
     shuffle=False,
     persistent_workers=True,
     pin_memory=True,
@@ -91,7 +103,7 @@ trainer = L.Trainer(
     accelerator="gpu",
     devices=2,
     strategy=strategy,
-    # callbacks=[TBProfilerCallback()],
+    callbacks=[TBProfilerCallback()],
     # accumulate_grad_batches=4,
 )
 
@@ -116,13 +128,13 @@ class ShowBackward(TorchDispatchMode):
         return func(*args, **(kwargs or {}))
 
 
-with ShowBackward(), debug_autograd_shapes():
+# with ShowBackward(), debug_autograd_shapes():
 
-    trainer.fit(
-        model=clt,
-        train_dataloaders=loader,
-        # val_dataloaders=loader,
-    )
+trainer.fit(
+    model=clt,
+    train_dataloaders=loader,
+    # val_dataloaders=loader,
+)
 
 # Save checkpoint after training
 checkpoint_path = "checkpoints/clt.ckpt"
