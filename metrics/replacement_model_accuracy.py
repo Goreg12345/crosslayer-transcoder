@@ -3,6 +3,7 @@ import torch
 from einops import einsum
 from torchmetrics import Metric
 
+from model.jumprelu import JumpReLU
 from utils.utils import get_webtext_dataloader
 
 
@@ -36,10 +37,18 @@ class ReplacementModel(torch.nn.Module):
                     "batch seq d_acts, d_acts d_features -> batch seq d_features",
                 )
 
-                feature_mask = torch.logical_and(
-                    pre_actvs > clt.nonlinearity.theta[:, layer], pre_actvs > 0.0
-                )
-                features[..., layer, :] = feature_mask * pre_actvs
+                if isinstance(clt.nonlinearity, JumpReLU):
+                    feature_mask = torch.logical_and(
+                        pre_actvs > clt.nonlinearity.theta[:, layer], pre_actvs > 0.0
+                    )
+                    features[..., layer, :] = feature_mask * pre_actvs
+                else:
+                    post_actvs = clt.nonlinearity(
+                        pre_actvs.reshape(-1, 1, self.n_features)
+                    )  # batchxseq, 1, n_features
+                    features[..., layer, :] = post_actvs.reshape(
+                        tokens.shape[0], tokens.shape[1], self.n_features
+                    )
 
                 recons = einsum(
                     features[..., : layer + 1, :],

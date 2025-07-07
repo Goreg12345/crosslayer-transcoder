@@ -48,7 +48,6 @@ def main():
             "prog": "CrossLayer Transcoder Training",
             "description": "Train CrossLayer Transcoder models for neural network interpretability",
         },
-        load_from_checkpoint_support=False,
     )
 
 

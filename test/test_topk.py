@@ -158,3 +158,32 @@ def test_k_boundary_plus_one_error(features):
     topk = BatchTopK(k=features.numel() + 1)
     with pytest.raises(AssertionError):
         topk(features)
+
+
+@pytest.fixture
+def nnsight_model():
+    import nnsight
+
+    gpt2 = nnsight.LanguageModel(
+        "openai-community/gpt2", device_map="auto", dispatch=True
+    )
+
+    gpt2.requires_grad_(False)
+    return gpt2
+
+
+@pytest.mark.parametrize(
+    "topk_fixture",
+    ["per_layer_topk", "per_sample_topk", "batch_topk"],
+)
+def test_nnsight_compatibility(nnsight_model, topk_fixture, request):
+    """Test that all topk implementations work correctly with nnsight tracing"""
+    topk = request.getfixturevalue(topk_fixture)
+
+    # Test that no error occurs during tracing and topk execution
+    try:
+        with nnsight_model.trace("test"):
+            actvs = nnsight_model.transformer.h[0].mlp.output
+            topk_result = topk(actvs)
+    except Exception as e:
+        pytest.fail(f"nnsight compatibility test failed for {topk_fixture}: {e}")
