@@ -14,7 +14,7 @@ class DeadFeatures(Metric):
         """
         :param n_features: number of features in the layer
         :param return_neuron_indices: whether to return the indices of the dead neurons
-            if True, the compute method will return a tensor with the indices of the dead neurons
+            if True, the compute method will return a tuple of (layer_indices, feature_indices)
             if False, the compute method will return the fraction of dead neurons
         """
         super().__init__(**kwargs)
@@ -26,16 +26,19 @@ class DeadFeatures(Metric):
 
         self.add_state(
             "dead_neurons",
-            default=torch.zeros((n_layers, n_features), dtype=torch.int),
+            default=torch.zeros((n_layers, n_features), dtype=torch.float),
             dist_reduce_fx="sum",
         )
 
     def update(self, features: torch.Tensor):
-        self.dead_neurons += (features > 0.0).sum(dim=0)
+        self.dead_neurons += features.detach().sum(dim=0)
 
     def compute(self):
         if self.return_neuron_indices:
-            return (self.dead_neurons == 0.0).nonzero(as_tuple=True)[0]
+            dead_mask = self.dead_neurons == 0.0
+            layer_indices, feature_indices = dead_mask.nonzero(as_tuple=True)
+            # Return tuple of (layer_indices, feature_indices) - more intuitive than flattened
+            return (layer_indices, feature_indices)
         elif self.return_per_layer:
-            return (self.dead_neurons == 0.0).sum(dim=1) / self.n_features
-        return (self.dead_neurons == 0.0).sum() / (self.n_layers * self.n_features)
+            return (self.dead_neurons == 0.0).float().mean(dim=1)
+        return (self.dead_neurons == 0.0).float().mean()

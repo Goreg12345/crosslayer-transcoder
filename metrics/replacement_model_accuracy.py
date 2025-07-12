@@ -1,3 +1,5 @@
+import gc
+
 import nnsight
 import torch
 from einops import einsum
@@ -29,11 +31,11 @@ class ReplacementModel(torch.nn.Module):
                     layer
                 ].ln_2.input  # (batch, seq, d_acts)
 
-                mlp_in_norm = clt.input_standardizer(mlp_in, layer=layer)
+                mlp_in_norm = clt.input_standardizer(mlp_in, layer=layer).detach()
 
                 pre_actvs = einsum(
                     mlp_in_norm,
-                    clt.W_enc[layer],
+                    clt.W_enc[layer].detach(),
                     "batch seq d_acts, d_acts d_features -> batch seq d_features",
                 )
 
@@ -44,19 +46,19 @@ class ReplacementModel(torch.nn.Module):
                     features[..., layer, :] = feature_mask * pre_actvs
                 else:
                     post_actvs = clt.nonlinearity(
-                        pre_actvs.reshape(-1, 1, self.n_features)
-                    )  # batchxseq, 1, n_features
+                        pre_actvs, training=False
+                    ).detach()  # batchxseq, 1, n_features
                     features[..., layer, :] = post_actvs.reshape(
                         tokens.shape[0], tokens.shape[1], self.n_features
                     )
 
                 recons = einsum(
                     features[..., : layer + 1, :],
-                    clt.W_dec[: layer + 1, layer],
+                    clt.W_dec[: layer + 1, layer].detach(),
                     "batch seq n_layers d_features, n_layers d_features d_acts -> batch seq d_acts",
                 )
 
-                recons_norm = clt.output_standardizer(recons, layer=layer)
+                recons_norm = clt.output_standardizer(recons, layer=layer).detach()
 
                 self.gpt2.transformer.h[layer].mlp.output = recons_norm
             logits = self.gpt2.lm_head.output.save()
@@ -93,11 +95,14 @@ class ReplacementModelAccuracy(Metric):
         return tokens
 
     def update(self, clt, max_batches=10):
+        torch.cuda.empty_cache()
+        gc.collect()
         with torch.no_grad():
             for i, tokens in enumerate(self.loader):
+                torch.cuda.empty_cache()
                 print(f"computing replacement model", i)
                 tokens = self.handle_device(tokens)
-                if i > max_batches:
+                if i >= max_batches:
                     break
                 tokens = self.prepend_bos(tokens)
 
@@ -113,8 +118,17 @@ class ReplacementModelAccuracy(Metric):
                     .sum()
                 )
                 self.n_total += tokens.numel()
-
+                del logits_gpt2, logits_replacement
+                # gc.collect()
+                self.gpt2._clear()
+                self.replacement_model.gpt2._clear()
+                torch.cuda.empty_cache()
+                gc.collect()
+        self.gpt2._clear()
+        self.replacement_model.gpt2._clear()
         print("exiting update")
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def compute(self):
         return self.n_correct / self.n_total

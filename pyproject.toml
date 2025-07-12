@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 
 dependencies = [
     "torch>=2.7.1",
-    "nnsight>=0.4.6",
+    "nnsight==0.5.0.dev7",
     "datasets>=3.6.0",
     "h5py>=3.13.0",
     "einops>=0.8.1",

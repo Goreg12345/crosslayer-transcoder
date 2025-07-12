@@ -5,7 +5,7 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates, not number of batches
-  max_steps: 2_500  # 20M tokens
+  max_steps: 10_000  # 20M tokens
   #limit_train_batches: 10_000
   val_check_interval: 200
   limit_val_batches: 1
@@ -14,8 +14,8 @@ trainer:
   num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
   precision: "16-mixed"
   accelerator: "gpu"
-  devices: 1  # 4; [1] for cuda:1
-  accumulate_grad_batches: 2
+  devices: [0]  # 4; [1] for cuda:1
+  accumulate_grad_batches: 3
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
@@ -38,7 +38,7 @@ model:
       init_args:
         # Model architecture parameters
         d_acts: 768
-        d_features: 6144  # 768 * 8
+        d_features: 5_000  # 768 * 8
         n_layers: 12
         
         # Pre-constructed nonlinearity
@@ -48,7 +48,7 @@ model:
             theta: 0.03
             bandwidth: 1.0
             n_layers: 12
-            d_features: 6144
+            d_features: 5_000
         
         # Pre-constructed standardizers
         input_standardizer:
@@ -69,13 +69,13 @@ model:
       init_args:
         model_name: "openai-community/gpt2"
         device_map: "cuda:0"
-        loader_batch_size: 5
+        loader_batch_size: 2
     
     # Pre-constructed dead features metric
     dead_features:
       class_path: metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 6144
+        n_features: 5_000
         n_layers: 12
         return_per_layer: true
     
@@ -87,7 +87,7 @@ model:
     
     # Dead features computation settings
     compute_dead_features: true
-    compute_dead_features_every: 1000
+    compute_dead_features_every: 200
 
 data:
   class_path: data.datamodule.ActivationDataModule
@@ -122,7 +122,7 @@ data:
     
     # DataLoader settings
     batch_size: 4000
-    num_workers: 20
+    num_workers: 10
     prefetch_factor: 2
     shuffle: true
     persistent_workers: true
@@ -131,7 +131,7 @@ data:
     use_shared_memory: true
 
     # Device configuration
-    device_map: "cuda:2"  # "cpu", "auto", "cuda:0", "cuda:0,1,2,3"
+    device_map: "cuda:0"  # "cpu", "auto", "cuda:0", "cuda:0,1,2,3"
 
     # WandB logging configuration for data generation
     wandb_logging:

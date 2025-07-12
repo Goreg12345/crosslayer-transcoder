@@ -3,6 +3,7 @@ Activation data sources for the data generator.
 Different sources that can provide batches of neural network activations.
 """
 
+import gc
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Optional
@@ -58,6 +59,7 @@ class ActivationComputer(ActivationSource):
         Returns:
             Activations tensor [batch*seq_len, n_in_out, n_layers, d_model]
         """
+        gc.collect()
         return self._extract_activations(model, tokens)
 
     @torch.no_grad()
@@ -73,9 +75,9 @@ class ActivationComputer(ActivationSource):
         Returns:
             Activations tensor [batch*seq_len, in/out, n_layer, d_model]
         """
+        mlp_ins = []
+        mlp_outs = []
         with model.trace(tokens) as tracer:
-            mlp_ins = []
-            mlp_outs = []
 
             # Extract from all transformer layers
             for i in range(self.n_layers):
@@ -203,3 +205,19 @@ class DiskActivationSource(ActivationSource):
             self.file_handle.close()
             self.file_handle = None
             self.tensor_handle = None
+
+
+if __name__ == "__main__":
+    import nnsight
+    import torch
+
+    gpt2 = nnsight.LanguageModel(
+        "openai-community/gpt2", device_map="cuda:0", dispatch=True
+    )
+
+    gpt2.requires_grad_(False)
+
+    computer = ActivationComputer(gpt2.config.n_layer)
+    tokens = torch.randint(0, gpt2.config.vocab_size, (5, 1024))
+    actvs = computer.get_next_batch(gpt2, tokens)
+    print(actvs.shape)

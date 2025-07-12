@@ -15,9 +15,9 @@ from model.topk import BatchTopK, PerLayerTopK, PerSampleTopK
     ids=["standard", "minimal", "medium", "transformer_like", "single_layer"],
 )
 def features(request):
-    """Creates test tensors with various shapes"""
+    """Creates test tensors with various shapes - all positive values"""
     shape = request.param
-    return torch.randn(*shape)
+    return torch.rand(*shape) + 0.1  # Ensures all values are positive (0.1 to 1.1)
 
 
 @pytest.fixture
@@ -160,6 +160,51 @@ def test_k_boundary_plus_one_error(features):
         topk(features)
 
 
+def test_no_negative_values_in_output(per_layer_topk, per_sample_topk, batch_topk):
+    """Test that all topk implementations never output negative values, even with negative inputs"""
+    # Create test tensor with negative values
+    negative_features = torch.randn(2, 3, 4) - 1.0  # Ensures mostly negative values
+
+    # Test PerLayerTopK
+    result = per_layer_topk(negative_features)
+    assert torch.all(result >= 0), "PerLayerTopK output contains negative values"
+
+    # Test PerSampleTopK
+    result = per_sample_topk(negative_features)
+    assert torch.all(result >= 0), "PerSampleTopK output contains negative values"
+
+    # Test BatchTopK
+    result = batch_topk(negative_features)
+    assert torch.all(result >= 0), "BatchTopK output contains negative values"
+
+
+def test_mixed_positive_negative_values(per_layer_topk, per_sample_topk, batch_topk):
+    """Test that topk implementations handle mixed positive/negative values correctly"""
+    # Create test tensor with mix of positive and negative values
+    mixed_features = torch.tensor(
+        [
+            [
+                [1.0, -2.0, 3.0, -4.0, 5.0],  # Layer 0: mix of pos/neg
+                [-1.0, 2.0, -3.0, 4.0, -5.0],  # Layer 1: mix of pos/neg
+            ]
+        ]
+    )
+
+    # Test PerLayerTopK - should keep top 3 positive values per layer
+    result = per_layer_topk(mixed_features)
+    assert torch.all(result >= 0), "PerLayerTopK output contains negative values"
+    # For layer 0: should keep [1.0, 3.0, 5.0] (top 3 values, negatives become 0)
+    # For layer 1: should keep [2.0, 4.0] (top 2 positive values, 3rd would be negative so becomes 0)
+
+    # Test PerSampleTopK - should keep top 3 values across all layers
+    result = per_sample_topk(mixed_features)
+    assert torch.all(result >= 0), "PerSampleTopK output contains negative values"
+
+    # Test BatchTopK - should keep top 3 values across entire batch
+    result = batch_topk(mixed_features)
+    assert torch.all(result >= 0), "BatchTopK output contains negative values"
+
+
 @pytest.fixture
 def nnsight_model():
     import nnsight
@@ -179,11 +224,13 @@ def nnsight_model():
 def test_nnsight_compatibility(nnsight_model, topk_fixture, request):
     """Test that all topk implementations work correctly with nnsight tracing"""
     topk = request.getfixturevalue(topk_fixture)
+    topk.to(nnsight_model.device)
 
     # Test that no error occurs during tracing and topk execution
     try:
         with nnsight_model.trace("test"):
             actvs = nnsight_model.transformer.h[0].mlp.output
+            topk.to(actvs.device)
             topk_result = topk(actvs)
     except Exception as e:
         pytest.fail(f"nnsight compatibility test failed for {topk_fixture}: {e}")
