@@ -206,10 +206,15 @@ class CrossLayerTranscoderModule(L.LightningModule):
         learning_rate: float = 1e-3,
         compile: bool = False,
         # Learning rate schedule parameters
-        warmup_steps: int = 1000,
+        warmup_steps: int = 0,
         # Dead features computation settings
         compute_dead_features: bool = False,
         compute_dead_features_every: int = 100,
+        tokens_till_dead: int = 1_000_000,
+        # optimizer parameters
+        optimizer: str = "adam",
+        beta1: Optional[float] = None,
+        beta2: Optional[float] = None,
         *args,
         **kwargs,
     ):
@@ -230,6 +235,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.c = c_sparsity
         self.learning_rate = learning_rate
         self.compile = compile
+        self.tokens_till_dead = tokens_till_dead
 
         # Learning rate schedule parameters
         self.warmup_steps = warmup_steps
@@ -238,9 +244,18 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.compute_dead_features = compute_dead_features
         self.compute_dead_features_every = compute_dead_features_every
 
+        # optimizer parameters
+        self.optimizer = optimizer
+        self.beta1 = beta1
+        self.beta2 = beta2
+
         self.register_buffer(
             "n_lifetime_active",
             torch.zeros((self.model.n_layers, self.model.d_features)),
+        )
+        self.register_buffer(
+            "last_active",
+            torch.zeros((self.model.n_layers, self.model.d_features), dtype=torch.long),
         )
 
     def configure_model(self):
@@ -257,73 +272,67 @@ class CrossLayerTranscoderModule(L.LightningModule):
     ]:
         return self.model(acts_norm)
 
-    def training_step(self, batch, batch_idx):
-        torch.cuda.empty_cache()
-        # gc.collect()
+    def log_training_metrics(self, features, recons_norm, recons, mlp_out, batch_idx):
+        # Compute MSE and related metrics
+        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
 
-        if batch_idx == 0:
-            self.model.initialize_standardizers(batch)
+        # Log n_lifetime_active
+        self.log(
+            "metrics/n_lifetime_active", (self.n_lifetime_active > 0).float().mean()
+        )
 
-        resid, mlp_out = batch[:, 0], batch[:, 1]
-        features, recons_norm, recons = self.forward(resid)
-
-        self.n_lifetime_active += (features > 0).sum(0).float()
-        self.log("n_lifetime_active", (self.n_lifetime_active > 0).float().mean())
-
-        # encoder direction magnitudes
+        # Log encoder/decoder direction magnitudes
         lens = self.model.W_enc.norm(p=2, dim=1)  # (n_layers, d_features)
         lens_active = lens[self.n_lifetime_active > 100]
-        self.log("encoder_direction_magnitude", lens_active.mean())
+        self.log("model/encoder_direction_magnitude", lens_active.mean())
         lens_inactive = lens[self.n_lifetime_active < 100]
-        self.log("encoder_direction_magnitude_inactive", lens_inactive.mean())
+        self.log("model/encoder_direction_magnitude_inactive", lens_inactive.mean())
         lens_dec = self.model.W_dec.norm(p=2, dim=-1)
-        self.log("decoder_direction_magnitude", lens_dec.mean())
+        self.log("model/decoder_direction_magnitude", lens_dec.mean())
 
-        # LOGGING OF NORMS AND STD
+        # Log MSE per layer
+        mse_per_layer = mse.mean(dim=(0, 2))
+        for layer in range(self.model.n_layers):
+            self.log(f"layers/train_mse/layer_{layer}", mse_per_layer[layer])
+
+        # Calculate and log variance unexplained
+        residual = mlp_out - recons
+        # Compute variance per layer (reduce over batch and activation dimensions)
+        residual_var_per_layer = residual.var(dim=-1).mean(dim=0)  # (n_layers,)
+        target_var_per_layer = mlp_out.var(dim=-1).mean(dim=0)  # (n_layers,)
+        variance_unexplained_per_layer = residual_var_per_layer / target_var_per_layer
+
+        # Log mean across layers and global variance unexplained
         for layer in range(self.model.n_layers):
             self.log(
-                f"targets_norm_layer_{layer}",
-                self.model.output_standardizer.standardize(mlp_out)[:, layer].norm(),
+                f"layers/variance_unexplained/layer_{layer}",
+                variance_unexplained_per_layer[layer],
             )
-            self.log(f"recons_norm_layer_{layer}", recons_norm[:, layer].norm())
-            self.log(
-                f"targets_std_layer_{layer}",
-                self.model.output_standardizer.standardize(mlp_out)[:, layer].std(),
-            )
-            self.log(f"recons_std_layer_{layer}", recons_norm[:, layer].std())
-
-        mse = (
-            (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
-        ).mean()
-        loss = mse
-
-        if isinstance(self.model.nonlinearity, JumpReLU):
-            masked_w = einsum(
-                self.model.W_dec,
-                self.model.mask,
-                "from_layer to_layer d_features d_acts, from_layer to_layer -> from_layer to_layer d_features d_acts",
-            )
-            l1 = masked_w.norm(p=2, dim=[1, 3])
-            tanh = torch.tanh(features * l1 * self.c)
-            sparsity = self._lambda * tanh.sum(dim=[1, 2]).mean()
-            loss += sparsity
-            self.log("train_sparsity", sparsity)
-            # TopK does not need sparsity loss
-
-        self.log("train_loss", loss)
-        self.log("train_mse", mse)
-        self.log("train_mse_rescaled", ((recons - mlp_out) ** 2).mean())
-        self.log("L0 (%)", 100 * (features > 0).float().mean())
-        self.log("recons_standardized_std", recons_norm.std())
         self.log(
-            "L0 (Avg. per layer)",
+            "metrics/variance_unexplained",
+            (residual.var(dim=-1) / mlp_out.var(dim=-1)).mean(),
+        )
+
+        # Log MSE metrics
+        self.log("metrics/train_mse", mse.mean())
+        self.log("metrics/train_mse_rescaled", ((recons - mlp_out) ** 2).mean())
+
+        # Log L0 metrics
+        self.log("metrics/L0_percent", 100 * (features > 0).float().mean())
+        self.log("metrics/recons_standardized_std", recons_norm.std())
+        self.log(
+            "metrics/L0_avg_per_layer",
             (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
         )
 
         # Log current learning rate
         if self.lr_schedulers():
-            self.log("learning_rate", self.trainer.optimizers[0].param_groups[0]["lr"])
+            self.log(
+                "training/learning_rate",
+                self.trainer.optimizers[0].param_groups[0]["lr"],
+            )
 
+        # Log L0 table per layer
         if batch_idx % 500 == 1:
             l0_per_layer = (features > 0).float().sum(dim=(0, 2)) / features.shape[0]
 
@@ -334,13 +343,14 @@ class CrossLayerTranscoderModule(L.LightningModule):
                 )
                 self.logger.experiment.log(
                     {
-                        "L0 per layer": wandb.plot.bar(
+                        "layers/L0_per_layer": wandb.plot.bar(
                             table, "layer", "L0", title="L0 per Layer"
                         )
                     },
                     step=self.global_step,
                 )
 
+        # Compute and log dead features
         if self.compute_dead_features and self.dead_features is not None:
             self.dead_features.update(features)
 
@@ -352,8 +362,51 @@ class CrossLayerTranscoderModule(L.LightningModule):
             dead_features_per_layer = self.dead_features.compute()
             dead_features_per_layer = dead_features_per_layer.detach().cpu()
             for i in range(dead_features_per_layer.shape[0]):
-                self.log(f"dead_features_layer_{i}", dead_features_per_layer[i])
+                self.log(f"layers/dead_features/layer_{i}", dead_features_per_layer[i])
             self.dead_features.reset()
+
+        # Update last_active and compute dead features
+        self.last_active[features.detach().sum(dim=0) > 0.0] = 0.0
+        self.last_active += features.shape[0]
+        idxs_dead = self.last_active > self.tokens_till_dead
+        self.log("metrics/dead_features", idxs_dead.float().mean())
+
+        return idxs_dead
+
+    def training_step(self, batch, batch_idx):
+        torch.cuda.empty_cache()
+        # gc.collect()
+
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
+
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        _, features, recons_norm, recons = self.forward(resid)
+
+        self.n_lifetime_active += (features > 0).sum(0).float()
+
+        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
+        loss = mse.mean()
+
+        if isinstance(self.model.nonlinearity, JumpReLU):
+            masked_w = einsum(
+                self.model.W_dec,
+                self.model.mask,
+                "from_layer to_layer d_features d_acts, from_layer to_layer -> from_layer to_layer d_features d_acts",
+            )
+            l1 = masked_w.norm(p=2, dim=[1, 3])
+            tanh = torch.tanh(features * l1 * self.c)
+            sparsity = self._lambda * tanh.sum(dim=[1, 2]).mean()
+            loss += sparsity
+            self.log("training/sparsity_loss", sparsity)
+            # TopK does not need sparsity loss
+
+        self.log("training/loss", loss)
+
+        # Log training metrics
+        idxs_dead = self.log_training_metrics(
+            features, recons_norm, recons, mlp_out, batch_idx
+        )
 
         # if batch_idx == 18:
         #     gpu_tensors = find_gpu_tensors_with_module_context()
@@ -376,7 +429,9 @@ class CrossLayerTranscoderModule(L.LightningModule):
         if self.replacement_model is not None:
             with torch.no_grad():
                 self.replacement_model.update(self.model)
-                self.log("replacement_model_accuracy", self.replacement_model.compute())
+                r_acc, r_kl = self.replacement_model.compute()
+                self.log("validation/replacement_model_accuracy", r_acc)
+                self.log("validation/replacement_model_kl", r_kl)
                 self.replacement_model.reset()
         print("exiting val epoch end")
         # gc.collect()
@@ -385,7 +440,21 @@ class CrossLayerTranscoderModule(L.LightningModule):
         # exit()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        if self.beta1 is None:
+            self.beta1 = 0.9
+        if self.beta2 is None:
+            self.beta2 = 0.999
+
+        if self.optimizer == "adam":
+            optimizer = torch.optim.Adam(
+                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2)
+            )
+        elif self.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(
+                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2)
+            )
+        else:
+            raise ValueError(f"Optimizer {self.optimizer} not supported")
 
         # If no warmup steps, return just the optimizer
         if self.warmup_steps <= 0:
@@ -437,81 +506,41 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
             self.model.initialize_standardizers(batch)
 
         resid, mlp_out = batch[:, 0], batch[:, 1]
-        features, recons_norm, recons = self.forward(resid)
+        pre_actvs, features, recons_norm, recons = self.forward(resid)
 
         mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
-        self.log("train_mse", mse.mean())
-        self.log("train_mse_rescaled", ((recons - mlp_out) ** 2).mean())
-        self.log("L0 (%)", 100 * (features > 0).float().mean())
-        self.log("recons_standardized_std", recons_norm.std())
-        self.log(
-            "L0 (Avg. per layer)",
-            (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
-        )
-        if batch_idx % 500 == 1:
-            l0_per_layer = (features > 0).float().sum(dim=(0, 2)) / features.shape[0]
-
-            if self.logger and isinstance(self.logger.experiment, wandb.wandb_run.Run):
-                table = wandb.Table(
-                    data=[[i, v.item()] for i, v in enumerate(l0_per_layer.cpu())],
-                    columns=["layer", "L0"],
-                )
-                self.logger.experiment.log(
-                    {
-                        "L0 per layer": wandb.plot.bar(
-                            table, "layer", "L0", title="L0 per Layer"
-                        )
-                    },
-                    step=self.global_step,
-                )
-
-        if self.compute_dead_features and self.dead_features is not None:
-            self.dead_features.update(features)
-
-        if (
-            self.compute_dead_features
-            and self.dead_features is not None
-            and self.global_step % self.compute_dead_features_every == 0
-        ):
-            dead_features_per_layer = self.dead_features.compute()
-            dead_features_per_layer = dead_features_per_layer.detach().cpu()
-            for i in range(dead_features_per_layer.shape[0]):
-                self.log(f"dead_features_layer_{i}", dead_features_per_layer[i])
-            self.dead_features.reset()
 
         self.n_lifetime_active += (features > 0).sum(0).float()
-        self.log("n_lifetime_active", (self.n_lifetime_active > 0).float().mean())
 
-        # encoder direction magnitudes
-        lens = self.model.W_enc.norm(p=2, dim=1)  # (n_layers, d_features)
-        lens_active = lens[self.n_lifetime_active > 100]
-        self.log("encoder_direction_magnitude", lens_active.mean())
-        lens_inactive = lens[self.n_lifetime_active < 100]
-        self.log("encoder_direction_magnitude_inactive", lens_inactive.mean())
-        lens_dec = self.model.W_dec.norm(p=2, dim=-1)
-        self.log("decoder_direction_magnitude", lens_dec.mean())
+        # Calculate variance unexplained (TopK-specific calculation)
+        residual = mlp_out - recons
+        # Compute variance per layer (reduce over batch and activation dimensions)
+        residual_var_per_layer = residual.var(dim=[0, 2])  # (n_layers,)
+        target_var_per_layer = mlp_out.var(dim=[0, 2])  # (n_layers,)
+        variance_unexplained_per_layer = residual_var_per_layer / target_var_per_layer
+
+        # Log TopK-specific variance unexplained metrics
+        self.log("metrics/variance_unexplained", variance_unexplained_per_layer.mean())
+        self.log("metrics/variance_unexplained_global", residual.var() / mlp_out.var())
+
+        # Log training metrics using shared method
+        idxs_dead = self.log_training_metrics(
+            features, recons_norm, recons, mlp_out, batch_idx
+        )
 
         # AUXILLIARY LOSS
-        self.last_active[features.detach().sum(dim=0) > 0.0] = 0.0
-        self.last_active += features.shape[0]
-        idxs_dead = self.last_active > self.tokens_till_dead
-        self.log("dead_features", idxs_dead.float().mean())
         idxs_dead = idxs_dead.repeat(features.shape[0], 1, 1)
-        features = torch.where(idxs_dead, features, -torch.inf)
-        features = self.topk_aux(features)
-        aux_recons = self.model.decode(features)
-        recons_err = recons_norm - self.model.output_standardizer.standardize(mlp_out)
+        dead_pre_actvs = torch.where(idxs_dead, pre_actvs, -torch.inf)
+        dead_features = self.topk_aux(dead_pre_actvs)
+        aux_recons = self.model.decode(dead_features)
+        recons_err = self.model.output_standardizer.standardize(mlp_out) - recons_norm
         aux_loss = (aux_recons - recons_err) ** 2
 
         aux_loss = torch.nan_to_num(aux_loss, 0.0)
 
         loss = mse.mean() + self.aux_loss_scale * aux_loss.mean()
-        self.log("aux_loss", aux_loss.mean())
-        self.log("loss", loss)
-
-        # Log current learning rate
-        if self.lr_schedulers():
-            self.log("learning_rate", self.trainer.optimizers[0].param_groups[0]["lr"])
+        self.log("training/aux_loss", aux_loss.mean())
+        self.log("training/loss", loss)
 
         # if batch_idx == 18:
         #     gpu_tensors = find_gpu_tensors_with_module_context()

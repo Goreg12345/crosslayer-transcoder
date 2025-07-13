@@ -18,6 +18,7 @@ class ReplacementModel(torch.nn.Module):
     def forward(self, tokens, clt):
         self.n_features = clt.d_features
         self.n_layers = clt.n_layers
+        half = clt.W_enc.dtype == torch.float16
         with self.gpt2.trace(tokens):
             # features: batch_size x seq_len x n_layers x n_features
             features = torch.full(
@@ -33,6 +34,8 @@ class ReplacementModel(torch.nn.Module):
 
                 mlp_in_norm = clt.input_standardizer(mlp_in, layer=layer).detach()
 
+                if half:
+                    mlp_in_norm = mlp_in_norm.to(torch.float16)
                 pre_actvs = einsum(
                     mlp_in_norm,
                     clt.W_enc[layer].detach(),
@@ -52,6 +55,8 @@ class ReplacementModel(torch.nn.Module):
                         tokens.shape[0], tokens.shape[1], self.n_features
                     )
 
+                if half:
+                    features = features.to(torch.float16)
                 recons = einsum(
                     features[..., : layer + 1, :],
                     clt.W_dec[: layer + 1, layer].detach(),
@@ -67,6 +72,10 @@ class ReplacementModel(torch.nn.Module):
 
 
 class ReplacementModelAccuracy(Metric):
+    """
+    Computes the accuracy of the replacement model and the KL divergence between the logits of the GPT-2 and the replacement model.
+    """
+
     def __init__(
         self, model_name="openai-community/gpt2", device_map="auto", loader_batch_size=5
     ):
@@ -79,6 +88,12 @@ class ReplacementModelAccuracy(Metric):
         self.loader = get_webtext_dataloader(self.gpt2, batch_size=loader_batch_size)
         self.add_state("n_correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("n_total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state(
+            "kl_div",
+            default=torch.tensor(0, dtype=torch.float32),
+            dist_reduce_fx="sum",
+        )
+        self.add_state("n_kl_div", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def handle_device(self, tokens):
         tokens = tokens.to(self.gpt2.device)
@@ -118,6 +133,13 @@ class ReplacementModelAccuracy(Metric):
                     .sum()
                 )
                 self.n_total += tokens.numel()
+                self.kl_div += torch.nn.functional.kl_div(
+                    torch.nn.functional.log_softmax(logits_gpt2.logits, dim=-1),
+                    torch.nn.functional.log_softmax(logits_replacement, dim=-1),
+                    reduction="batchmean",
+                    log_target=True,
+                )
+                self.n_kl_div += 1
                 del logits_gpt2, logits_replacement
                 # gc.collect()
                 self.gpt2._clear()
@@ -131,4 +153,4 @@ class ReplacementModelAccuracy(Metric):
         torch.cuda.empty_cache()
 
     def compute(self):
-        return self.n_correct / self.n_total
+        return self.n_correct / self.n_total, self.kl_div / self.n_kl_div

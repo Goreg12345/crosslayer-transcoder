@@ -19,6 +19,7 @@ class CrossLayerTranscoder(nn.Module):
         n_layers: int = 12,
         enc_init_scaler: float = 1.0,
         plt: bool = False,
+        tied_init: bool = False,
     ):
         super().__init__()
 
@@ -29,6 +30,7 @@ class CrossLayerTranscoder(nn.Module):
         self.input_standardizer = input_standardizer
         self.output_standardizer = output_standardizer
         self.enc_init_scaler = enc_init_scaler
+        self.tied_init = tied_init
 
         self.W_enc = nn.Parameter(torch.empty(n_layers, d_acts, d_features))
         self.W_dec = nn.Parameter(torch.empty(n_layers, n_layers, d_features, d_acts))
@@ -56,8 +58,10 @@ class CrossLayerTranscoder(nn.Module):
         )
         self.W_dec.data = torch.where(mask.bool(), self.W_dec.data, 0.0)
 
-        for layer in range(self.n_layers):
-            self.W_dec.data[layer, layer, :, :] = self.W_enc[layer].data.T
+        if self.tied_init:
+            for layer1 in range(self.n_layers):
+                for layer2 in range(self.n_layers):
+                    self.W_dec.data[layer1, layer2, :, :] = self.W_enc[layer1].data.T
 
         # rescale to have same norm
         # norm = self.W_dec.norm(p=2, dim=-1)
@@ -82,19 +86,21 @@ class CrossLayerTranscoder(nn.Module):
 
     def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],
+        Float[torch.Tensor, "batch_size n_layers d_features"],
+        Float[torch.Tensor, "batch_size n_layers d_acts"],
         Float[torch.Tensor, "batch_size n_layers d_acts"],
     ]:
         acts = self.input_standardizer(acts)
 
-        features = einsum(
+        pre_actvs = einsum(
             acts,
             self.W_enc,
             "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
         )
 
-        features = self.nonlinearity(features)
+        features = self.nonlinearity(pre_actvs)
         recons_norm = self.decode(features)
 
         recons = self.output_standardizer(recons_norm)
 
-        return features, recons_norm, recons
+        return pre_actvs, features, recons_norm, recons

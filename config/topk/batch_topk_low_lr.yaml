@@ -5,7 +5,7 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates, not number of batches
-  max_steps: 10_000  # 120M tokens
+  max_steps: 12_500  # 120M tokens
   #limit_train_batches: 10_000
   val_check_interval: 200
   limit_val_batches: 1
@@ -19,9 +19,10 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      project: "crosslayer-transcoder"
+      project: "topk-crosslayer-transcoder"
+      name: "batch-topk-aux-low-lr"
       save_dir: "./wandb"
-      tags: ["batch-topk"]  # Add tag to distinguish this experiment
+      tags: ["batch-topk", "low-lr"]  # Add tag to distinguish this experiment
   callbacks:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
@@ -68,14 +69,14 @@ model:
       class_path: model.topk.BatchTopK
       init_args:
         k: 24_576_000
-    tokens_till_dead: 1_000_000
+    tokens_till_dead: 2_000_000
     aux_loss_scale: 0.03125  # 1/32
     # Pre-constructed replacement model
     replacement_model:
       class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
       init_args:
         model_name: "openai-community/gpt2"
-        device_map: "cuda:3"
+        device_map: "cuda:1"
         loader_batch_size: 5
     
     # Pre-constructed dead features metric
@@ -89,7 +90,7 @@ model:
     # Training parameters
     lambda_sparsity: 0.0004
     c_sparsity: 0.1
-    learning_rate: 1e-3
+    learning_rate: 1e-4
     compile: true
     
     # Dead features computation settings
@@ -100,7 +101,7 @@ data:
   class_path: data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
-    buffer_size: 5_000_000
+    buffer_size: 3_000_000
     n_in_out: 2
     n_layers: 12
     activation_dim: 768

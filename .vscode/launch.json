@@ -29,7 +29,7 @@
             "args": [
                 "fit",
                 "--config",
-                "config/batch_topk_gpu_3_tests.yaml"
+                "config/batch_topk_aux.yaml"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
