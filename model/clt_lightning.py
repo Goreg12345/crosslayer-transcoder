@@ -148,11 +148,7 @@ def comprehensive_memory_debug():
                             int(parts[1]),
                             int(parts[2]),
                         )
-                        highlight = (
-                            f" *** PyTorch is here ***"
-                            if int(gpu_id) == current_device
-                            else ""
-                        )
+                        highlight = f" *** PyTorch is here ***" if int(gpu_id) == current_device else ""
                         print(
                             f"  GPU {gpu_id}: {used_mb / 1024:.2f} GB / {total_mb / 1024:.2f} GB{highlight}"
                         )
@@ -183,12 +179,8 @@ def comprehensive_memory_debug():
                             parts[3],
                         )
                         current_pid = os.getpid()
-                        highlight = (
-                            "*** THIS PROCESS ***" if int(pid) == current_pid else ""
-                        )
-                        print(
-                            f"  GPU {gpu_uuid[:8]}...: PID {pid} ({name}) using {memory} MB {highlight}"
-                        )
+                        highlight = "*** THIS PROCESS ***" if int(pid) == current_pid else ""
+                        print(f"  GPU {gpu_uuid[:8]}...: PID {pid} ({name}) using {memory} MB {highlight}")
     except Exception as e:
         print(f"Error checking GPU processes: {e}")
 
@@ -201,12 +193,12 @@ class CrossLayerTranscoderModule(L.LightningModule):
         replacement_model: Optional[ReplacementModelAccuracy] = None,
         dead_features: Optional[DeadFeatures] = None,
         # Training parameters
-        lambda_sparsity: float = 0.0002,
-        c_sparsity: float = 0.1,
         learning_rate: float = 1e-3,
         compile: bool = False,
         # Learning rate schedule parameters
         warmup_steps: int = 0,
+        lr_decay_step: int = 0,
+        lr_decay_factor: float = 1.0,
         # Dead features computation settings
         compute_dead_features: bool = False,
         compute_dead_features_every: int = 100,
@@ -220,9 +212,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
     ):
         super().__init__(*args, **kwargs)
 
-        self.save_hyperparameters(
-            ignore=["model", "replacement_model", "dead_features"]
-        )
+        self.save_hyperparameters(ignore=["model", "replacement_model", "dead_features"])
         # torch.cuda.memory._record_memory_history(max_entries=100_000)
 
         # Store pre-constructed modules
@@ -231,14 +221,14 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.dead_features = dead_features
 
         # Store training parameters
-        self._lambda = lambda_sparsity
-        self.c = c_sparsity
         self.learning_rate = learning_rate
         self.compile = compile
         self.tokens_till_dead = tokens_till_dead
 
         # Learning rate schedule parameters
         self.warmup_steps = warmup_steps
+        self.lr_decay_step = lr_decay_step
+        self.lr_decay_factor = lr_decay_factor
 
         # Dead features computation settings
         self.compute_dead_features = compute_dead_features
@@ -249,13 +239,21 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.beta1 = beta1
         self.beta2 = beta2
 
+        assert (
+            self.model.encoder.n_layers == self.model.decoder.n_layers
+        ), "Encoder and decoder must have the same number of layers"
+
         self.register_buffer(
             "n_lifetime_active",
-            torch.zeros((self.model.n_layers, self.model.d_features)),
+            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features)),
         )
         self.register_buffer(
             "last_active",
-            torch.zeros((self.model.n_layers, self.model.d_features), dtype=torch.long),
+            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.long),
+        )
+        self.register_buffer(
+            "prev_dead_features",
+            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.bool),
         )
 
     def configure_model(self):
@@ -264,54 +262,49 @@ class CrossLayerTranscoderModule(L.LightningModule):
             print("Compiling model")
             self = torch.compile(self)
 
-    def forward(
-        self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]
-    ) -> Tuple[
-        Float[torch.Tensor, "batch_size n_layers d_features"],
-        Float[torch.Tensor, "batch_size n_layers d_acts"],
+    def forward(self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
+        Float[torch.Tensor, "batch_size n_layers d_features"],  # pre_actvs
+        Float[torch.Tensor, "batch_size n_layers d_features"],  # features
+        Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons_norm
+        Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons
     ]:
         return self.model(acts_norm)
 
     def log_training_metrics(self, features, recons_norm, recons, mlp_out, batch_idx):
         # Compute MSE and related metrics
-        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
+        mlp_out_norm = self.model.output_standardizer.standardize(mlp_out)
+        mse = (recons_norm - mlp_out_norm) ** 2
+
+        ss_err = (mlp_out_norm - recons_norm) ** 2
+        ss_err = ss_err.sum(dim=0)
+        ss_total = ((mlp_out_norm - mlp_out_norm.mean(dim=0, keepdim=True)) ** 2).sum(dim=0)
+        fvu = (ss_err / ss_total).mean()  # (n_layers, d_model)
+        self.log("metrics/fraction_of_variance_unexplained", fvu)
+        fvu_per_layer = (ss_err / ss_total).mean(dim=-1)
+        assert fvu_per_layer.shape == (self.model.encoder.n_layers,)
+        for layer in range(self.model.encoder.n_layers):
+            self.log(f"layers/fraction_of_variance_unexplained/layer_{layer}", fvu_per_layer[layer])
 
         # Log n_lifetime_active
-        self.log(
-            "metrics/n_lifetime_active", (self.n_lifetime_active > 0).float().mean()
-        )
+        self.log("metrics/n_lifetime_active", (self.n_lifetime_active > 0).float().mean())
 
         # Log encoder/decoder direction magnitudes
-        lens = self.model.W_enc.norm(p=2, dim=1)  # (n_layers, d_features)
+        lens = self.model.encoder.W.norm(p=2, dim=1)  # (n_layers, d_features)
         lens_active = lens[self.n_lifetime_active > 100]
         self.log("model/encoder_direction_magnitude", lens_active.mean())
         lens_inactive = lens[self.n_lifetime_active < 100]
         self.log("model/encoder_direction_magnitude_inactive", lens_inactive.mean())
-        lens_dec = self.model.W_dec.norm(p=2, dim=-1)
+        lens_dec = [
+            self.model.decoder.get_parameter(f"W_{l}").norm(p=2, dim=-1).flatten()
+            for l in range(self.model.decoder.n_layers)
+        ]
+        lens_dec = torch.concat(lens_dec)
         self.log("model/decoder_direction_magnitude", lens_dec.mean())
 
         # Log MSE per layer
         mse_per_layer = mse.mean(dim=(0, 2))
-        for layer in range(self.model.n_layers):
+        for layer in range(self.model.decoder.n_layers):
             self.log(f"layers/train_mse/layer_{layer}", mse_per_layer[layer])
-
-        # Calculate and log variance unexplained
-        residual = mlp_out - recons
-        # Compute variance per layer (reduce over batch and activation dimensions)
-        residual_var_per_layer = residual.var(dim=-1).mean(dim=0)  # (n_layers,)
-        target_var_per_layer = mlp_out.var(dim=-1).mean(dim=0)  # (n_layers,)
-        variance_unexplained_per_layer = residual_var_per_layer / target_var_per_layer
-
-        # Log mean across layers and global variance unexplained
-        for layer in range(self.model.n_layers):
-            self.log(
-                f"layers/variance_unexplained/layer_{layer}",
-                variance_unexplained_per_layer[layer],
-            )
-        self.log(
-            "metrics/variance_unexplained",
-            (residual.var(dim=-1) / mlp_out.var(dim=-1)).mean(),
-        )
 
         # Log MSE metrics
         self.log("metrics/train_mse", mse.mean())
@@ -342,11 +335,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
                     columns=["layer", "L0"],
                 )
                 self.logger.experiment.log(
-                    {
-                        "layers/L0_per_layer": wandb.plot.bar(
-                            table, "layer", "L0", title="L0 per Layer"
-                        )
-                    },
+                    {"layers/L0_per_layer": wandb.plot.bar(table, "layer", "L0", title="L0 per Layer")},
                     step=self.global_step,
                 )
 
@@ -359,10 +348,36 @@ class CrossLayerTranscoderModule(L.LightningModule):
             and self.dead_features is not None
             and self.global_step % self.compute_dead_features_every == 0
         ):
-            dead_features_per_layer = self.dead_features.compute()
-            dead_features_per_layer = dead_features_per_layer.detach().cpu()
-            for i in range(dead_features_per_layer.shape[0]):
-                self.log(f"layers/dead_features/layer_{i}", dead_features_per_layer[i])
+            features_stats = self.dead_features.compute()
+            dead_total = features_stats["mean"]
+            self.log("metrics/dead_features_mean", dead_total)
+            if "per_layer" in features_stats:
+                dead_per_layer = features_stats["per_layer"]
+                for i in range(dead_per_layer.shape[0]):
+                    self.log(f"layers/dead_features/layer_{i}", dead_per_layer[i])
+            if "log_freqs" in features_stats:
+                dead_log_freqs = features_stats["log_freqs"]
+                # Log histogram for vertical color visualization
+                if self.logger and (
+                    isinstance(self.logger.experiment, wandb.wandb_run.Run)
+                    or (isinstance(self.logger, L.pytorch.loggers.WandbLogger))
+                ):
+                    for layer in range(dead_log_freqs.shape[0]):
+                        self.logger.experiment.log(
+                            {f"layers/log_feature_density/layer_{layer}": dead_log_freqs[layer]},
+                            step=self.global_step,
+                        )
+                    self.logger.experiment.log(
+                        {f"training/log_feature_density": dead_log_freqs.flatten()},
+                        step=self.global_step,
+                    )
+                self.log("training/log_feature_density_mean", dead_log_freqs.mean())
+
+            if "layer_indices" in features_stats:
+                layer_indices = features_stats["layer_indices"]
+                self.prev_dead_features[layer_indices] = True
+                ## here
+
             self.dead_features.reset()
 
         # Update last_active and compute dead features
@@ -374,9 +389,10 @@ class CrossLayerTranscoderModule(L.LightningModule):
         return idxs_dead
 
     def training_step(self, batch, batch_idx):
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         # gc.collect()
 
+        # TODO: does this prevent complete compilation?
         if batch_idx == 0:
             self.model.initialize_standardizers(batch)
 
@@ -388,36 +404,11 @@ class CrossLayerTranscoderModule(L.LightningModule):
         mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
         loss = mse.mean()
 
-        if isinstance(self.model.nonlinearity, JumpReLU):
-            masked_w = einsum(
-                self.model.W_dec,
-                self.model.mask,
-                "from_layer to_layer d_features d_acts, from_layer to_layer -> from_layer to_layer d_features d_acts",
-            )
-            l1 = masked_w.norm(p=2, dim=[1, 3])
-            tanh = torch.tanh(features * l1 * self.c)
-            sparsity = self._lambda * tanh.sum(dim=[1, 2]).mean()
-            loss += sparsity
-            self.log("training/sparsity_loss", sparsity)
-            # TopK does not need sparsity loss
-
         self.log("training/loss", loss)
 
         # Log training metrics
-        idxs_dead = self.log_training_metrics(
-            features, recons_norm, recons, mlp_out, batch_idx
-        )
+        self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
 
-        # if batch_idx == 18:
-        #     gpu_tensors = find_gpu_tensors_with_module_context()
-        #     # print(gpu_tensors)
-        #     exit()
-
-        if batch_idx == 100_000_000_000:
-            torch.cuda.memory._dump_snapshot("snapshot.pickle")
-
-            torch.cuda.memory._record_memory_history(enabled=None)
-            exit()
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -425,7 +416,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
     def on_validation_epoch_end(self):
         torch.cuda.empty_cache()
-        # gc.collect()
+        gc.collect()
         if self.replacement_model is not None:
             with torch.no_grad():
                 self.replacement_model.update(self.model)
@@ -434,9 +425,9 @@ class CrossLayerTranscoderModule(L.LightningModule):
                 self.log("validation/replacement_model_kl", r_kl)
                 self.replacement_model.reset()
         print("exiting val epoch end")
-        # gc.collect()
+        gc.collect()
         # comprehensive_memory_debug()
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         # exit()
 
     def configure_optimizers(self):
@@ -456,34 +447,126 @@ class CrossLayerTranscoderModule(L.LightningModule):
         else:
             raise ValueError(f"Optimizer {self.optimizer} not supported")
 
-        # If no warmup steps, return just the optimizer
-        if self.warmup_steps <= 0:
-            return optimizer
+        # Use warmup scheduler if requested
+        if self.warmup_steps > 0:
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer,
+                start_factor=1e-7,  # Start from very small LR
+                end_factor=1.0,  # End at full LR
+                total_iters=self.warmup_steps,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": warmup_scheduler,
+                    "interval": "step",
+                    "frequency": 1,
+                    "name": "warmup",
+                },
+            }
 
-        # Linear warmup scheduler
-        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1e-7,  # Start from very small LR
-            end_factor=1.0,  # End at full LR
-            total_iters=self.warmup_steps,
-        )
+        # Use step decay scheduler if requested (single step down)
+        if self.lr_decay_step > 0:
+            step_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                optimizer,
+                milestones=[self.lr_decay_step],
+                gamma=self.lr_decay_factor,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": step_scheduler,
+                    "interval": "step",
+                    "frequency": 1,
+                    "name": "step_decay",
+                },
+            }
 
-        # Return optimizer with warmup scheduler
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": warmup_scheduler,
-                "interval": "step",
-                "frequency": 1,
-                "name": "warmup",
-            },
-        }
+        # No scheduler
+        return optimizer
+
+
+class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
+    def __init__(
+        self,
+        lambda_sparsity: float = 0.0002,
+        c_sparsity: float = 0.1,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._lambda = lambda_sparsity
+        self.c = c_sparsity
+
+    def current_sparsity_penalty(self):
+        n_steps = self.trainer.max_steps
+        current_step = (
+            self.global_step
+        )  # use global step instead of batch idx to work with gradient accumulation
+        cur_lambda = self._lambda * (current_step / n_steps)
+        self.log("training/sparsity_penalty", cur_lambda)
+        return cur_lambda
+
+    def training_step(self, batch, batch_idx):
+        # torch.cuda.empty_cache()
+        # gc.collect()
+        # batch = torch.stack([batch[:, 0], batch[:, 0]], dim=1)  # TODO: remove this
+        # Initialize standardizers
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
+
+        # Forward pass
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        _, features, recons_norm, recons = self.forward(resid)
+
+        self.n_lifetime_active += (features > 0).sum(0).float()
+
+        # Compute MSE loss
+        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
+
+        dec_norms = torch.zeros_like(features[:1])
+        for l in range(self.model.decoder.n_layers):
+            W = self.model.decoder.get_parameter(f"W_{l}")  # (from_layer, d_features, d_acts)
+            dec_norms[:, : l + 1] = dec_norms[:, : l + 1] + W.norm(p=2, dim=-1)
+        tanh = torch.tanh(features * dec_norms * self.c)
+        sparsity = self.current_sparsity_penalty() * tanh.sum(dim=[1, 2]).mean()
+        self.log("training/sparsity_loss", sparsity)
+
+        loss = mse.mean() + sparsity
+        self.log("training/loss", loss)
+
+        # Log training metrics
+        self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
+
+        return loss
+
+    def on_validation_epoch_end(self):
+        super().on_validation_epoch_end()
+
+        # Log theta values from JumpReLU nonlinearity
+        if hasattr(self.model.nonlinearity, "theta"):
+            theta = self.model.nonlinearity.theta.squeeze(0)
+
+            if self.logger and (
+                isinstance(self.logger.experiment, wandb.wandb_run.Run)
+                or (isinstance(self.logger, L.pytorch.loggers.WandbLogger))
+            ):
+                for layer in range(theta.shape[0]):
+                    self.logger.experiment.log(
+                        {f"layers/theta/layer_{layer}": theta[layer].cpu()},
+                        step=self.global_step,
+                    )
+                # Log combined theta values
+                self.logger.experiment.log(
+                    {"validation/theta": theta.flatten().cpu()},
+                    step=self.global_step,
+                )
 
 
 class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
     def __init__(
         self,
-        topk_aux: BatchTopK,
+        topk_aux: torch.nn.Module,
         tokens_till_dead: int = 100_000,
         aux_loss_scale: float = 1 / 32,
         *args,
@@ -495,11 +578,11 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         self.aux_loss_scale = aux_loss_scale
         self.register_buffer(
             "last_active",
-            torch.zeros((self.model.n_layers, self.model.d_features), dtype=torch.long),
+            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.long),
         )
 
     def training_step(self, batch, batch_idx):
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         # gc.collect()
 
         if batch_idx == 0:
@@ -512,27 +595,14 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
 
         self.n_lifetime_active += (features > 0).sum(0).float()
 
-        # Calculate variance unexplained (TopK-specific calculation)
-        residual = mlp_out - recons
-        # Compute variance per layer (reduce over batch and activation dimensions)
-        residual_var_per_layer = residual.var(dim=[0, 2])  # (n_layers,)
-        target_var_per_layer = mlp_out.var(dim=[0, 2])  # (n_layers,)
-        variance_unexplained_per_layer = residual_var_per_layer / target_var_per_layer
-
-        # Log TopK-specific variance unexplained metrics
-        self.log("metrics/variance_unexplained", variance_unexplained_per_layer.mean())
-        self.log("metrics/variance_unexplained_global", residual.var() / mlp_out.var())
-
         # Log training metrics using shared method
-        idxs_dead = self.log_training_metrics(
-            features, recons_norm, recons, mlp_out, batch_idx
-        )
+        idxs_dead = self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
 
         # AUXILLIARY LOSS
         idxs_dead = idxs_dead.repeat(features.shape[0], 1, 1)
         dead_pre_actvs = torch.where(idxs_dead, pre_actvs, -torch.inf)
         dead_features = self.topk_aux(dead_pre_actvs)
-        aux_recons = self.model.decode(dead_features)
+        aux_recons = self.model.decoder(dead_features)
         recons_err = self.model.output_standardizer.standardize(mlp_out) - recons_norm
         aux_loss = (aux_recons - recons_err) ** 2
 

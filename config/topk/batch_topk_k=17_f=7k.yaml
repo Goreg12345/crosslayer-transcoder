@@ -20,9 +20,9 @@ trainer:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "topk-crosslayer-transcoder"
-      name: "batch-topk-k=17-f=7k"
+      name: "batch-topk-k=17-f=6k"
       save_dir: "./wandb"
-      tags: ["batch-topk", "k=17", "f=7k"]  # Add tag to distinguish this experiment
+      tags: ["batch-topk", "k=17", "f=6k"]  # Add tag to distinguish this experiment
   callbacks:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
@@ -41,7 +41,7 @@ model:
       init_args:
         # Model architecture parameters
         d_acts: 768
-        d_features: 10_000  # 768 * 8
+        d_features: 6_000  # 768 * 8
         n_layers: 12
         
         # Pre-constructed PerLayerTopK nonlinearity
@@ -83,7 +83,7 @@ model:
     dead_features:
       class_path: metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 10_000
+        n_features: 6_000
         n_layers: 12
         return_per_layer: true
     

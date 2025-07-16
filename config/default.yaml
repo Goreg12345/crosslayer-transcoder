@@ -41,14 +41,11 @@ model:
         d_features: 5_000  # 768 * 8
         n_layers: 12
         
-        # Pre-constructed nonlinearity
+        # Pre-constructed BatchTopK nonlinearity
         nonlinearity:
-          class_path: model.jumprelu.JumpReLU
+          class_path: model.topk.BatchTopK  # or: PerSampleTopK, BatchTopK
           init_args:
-            theta: 0.03
-            bandwidth: 1.0
-            n_layers: 12
-            d_features: 5_000
+            k: 800_000  # Number of top features to keep per layer (adjust as needed)
         
         # Pre-constructed standardizers
         input_standardizer:
@@ -78,6 +75,7 @@ model:
         n_features: 5_000
         n_layers: 12
         return_per_layer: true
+        return_log_freqs: true
     
     # Training parameters
     lambda_sparsity: 0.0004
@@ -87,7 +85,7 @@ model:
     
     # Dead features computation settings
     compute_dead_features: true
-    compute_dead_features_every: 200
+    compute_dead_features_every: 20
 
 data:
   class_path: data.datamodule.ActivationDataModule
@@ -99,6 +97,7 @@ data:
     activation_dim: 768
     dtype: "float16"
     max_batch_size: 50000
+    minimum_fill_threshold: 0.2  # Only provide activations when buffer is at least 20% full
     
     # Model settings for activation generation
     model_name: "openai-community/gpt2"

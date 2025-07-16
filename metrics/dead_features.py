@@ -9,6 +9,7 @@ class DeadFeatures(Metric):
         n_layers: int,
         return_per_layer=False,
         return_neuron_indices=False,
+        return_log_freqs=False,
         **kwargs,
     ):
         """
@@ -23,22 +24,36 @@ class DeadFeatures(Metric):
         self.n_layers = n_layers
         self.return_per_layer = return_per_layer
         self.return_neuron_indices = return_neuron_indices
+        self.return_log_freqs = return_log_freqs
 
         self.add_state(
-            "dead_neurons",
-            default=torch.zeros((n_layers, n_features), dtype=torch.float),
+            "n_active",
+            default=torch.zeros((n_layers, n_features), dtype=torch.long),
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
+            "n_total",
+            default=torch.zeros((1), dtype=torch.long),
             dist_reduce_fx="sum",
         )
 
     def update(self, features: torch.Tensor):
-        self.dead_neurons += features.detach().sum(dim=0)
+        self.n_active += (features.detach() > 0.0).sum(dim=0)
+        self.n_total += features.shape[0]
 
     def compute(self):
+        return_dict = {}
+        return_dict["mean"] = (self.n_active == 0.0).float().mean()
         if self.return_neuron_indices:
-            dead_mask = self.dead_neurons == 0.0
+            dead_mask = self.n_active == 0.0
             layer_indices, feature_indices = dead_mask.nonzero(as_tuple=True)
             # Return tuple of (layer_indices, feature_indices) - more intuitive than flattened
-            return (layer_indices, feature_indices)
+            return_dict["layer_indices"] = layer_indices
+            return_dict["feature_indices"] = feature_indices
         elif self.return_per_layer:
-            return (self.dead_neurons == 0.0).float().mean(dim=1)
-        return (self.dead_neurons == 0.0).float().mean()
+            return_dict["per_layer"] = (self.n_active == 0.0).float().mean(dim=1)
+        if self.return_log_freqs:
+            return_dict["log_freqs"] = torch.clamp(
+                torch.log10(self.n_active / self.n_total), min=-10
+            )
+        return return_dict

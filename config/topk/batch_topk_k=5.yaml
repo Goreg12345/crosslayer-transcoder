@@ -20,9 +20,9 @@ trainer:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "topk-crosslayer-transcoder"
-      name: "batch-topk-aux-low-lr"
+      name: "batch-topk-aux"
       save_dir: "./wandb"
-      tags: ["batch-topk", "low-lr"]  # Add tag to distinguish this experiment
+      tags: ["batch-topk"]  # Add tag to distinguish this experiment
   callbacks:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
@@ -86,22 +86,24 @@ model:
         n_features: 9_000
         n_layers: 12
         return_per_layer: true
+        return_log_freqs: true
+        return_neuron_indices: true
     
     # Training parameters
     lambda_sparsity: 0.0004
     c_sparsity: 0.1
-    learning_rate: 1e-4
+    learning_rate: 1e-3
     compile: true
     
     # Dead features computation settings
     compute_dead_features: true
-    compute_dead_features_every: 250  # dead for 1M tokens
+    compute_dead_features_every: 500  # dead for 1M tokens
 
 data:
   class_path: data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
-    buffer_size: 3_000_000
+    buffer_size: 2_000_000
     n_in_out: 2
     n_layers: 12
     activation_dim: 768

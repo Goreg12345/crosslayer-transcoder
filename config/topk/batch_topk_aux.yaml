@@ -41,7 +41,7 @@ model:
       init_args:
         # Model architecture parameters
         d_acts: 768
-        d_features: 10_000  # 768 * 8
+        d_features: 9_000  # 768 * 8
         n_layers: 12
         
         # Pre-constructed PerLayerTopK nonlinearity
@@ -83,7 +83,7 @@ model:
     dead_features:
       class_path: metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 10_000
+        n_features: 9_000
         n_layers: 12
         return_per_layer: true
     
@@ -101,7 +101,7 @@ data:
   class_path: data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
-    buffer_size: 3_000_000
+    buffer_size: 2_000_000
     n_in_out: 2
     n_layers: 12
     activation_dim: 768

@@ -32,6 +32,7 @@ class ActivationDataModule(L.LightningDataModule):
         activation_dim: int = 768,
         dtype: str = "float16",
         max_batch_size: int = 50_000,
+        minimum_fill_threshold: float = 0.0,
         # Model settings for activation generation
         model_name: str = "openai-community/gpt2",
         model_dtype: str = "float32",
@@ -72,6 +73,7 @@ class ActivationDataModule(L.LightningDataModule):
             activation_dim: Dimension of activation vectors
             dtype: Data type ("float16" or "float32")
             max_batch_size: Maximum batch size for high-throughput clients
+            minimum_fill_threshold: Minimum buffer fill ratio (0.0-1.0) before providing activations
 
             # Model settings
             model_name: HuggingFace model name for activation generation
@@ -118,6 +120,7 @@ class ActivationDataModule(L.LightningDataModule):
         self.activation_dim = activation_dim
         self.dtype = dtype
         self.max_batch_size = max_batch_size
+        self.minimum_fill_threshold = minimum_fill_threshold
 
         # Model settings for activation generation
         self.model_name = model_name
@@ -169,13 +172,7 @@ class ActivationDataModule(L.LightningDataModule):
         """Estimate total memory usage in GB."""
         # Buffer memory: [buffer_size, n_in_out, n_layers, activation_dim]
         element_size = torch.tensor([], dtype=self.torch_dtype).element_size()
-        buffer_memory = (
-            self.buffer_size
-            * self.n_in_out
-            * self.n_layers
-            * self.activation_dim
-            * element_size
-        )
+        buffer_memory = self.buffer_size * self.n_in_out * self.n_layers * self.activation_dim * element_size
 
         # Validity mask memory
         validity_memory = self.buffer_size  # 1 byte per sample
@@ -240,6 +237,7 @@ class ActivationDataModule(L.LightningDataModule):
             timeout_seconds=self.timeout_seconds,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
+            minimum_fill_threshold=self.minimum_fill_threshold,
         )
 
         # 2. Create data generator process
@@ -277,6 +275,7 @@ class ActivationDataModule(L.LightningDataModule):
             dataset=dataset,
             data_generator=self.data_generator,
             batch_size=self.batch_size,
+            pin_memory=self.pin_memory,
         )
 
     def _setup_simple_buffer_loader(self):
@@ -287,19 +286,12 @@ class ActivationDataModule(L.LightningDataModule):
 
         import torch.multiprocessing as mp
 
-        if (
-            sys.platform.startswith("linux")
-            and mp.get_start_method(allow_none=True) != "fork"
-        ):
+        if sys.platform.startswith("linux") and mp.get_start_method(allow_none=True) != "fork":
             try:
                 mp.set_start_method("fork", force=True)
-                logger.info(
-                    "Set multiprocessing method to 'fork' for h5py compatibility"
-                )
+                logger.info("Set multiprocessing method to 'fork' for h5py compatibility")
             except RuntimeError:
-                logger.warning(
-                    "Could not set fork method, using num_workers=0 for h5py safety"
-                )
+                logger.warning("Could not set fork method, using num_workers=0 for h5py safety")
                 # If we can't set fork, force single-threaded to avoid pickling issues
                 self.num_workers = 0
                 self.persistent_workers = False

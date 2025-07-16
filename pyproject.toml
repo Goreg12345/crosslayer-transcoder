@@ -38,3 +38,6 @@ dev-dependencies = [
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
 ]
+
+[tool.black]
+line-length = 110

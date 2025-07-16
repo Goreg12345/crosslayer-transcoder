@@ -14,15 +14,15 @@ trainer:
   num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
   precision: "16-mixed"
   accelerator: "gpu"
-  devices: [1]  # 4; [1] for cuda:1
+  devices: [3]  # 4; [1] for cuda:1
   accumulate_grad_batches: 2
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "topk-crosslayer-transcoder"
-      name: "batch-topk-aux-low-lr"
+      name: "batch-topk-aux-low-lr-control"
       save_dir: "./wandb"
-      tags: ["batch-topk", "low-lr"]  # Add tag to distinguish this experiment
+      tags: ["batch-topk", "low-lr", "control"]  # Add tag to distinguish this experiment
   callbacks:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
@@ -33,7 +33,7 @@ trainer:
     #    log_dir: "log/profiler"
 
 model:
-  class_path: model.clt_lightning.TopKCrossLayerTranscoderModule
+  class_path: model.clt_lightning.CrossLayerTranscoderModule
   init_args:
     # Pre-constructed CrossLayerTranscoder model
     model:
@@ -65,18 +65,12 @@ model:
             activation_dim: 768
           #  #n_exclude: 0
 
-    topk_aux:
-      class_path: model.topk.BatchTopK
-      init_args:
-        k: 24_576_000
-    tokens_till_dead: 2_000_000
-    aux_loss_scale: 0.03125  # 1/32
     # Pre-constructed replacement model
     replacement_model:
       class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
       init_args:
         model_name: "openai-community/gpt2"
-        device_map: "cuda:1"
+        device_map: "cuda:3"
         loader_batch_size: 5
     
     # Pre-constructed dead features metric

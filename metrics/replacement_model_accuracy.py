@@ -16,9 +16,9 @@ class ReplacementModel(torch.nn.Module):
         self.n_layers = self.gpt2.config.n_layer
 
     def forward(self, tokens, clt):
-        self.n_features = clt.d_features
-        self.n_layers = clt.n_layers
-        half = clt.W_enc.dtype == torch.float16
+        self.n_features = clt.encoder.d_features
+        self.n_layers = clt.encoder.n_layers
+        half = clt.encoder.W.dtype == torch.float16
         with self.gpt2.trace(tokens):
             # features: batch_size x seq_len x n_layers x n_features
             features = torch.full(
@@ -28,25 +28,21 @@ class ReplacementModel(torch.nn.Module):
             )
 
             for layer in range(self.n_layers):
-                mlp_in = self.gpt2.transformer.h[
-                    layer
-                ].ln_2.input  # (batch, seq, d_acts)
+                mlp_in = self.gpt2.transformer.h[layer].ln_2.input  # (batch, seq, d_acts)
 
                 mlp_in_norm = clt.input_standardizer(mlp_in, layer=layer).detach()
 
                 if half:
                     mlp_in_norm = mlp_in_norm.to(torch.float16)
-                pre_actvs = einsum(
-                    mlp_in_norm,
-                    clt.W_enc[layer].detach(),
-                    "batch seq d_acts, d_acts d_features -> batch seq d_features",
-                )
+                pre_actvs = clt.encoder(mlp_in_norm, layer=layer)
 
                 if isinstance(clt.nonlinearity, JumpReLU):
                     feature_mask = torch.logical_and(
                         pre_actvs > clt.nonlinearity.theta[:, layer], pre_actvs > 0.0
                     )
                     features[..., layer, :] = feature_mask * pre_actvs
+                elif isinstance(clt.nonlinearity, torch.nn.ReLU):
+                    features[..., layer, :] = torch.relu(pre_actvs)
                 else:
                     post_actvs = clt.nonlinearity(
                         pre_actvs, training=False
@@ -57,11 +53,7 @@ class ReplacementModel(torch.nn.Module):
 
                 if half:
                     features = features.to(torch.float16)
-                recons = einsum(
-                    features[..., : layer + 1, :],
-                    clt.W_dec[: layer + 1, layer].detach(),
-                    "batch seq n_layers d_features, n_layers d_features d_acts -> batch seq d_acts",
-                )
+                recons = clt.decoder(features[..., : layer + 1, :], layer=layer)
 
                 recons_norm = clt.output_standardizer(recons, layer=layer).detach()
 
@@ -76,13 +68,9 @@ class ReplacementModelAccuracy(Metric):
     Computes the accuracy of the replacement model and the KL divergence between the logits of the GPT-2 and the replacement model.
     """
 
-    def __init__(
-        self, model_name="openai-community/gpt2", device_map="auto", loader_batch_size=5
-    ):
+    def __init__(self, model_name="openai-community/gpt2", device_map="auto", loader_batch_size=5):
         super().__init__()
-        self.gpt2 = nnsight.LanguageModel(
-            model_name, device_map=device_map, dispatch=True
-        )
+        self.gpt2 = nnsight.LanguageModel(model_name, device_map=device_map, dispatch=True)
         self.gpt2.requires_grad_(False)
         self.replacement_model = ReplacementModel(self.gpt2)
         self.loader = get_webtext_dataloader(self.gpt2, batch_size=loader_batch_size)
@@ -125,12 +113,7 @@ class ReplacementModelAccuracy(Metric):
                 logits_replacement = self.replacement_model(tokens, clt)
 
                 self.n_correct += (
-                    (
-                        logits_gpt2.logits.argmax(dim=-1)
-                        == logits_replacement.argmax(dim=-1)
-                    )
-                    .int()
-                    .sum()
+                    (logits_gpt2.logits.argmax(dim=-1) == logits_replacement.argmax(dim=-1)).int().sum()
                 )
                 self.n_total += tokens.numel()
                 self.kl_div += torch.nn.functional.kl_div(

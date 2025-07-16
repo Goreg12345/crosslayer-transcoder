@@ -5,7 +5,7 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates, not number of batches
-  max_steps: 12_500  # 120M tokens
+  max_steps: 40_000  # 320M tokens
   #limit_train_batches: 10_000
   val_check_interval: 200
   limit_val_batches: 1
@@ -14,15 +14,15 @@ trainer:
   num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
   precision: "16-mixed"
   accelerator: "gpu"
-  devices: [1]  # 4; [1] for cuda:1
+  devices: [2]  # 4; [1] for cuda:1
   accumulate_grad_batches: 2
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "topk-crosslayer-transcoder"
-      name: "batch-topk-aux-low-lr"
+      name: "batch-topk-lr-1e-5"
       save_dir: "./wandb"
-      tags: ["batch-topk", "low-lr"]  # Add tag to distinguish this experiment
+      tags: ["batch-topk", "lr-1e-5"]  # Add tag to distinguish this experiment
   callbacks:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
@@ -76,7 +76,7 @@ model:
       class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
       init_args:
         model_name: "openai-community/gpt2"
-        device_map: "cuda:1"
+        device_map: "cuda:2"
         loader_batch_size: 5
     
     # Pre-constructed dead features metric
@@ -90,7 +90,7 @@ model:
     # Training parameters
     lambda_sparsity: 0.0004
     c_sparsity: 0.1
-    learning_rate: 1e-4
+    learning_rate: 1e-5
     compile: true
     
     # Dead features computation settings
