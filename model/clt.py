@@ -148,7 +148,7 @@ class Decoder(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
+        dec_uniform_thresh = 1 / ((self.d_acts) ** 0.5)
         self.get_parameter(f"W").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
 
     @torch.no_grad()
@@ -159,7 +159,7 @@ class Decoder(nn.Module):
             features = features[:, :, layer, :]
         return einsum(
             features,
-            self.get_parameter(f"W")[layer],
+            self.W[layer],
             "batch_size seq d_features, d_features d_acts -> batch_size seq d_acts",
         )
 
@@ -172,7 +172,7 @@ class Decoder(nn.Module):
         recons = einsum(
             features,
             self.W,
-            "batch_size n_layers d_features, d_features d_acts -> batch_size n_layers d_acts",
+            "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
         )
         return recons
 
@@ -230,7 +230,7 @@ class CrossLayerTranscoder(nn.Module):
         input_standardizer: Standardizer,
         output_standardizer: Standardizer,
         encoder: Encoder,
-        decoder: Decoder,
+        decoder: Union[Decoder, CrosslayerDecoder],
     ):
         super().__init__()
 

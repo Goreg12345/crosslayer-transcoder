@@ -14,7 +14,7 @@ from jaxtyping import Float
 import wandb
 from metrics.dead_features import DeadFeatures
 from metrics.replacement_model_accuracy import ReplacementModelAccuracy
-from model.clt import CrossLayerTranscoder
+from model.clt import CrosslayerDecoder, CrossLayerTranscoder, Decoder
 from model.jumprelu import JumpReLU
 from model.topk import BatchTopK
 
@@ -294,11 +294,14 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.log("model/encoder_direction_magnitude", lens_active.mean())
         lens_inactive = lens[self.n_lifetime_active < 100]
         self.log("model/encoder_direction_magnitude_inactive", lens_inactive.mean())
-        lens_dec = [
-            self.model.decoder.get_parameter(f"W_{l}").norm(p=2, dim=-1).flatten()
-            for l in range(self.model.decoder.n_layers)
-        ]
-        lens_dec = torch.concat(lens_dec)
+        if isinstance(self.model.decoder, CrosslayerDecoder):
+            lens_dec = [
+                self.model.decoder.get_parameter(f"W_{l}").norm(p=2, dim=-1).flatten()
+                for l in range(self.model.decoder.n_layers)
+            ]
+            lens_dec = torch.concat(lens_dec)
+        elif isinstance(self.model.decoder, Decoder):
+            lens_dec = self.model.decoder.W.norm(p=2, dim=-1).flatten()
         self.log("model/decoder_direction_magnitude", lens_dec.mean())
 
         # Log MSE per layer
@@ -391,6 +394,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
     def training_step(self, batch, batch_idx):
         # torch.cuda.empty_cache()
         # gc.collect()
+        batch = torch.stack([batch[:, 0], batch[:, 0]], dim=1)  # TODO: remove this
 
         # TODO: does this prevent complete compilation?
         if batch_idx == 0:
@@ -510,7 +514,7 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
     def training_step(self, batch, batch_idx):
         # torch.cuda.empty_cache()
         # gc.collect()
-        # batch = torch.stack([batch[:, 0], batch[:, 0]], dim=1)  # TODO: remove this
+        batch = torch.stack([batch[:, 0], batch[:, 0]], dim=1)  # TODO: remove this
         # Initialize standardizers
         if batch_idx == 0:
             self.model.initialize_standardizers(batch)
@@ -554,12 +558,10 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
                 for layer in range(theta.shape[0]):
                     self.logger.experiment.log(
                         {f"layers/theta/layer_{layer}": theta[layer].cpu()},
-                        step=self.global_step,
                     )
                 # Log combined theta values
                 self.logger.experiment.log(
                     {"validation/theta": theta.flatten().cpu()},
-                    step=self.global_step,
                 )
 
 

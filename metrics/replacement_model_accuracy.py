@@ -57,7 +57,9 @@ class ReplacementModel(torch.nn.Module):
 
                 recons_norm = clt.output_standardizer(recons, layer=layer).detach()
 
-                self.gpt2.transformer.h[layer].mlp.output = recons_norm
+                # TODO: remove this
+                # self.gpt2.transformer.h[layer].mlp.output = recons_norm
+                self.gpt2.transformer.h[layer].ln_2.input = recons_norm
             logits = self.gpt2.lm_head.output.save()
 
         return logits
