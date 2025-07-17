@@ -7,7 +7,7 @@ trainer:
   # max_steps is number of gradient updates, not number of batches
   max_steps: 10_000  # 20M tokens
   #limit_train_batches: 10_000
-  val_check_interval: 50
+  val_check_interval: 100
   limit_val_batches: 1
   check_val_every_n_epoch: null
   enable_checkpointing: false  # We use custom end-of-training checkpoint
@@ -118,7 +118,7 @@ data:
     max_sequence_length: 1024
     
     # Generation settings
-    generation_batch_size: 2
+    generation_batch_size: 5
     refresh_interval: 0.1
     
     # Memory settings
@@ -136,6 +136,8 @@ data:
     persistent_workers: true
     pin_memory: true
     
+    minimum_fill_threshold: 0.4  # Only provide activations when buffer is at least 20% full
+
     use_shared_memory: true
 
     # Device configuration

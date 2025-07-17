@@ -7,7 +7,7 @@ trainer:
   # max_steps is number of gradient updates, not number of batches
   max_steps: 12_500  # 20M tokens
   #limit_train_batches: 10_000
-  val_check_interval: 200
+  val_check_interval: 20
   limit_val_batches: 1
   check_val_every_n_epoch: null
   enable_checkpointing: false  # We use custom end-of-training checkpoint

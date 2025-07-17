@@ -135,7 +135,7 @@ class DataGenerationLoop:
         self._select_device()
 
         try:
-            batch = next(self.text_dataset_loader)
+            batch, mask = next(self.text_dataset_loader)
         except StopIteration:
             # Dataset exhausted, recreate loader
             self.monitor.log_dataset_exhausted()
@@ -156,17 +156,18 @@ class DataGenerationLoop:
                     worker_init_fn=text_dataset.worker_init_fn,
                 )
             )
-            batch = next(self.text_dataset_loader)
+            batch, mask = next(self.text_dataset_loader)
 
         # Move to current device (adaptive CPU/GPU)
         batch = batch.to(self.current_device)
+        mask = mask.to(self.current_device)
 
         # Prepend BOS token (like in benchmark)
         batch = torch.roll(batch, shifts=1, dims=1)
         batch[:, 0] = self.current_model.config.bos_token_id
 
         # Extract activations using the activation computer
-        mlp_acts = self.activation_computer.get_next_batch(self.current_model, batch)
+        mlp_acts = self.activation_computer.get_next_batch(self.current_model, batch, mask)
 
         return mlp_acts
 

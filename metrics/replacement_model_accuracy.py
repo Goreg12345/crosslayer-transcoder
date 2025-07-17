@@ -87,7 +87,7 @@ class ReplacementModelAccuracy(Metric):
         tokens = tokens.to(self.gpt2.device)
         return tokens
 
-    def prepend_bos(self, tokens):
+    def prepend_bos(self, tokens, mask):
         bos = torch.full(
             (tokens.shape[0], 1),
             self.gpt2.config.bos_token_id,
@@ -95,29 +95,38 @@ class ReplacementModelAccuracy(Metric):
             device=tokens.device,
         )
         tokens = torch.cat([bos, tokens], dim=1)
-        return tokens
+        mask = torch.cat(
+            [torch.zeros((tokens.shape[0], 1), dtype=torch.bool, device=tokens.device), mask], dim=1
+        )
+        return tokens, mask
 
     def update(self, clt, max_batches=10):
         torch.cuda.empty_cache()
         gc.collect()
         with torch.no_grad():
-            for i, tokens in enumerate(self.loader):
+            for i, (tokens, mask) in enumerate(self.loader):
                 torch.cuda.empty_cache()
                 print(f"computing replacement model", i)
                 tokens = self.handle_device(tokens)
+                mask = self.handle_device(mask)
                 if i >= max_batches:
                     break
-                tokens = self.prepend_bos(tokens)
+                tokens, mask = self.prepend_bos(tokens, mask)
 
                 logits_gpt2 = self.gpt2(tokens)
                 logits_replacement = self.replacement_model(tokens, clt)
 
+                mask_flat = mask.reshape(-1)
+                logits_gpt2 = logits_gpt2.logits
+                logits_gpt2 = logits_gpt2.reshape(-1, logits_gpt2.shape[-1])[mask_flat]
+                logits_replacement = logits_replacement.reshape(-1, logits_replacement.shape[-1])[mask_flat]
+
                 self.n_correct += (
-                    (logits_gpt2.logits.argmax(dim=-1) == logits_replacement.argmax(dim=-1)).int().sum()
+                    (logits_gpt2.argmax(dim=-1) == logits_replacement.argmax(dim=-1)).int().sum()
                 )
-                self.n_total += tokens.numel()
+                self.n_total += mask.sum()
                 self.kl_div += torch.nn.functional.kl_div(
-                    torch.nn.functional.log_softmax(logits_gpt2.logits, dim=-1),
+                    torch.nn.functional.log_softmax(logits_gpt2, dim=-1),
                     torch.nn.functional.log_softmax(logits_replacement, dim=-1),
                     reduction="batchmean",
                     log_target=True,

@@ -50,10 +50,8 @@ class DeadFeatures(Metric):
             # Return tuple of (layer_indices, feature_indices) - more intuitive than flattened
             return_dict["layer_indices"] = layer_indices
             return_dict["feature_indices"] = feature_indices
-        elif self.return_per_layer:
+        if self.return_per_layer:
             return_dict["per_layer"] = (self.n_active == 0.0).float().mean(dim=1)
         if self.return_log_freqs:
-            return_dict["log_freqs"] = torch.clamp(
-                torch.log10(self.n_active / self.n_total), min=-10
-            )
+            return_dict["log_freqs"] = torch.clamp(torch.log10(self.n_active / self.n_total), min=-10)
         return return_dict

@@ -8,6 +8,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+import einops
 import h5py
 import torch
 
@@ -48,7 +49,7 @@ class ActivationComputer(ActivationSource):
     def __init__(self, n_layers: int):
         self.n_layers = n_layers
 
-    def get_next_batch(self, model: Any, tokens: torch.Tensor) -> torch.Tensor:
+    def get_next_batch(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Compute activations by running forward pass.
 
@@ -60,10 +61,10 @@ class ActivationComputer(ActivationSource):
             Activations tensor [batch*seq_len, n_in_out, n_layers, d_model]
         """
         gc.collect()
-        return self._extract_activations(model, tokens)
+        return self._extract_activations(model, tokens, mask)
 
     @torch.no_grad()
-    def _extract_activations(self, model: Any, tokens: torch.Tensor) -> torch.Tensor:
+    def _extract_activations(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Extract MLP input/output activations using nnsight tracing.
         EXACT COPY of existing method - no changes to functionality!
@@ -71,9 +72,10 @@ class ActivationComputer(ActivationSource):
         Args:
             model: nnsight LanguageModel to run inference on
             tokens: Tokenized input [batch, seq_len]
+            mask: Attention mask [batch, seq_len]
 
         Returns:
-            Activations tensor [batch*seq_len, in/out, n_layer, d_model]
+            Activations tensor [samples, in/out, n_layer, d_model]
         """
         mlp_ins = []
         mlp_outs = []
@@ -89,16 +91,14 @@ class ActivationComputer(ActivationSource):
                 mlp_out = model.transformer.h[i].mlp.output.save()
                 mlp_outs.append(mlp_out)
 
-        # Stack: [batch, seq_len, n_layer, d_model]
-        mlp_ins = torch.stack(mlp_ins, dim=2)
-        mlp_outs = torch.stack(mlp_outs, dim=2)
+        mlp_ins = torch.stack(mlp_ins, dim=0)
+        mlp_outs = torch.stack(mlp_outs, dim=0)
 
-        # Combine input/output: [batch, seq_len, in/out, n_layer, d_model]
-        mlp_acts = torch.stack([mlp_ins, mlp_outs], dim=2)
-
-        # Fuse batch and sequence length dimensions: [batch*seq_len, in/out, n_layer, d_model]
-        mlp_acts = mlp_acts.reshape(-1, *mlp_acts.shape[2:])
-
+        mlp_acts = einops.rearrange(
+            [mlp_ins, mlp_outs], "iO n_layer batch seq d_model -> (batch seq) iO n_layer d_model"
+        )
+        mask = einops.rearrange(mask, "batch seq -> (batch seq)").bool()
+        mlp_acts = mlp_acts[mask]
         return mlp_acts
 
     def is_available(self) -> bool:
@@ -211,9 +211,7 @@ if __name__ == "__main__":
     import nnsight
     import torch
 
-    gpt2 = nnsight.LanguageModel(
-        "openai-community/gpt2", device_map="cuda:0", dispatch=True
-    )
+    gpt2 = nnsight.LanguageModel("openai-community/gpt2", device_map="cuda:0", dispatch=True)
 
     gpt2.requires_grad_(False)
 
