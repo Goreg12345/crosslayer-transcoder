@@ -29,7 +29,7 @@
             "args": [
                 "fit",
                 "--config",
-                "config/batch_topk_aux.yaml"
+                "config/debug-jumprelu/jumprelu-plt.yaml"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",

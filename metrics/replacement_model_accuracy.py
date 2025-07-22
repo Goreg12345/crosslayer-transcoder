@@ -44,9 +44,7 @@ class ReplacementModel(torch.nn.Module):
                 elif isinstance(clt.nonlinearity, torch.nn.ReLU):
                     features[..., layer, :] = torch.relu(pre_actvs)
                 else:
-                    post_actvs = clt.nonlinearity(
-                        pre_actvs, training=False
-                    ).detach()  # batchxseq, 1, n_features
+                    post_actvs = clt.nonlinearity(pre_actvs, layer=layer).detach()  # batchxseq, 1, n_features
                     features[..., layer, :] = post_actvs.reshape(
                         tokens.shape[0], tokens.shape[1], self.n_features
                     )
@@ -100,7 +98,7 @@ class ReplacementModelAccuracy(Metric):
         )
         return tokens, mask
 
-    def update(self, clt, max_batches=10):
+    def update(self, clt, max_batches=20):
         torch.cuda.empty_cache()
         gc.collect()
         with torch.no_grad():

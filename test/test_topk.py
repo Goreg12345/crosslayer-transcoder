@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from model.topk import BatchTopK, PerLayerTopK, PerSampleTopK
+from model.topk import BatchTopK, PerLayerBatchTopK, PerLayerTopK
 
 
 @pytest.fixture(
@@ -26,13 +26,13 @@ def per_layer_topk():
 
 
 @pytest.fixture
-def per_sample_topk():
-    return PerSampleTopK(k=3)
+def per_layer_batch_topk():
+    return PerLayerBatchTopK(k=3, e=0.1, n_layers=12)
 
 
 @pytest.fixture
 def batch_topk():
-    return BatchTopK(k=3)
+    return BatchTopK(k=3, e=0.1)
 
 
 def test_per_layer_topk_output_shape(per_layer_topk, features):
@@ -45,14 +45,18 @@ def test_per_layer_topk_has_k_nonzero_values(per_layer_topk, features):
     assert (topk_features[0, 0] != 0).sum() == per_layer_topk.k
 
 
-def test_per_sample_topk_output_shape(per_sample_topk, features):
-    topk_features = per_sample_topk(features)
+def test_per_layer_batch_topk_output_shape(per_layer_batch_topk, features):
+    topk_features = per_layer_batch_topk(features)
     assert topk_features.shape == features.shape
 
 
-def test_per_sample_topk_has_k_nonzero_values(per_sample_topk, features):
-    topk_features = per_sample_topk(features)
-    assert (topk_features[0] != 0).sum() == per_sample_topk.k
+def test_per_layer_batch_topk_has_k_nonzero_values(per_layer_batch_topk, features):
+    batch_size, n_layers, d_features = features.shape
+    topk_features = per_layer_batch_topk(features)
+    # Each layer should have k * batch_size non-zero values
+    for layer in range(n_layers):
+        layer_nonzeros = (topk_features[:, layer, :] != 0).sum()
+        assert layer_nonzeros == per_layer_batch_topk.k * batch_size
 
 
 def test_batch_topk_output_shape(batch_topk, features):
@@ -61,8 +65,11 @@ def test_batch_topk_output_shape(batch_topk, features):
 
 
 def test_batch_topk_has_k_nonzero_values(batch_topk, features):
+    batch_size, n_layers, d_features = features.shape
     topk_features = batch_topk(features)
-    assert (topk_features != 0).sum() == batch_topk.k
+    # Should have k * batch_size * n_layers non-zero values total
+    expected_nonzeros = batch_topk.k * batch_size * n_layers
+    assert (topk_features != 0).sum() == expected_nonzeros
 
 
 def test_per_layer_topk_has_correct_values(per_layer_topk):
@@ -72,14 +79,20 @@ def test_per_layer_topk_has_correct_values(per_layer_topk):
     assert torch.allclose(topk_features[0, 1], torch.tensor([0, 0, 8, 9, 10]))
 
 
-def test_per_sample_topk_has_correct_values(per_sample_topk):
-    features = torch.tensor([[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]]])
-    topk_features = per_sample_topk(features)
-    assert torch.allclose(topk_features[0, 0], torch.tensor([0, 0, 0, 0, 0]))
-    assert torch.allclose(topk_features[0, 1], torch.tensor([0, 0, 8, 9, 10]))
+def test_per_layer_batch_topk_has_correct_values():
+    per_layer_batch_topk = PerLayerBatchTopK(k=3, e=0.1, n_layers=2)
+    features = torch.tensor(
+        [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]]
+    )
+    topk_features = per_layer_batch_topk(features)
+    # Layer 0: top 6 values from [1,2,3,4,5,11,12,13,14,15] -> keep [11,12,13,14,15,5]
+    # Layer 1: top 6 values from [6,7,8,9,10,16,17,18,19,20] -> keep [16,17,18,19,20,10]
+    assert (topk_features[:, 0, :] != 0).sum() == 6  # 3 * 2 batch_size
+    assert (topk_features[:, 1, :] != 0).sum() == 6  # 3 * 2 batch_size
 
 
-def test_batch_topk_has_correct_values(batch_topk):
+def test_batch_topk_has_correct_values():
+    batch_topk = BatchTopK(k=3, e=0.1)
     features = torch.tensor(
         [
             [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
@@ -87,10 +100,12 @@ def test_batch_topk_has_correct_values(batch_topk):
         ]
     )
     topk_features = batch_topk(features)
-    assert torch.allclose(topk_features[0, 0], torch.tensor([0, 0, 0, 0, 0]))
-    assert torch.allclose(topk_features[0, 1], torch.tensor([0, 0, 0, 0, 0]))
-    assert torch.allclose(topk_features[1, 0], torch.tensor([0, 0, 0, 0, 0]))
-    assert torch.allclose(topk_features[1, 1], torch.tensor([0, 0, 18, 19, 20]))
+    # Should keep top 12 values globally (3 * 2 batch * 2 layers)
+    # Top 12: [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9]
+    assert (topk_features != 0).sum() == 12
+    # Should contain the highest values
+    assert topk_features[1, 1, 4] == 20  # Highest value should be preserved
+    assert topk_features[1, 1, 3] == 19  # Second highest should be preserved
 
 
 def test_per_layer_topk_backward(per_layer_topk, features):
@@ -100,9 +115,9 @@ def test_per_layer_topk_backward(per_layer_topk, features):
     assert features.grad is not None
 
 
-def test_per_sample_topk_backward(per_sample_topk, features):
+def test_per_layer_batch_topk_backward(per_layer_batch_topk, features):
     features.requires_grad = True
-    topk_features = per_sample_topk(features)
+    topk_features = per_layer_batch_topk(features)
     topk_features.sum().backward()
     assert features.grad is not None
 
@@ -119,11 +134,11 @@ def test_k_zero(features):
     result = topk(features)
     assert torch.allclose(result, torch.zeros_like(features))
 
-    topk = PerSampleTopK(k=0)
+    topk = PerLayerBatchTopK(k=0, e=0.1, n_layers=features.shape[1])
     result = topk(features)
     assert torch.allclose(result, torch.zeros_like(features))
 
-    topk = BatchTopK(k=0)
+    topk = BatchTopK(k=0, e=0.1)
     result = topk(features)
     assert torch.allclose(result, torch.zeros_like(features))
 
@@ -135,11 +150,11 @@ def test_k_boundary(features):
     result = topk(features)
     assert torch.allclose(result, features)
 
-    topk = PerSampleTopK(k=d_features * n_layers)
+    topk = PerLayerBatchTopK(k=d_features, e=0.1, n_layers=n_layers)
     result = topk(features)
     assert torch.allclose(result, features)
 
-    topk = BatchTopK(k=features.numel())
+    topk = BatchTopK(k=d_features, e=0.1)
     result = topk(features)
     assert torch.allclose(result, features)
 
@@ -151,16 +166,16 @@ def test_k_boundary_plus_one_error(features):
     with pytest.raises(AssertionError):
         topk(features)
 
-    topk = PerSampleTopK(k=d_features * n_layers + 1)
+    topk = PerLayerBatchTopK(k=d_features + 1, e=0.1, n_layers=n_layers)
     with pytest.raises(AssertionError):
         topk(features)
 
-    topk = BatchTopK(k=features.numel() + 1)
+    topk = BatchTopK(k=d_features + 1, e=0.1)
     with pytest.raises(AssertionError):
         topk(features)
 
 
-def test_no_negative_values_in_output(per_layer_topk, per_sample_topk, batch_topk):
+def test_no_negative_values_in_output(per_layer_topk, per_layer_batch_topk, batch_topk):
     """Test that all topk implementations never output negative values, even with negative inputs"""
     # Create test tensor with negative values
     negative_features = torch.randn(2, 3, 4) - 1.0  # Ensures mostly negative values
@@ -169,16 +184,16 @@ def test_no_negative_values_in_output(per_layer_topk, per_sample_topk, batch_top
     result = per_layer_topk(negative_features)
     assert torch.all(result >= 0), "PerLayerTopK output contains negative values"
 
-    # Test PerSampleTopK
-    result = per_sample_topk(negative_features)
-    assert torch.all(result >= 0), "PerSampleTopK output contains negative values"
+    # Test PerLayerBatchTopK
+    result = per_layer_batch_topk(negative_features)
+    assert torch.all(result >= 0), "PerLayerBatchTopK output contains negative values"
 
     # Test BatchTopK
     result = batch_topk(negative_features)
     assert torch.all(result >= 0), "BatchTopK output contains negative values"
 
 
-def test_mixed_positive_negative_values(per_layer_topk, per_sample_topk, batch_topk):
+def test_mixed_positive_negative_values(per_layer_topk, per_layer_batch_topk, batch_topk):
     """Test that topk implementations handle mixed positive/negative values correctly"""
     # Create test tensor with mix of positive and negative values
     mixed_features = torch.tensor(
@@ -193,12 +208,10 @@ def test_mixed_positive_negative_values(per_layer_topk, per_sample_topk, batch_t
     # Test PerLayerTopK - should keep top 3 positive values per layer
     result = per_layer_topk(mixed_features)
     assert torch.all(result >= 0), "PerLayerTopK output contains negative values"
-    # For layer 0: should keep [1.0, 3.0, 5.0] (top 3 values, negatives become 0)
-    # For layer 1: should keep [2.0, 4.0] (top 2 positive values, 3rd would be negative so becomes 0)
 
-    # Test PerSampleTopK - should keep top 3 values across all layers
-    result = per_sample_topk(mixed_features)
-    assert torch.all(result >= 0), "PerSampleTopK output contains negative values"
+    # Test PerLayerBatchTopK - should keep top 3 values per layer across batch
+    result = per_layer_batch_topk(mixed_features)
+    assert torch.all(result >= 0), "PerLayerBatchTopK output contains negative values"
 
     # Test BatchTopK - should keep top 3 values across entire batch
     result = batch_topk(mixed_features)
@@ -209,9 +222,7 @@ def test_mixed_positive_negative_values(per_layer_topk, per_sample_topk, batch_t
 def nnsight_model():
     import nnsight
 
-    gpt2 = nnsight.LanguageModel(
-        "openai-community/gpt2", device_map="auto", dispatch=True
-    )
+    gpt2 = nnsight.LanguageModel("openai-community/gpt2", device_map="auto", dispatch=True)
 
     gpt2.requires_grad_(False)
     return gpt2
@@ -219,7 +230,7 @@ def nnsight_model():
 
 @pytest.mark.parametrize(
     "topk_fixture",
-    ["per_layer_topk", "per_sample_topk", "batch_topk"],
+    ["per_layer_topk", "per_layer_batch_topk", "batch_topk"],
 )
 def test_nnsight_compatibility(nnsight_model, topk_fixture, request):
     """Test that all topk implementations work correctly with nnsight tracing"""

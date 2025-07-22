@@ -14,7 +14,7 @@ from jaxtyping import Float
 import wandb
 from metrics.dead_features import DeadFeatures
 from metrics.replacement_model_accuracy import ReplacementModelAccuracy
-from model.clt import CrossLayerTranscoder
+from model.clt import CrosslayerDecoder, CrossLayerTranscoder, Decoder
 from model.jumprelu import JumpReLU
 from model.topk import BatchTopK
 
@@ -271,8 +271,14 @@ class CrossLayerTranscoderModule(L.LightningModule):
         return self.model(acts_norm)
 
     def log_training_metrics(self, features, recons_norm, recons, mlp_out, batch_idx):
-        # Compute MSE and related metrics
+        features = features.detach()
+        recons_norm = recons_norm.detach()
+        recons = recons.detach()
         mlp_out_norm = self.model.output_standardizer.standardize(mlp_out)
+        mlp_out = mlp_out.detach()
+        mlp_out_norm = mlp_out_norm.detach()
+
+        # Compute MSE and related metrics
         mse = (recons_norm - mlp_out_norm) ** 2
 
         ss_err = (mlp_out_norm - recons_norm) ** 2
@@ -294,11 +300,14 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.log("model/encoder_direction_magnitude", lens_active.mean())
         lens_inactive = lens[self.n_lifetime_active < 100]
         self.log("model/encoder_direction_magnitude_inactive", lens_inactive.mean())
-        lens_dec = [
-            self.model.decoder.get_parameter(f"W_{l}").norm(p=2, dim=-1).flatten()
-            for l in range(self.model.decoder.n_layers)
-        ]
-        lens_dec = torch.concat(lens_dec)
+        if isinstance(self.model.decoder, CrosslayerDecoder):
+            lens_dec = [
+                self.model.decoder.get_parameter(f"W_{l}").norm(p=2, dim=-1).flatten()
+                for l in range(self.model.decoder.n_layers)
+            ]
+            lens_dec = torch.concat(lens_dec)
+        elif isinstance(self.model.decoder, Decoder):
+            lens_dec = self.model.decoder.W.norm(p=2, dim=-1).flatten()
         self.log("model/decoder_direction_magnitude", lens_dec.mean())
 
         # Log MSE per layer
@@ -317,6 +326,20 @@ class CrossLayerTranscoderModule(L.LightningModule):
             "metrics/L0_avg_per_layer",
             (features > 0).float().sum() / (features.shape[0] * features.shape[1]),
         )
+
+        # Magnitude of feature activations - memory efficient version
+        # positive_mask = features > 0
+        # if positive_mask.any():
+        #    mean_coeff = torch.sum(features * positive_mask) / torch.sum(positive_mask)
+        #    self.log("metrics/mean_coefficients", mean_coeff)
+
+        # Per-layer mean coefficients - memory efficient version
+        #        for layer in range(self.model.encoder.n_layers):
+        #            layer_features = features[:, layer, :]
+        #            layer_mask = layer_features > 0
+        #            if layer_mask.any():
+        #                layer_mean = torch.sum(layer_features * layer_mask) / torch.sum(layer_mask)
+        #                self.log(f"layers/mean_coefficients/layer_{layer}", layer_mean)
 
         # Log current learning rate
         if self.lr_schedulers():
@@ -380,12 +403,12 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
             self.dead_features.reset()
 
+    def update_dead_features(self, features):
         # Update last_active and compute dead features
         self.last_active[features.detach().sum(dim=0) > 0.0] = 0.0
         self.last_active += features.shape[0]
         idxs_dead = self.last_active > self.tokens_till_dead
         self.log("metrics/dead_features", idxs_dead.float().mean())
-
         return idxs_dead
 
     def training_step(self, batch, batch_idx):
@@ -400,6 +423,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
         _, features, recons_norm, recons = self.forward(resid)
 
         self.n_lifetime_active += (features > 0).sum(0).float()
+        self.update_dead_features(features)
 
         mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
         loss = mse.mean()
@@ -491,12 +515,16 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         self,
         lambda_sparsity: float = 0.0002,
         c_sparsity: float = 0.1,
+        use_tanh: bool = True,
+        pre_actv_loss: float = 0.0,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self._lambda = lambda_sparsity
         self.c = c_sparsity
+        self.use_tanh = use_tanh
+        self.pre_actv_loss = pre_actv_loss
 
     def current_sparsity_penalty(self):
         n_steps = self.trainer.max_steps
@@ -517,22 +545,38 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
 
         # Forward pass
         resid, mlp_out = batch[:, 0], batch[:, 1]
-        _, features, recons_norm, recons = self.forward(resid)
+        pre_actvs, features, recons_norm, recons = self.forward(resid)
 
         self.n_lifetime_active += (features > 0).sum(0).float()
-
+        self.update_dead_features(features)
         # Compute MSE loss
         mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out)) ** 2
 
-        dec_norms = torch.zeros_like(features[:1])
-        for l in range(self.model.decoder.n_layers):
-            W = self.model.decoder.get_parameter(f"W_{l}")  # (from_layer, d_features, d_acts)
-            dec_norms[:, : l + 1] = dec_norms[:, : l + 1] + W.norm(p=2, dim=-1)
-        tanh = torch.tanh(features * dec_norms * self.c)
-        sparsity = self.current_sparsity_penalty() * tanh.sum(dim=[1, 2]).mean()
+        # Compute Sparsity Loss
+        # with torch.no_grad():
+        if isinstance(self.model.decoder, CrosslayerDecoder):
+            dec_norms = torch.zeros_like(features[:1])
+            for l in range(self.model.decoder.n_layers):
+                W = self.model.decoder.get_parameter(f"W_{l}")  # (from_layer, d_features, d_acts)
+                dec_norms[:, : l + 1] = dec_norms[:, : l + 1] + (W**2).sum(dim=-1)
+            dec_norms = dec_norms.sqrt()
+
+        elif isinstance(self.model.decoder, Decoder):
+            dec_norms = torch.sqrt((self.model.decoder.W**2).sum(dim=-1))
+
+        weighted_features = features * dec_norms * self.c
+        self.log("model/weighted_features_mean", weighted_features.detach().mean().cpu())
+
+        if self.use_tanh:
+            weighted_features = torch.tanh(weighted_features)  # (batch_size, n_layers, d_features)
+        sparsity = self.current_sparsity_penalty() * weighted_features.sum(dim=[1, 2]).mean()
         self.log("training/sparsity_loss", sparsity)
 
-        loss = mse.mean() + sparsity
+        # Compute Pre-activation Loss
+        pre_actv_loss = torch.relu(-pre_actvs).sum(dim=-1).mean() * self.pre_actv_loss
+        self.log("training/pre_actv_loss", pre_actv_loss)
+
+        loss = mse.mean() + sparsity + pre_actv_loss
         self.log("training/loss", loss)
 
         # Log training metrics
@@ -554,12 +598,10 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
                 for layer in range(theta.shape[0]):
                     self.logger.experiment.log(
                         {f"layers/theta/layer_{layer}": theta[layer].cpu()},
-                        step=self.global_step,
                     )
                 # Log combined theta values
                 self.logger.experiment.log(
                     {"validation/theta": theta.flatten().cpu()},
-                    step=self.global_step,
                 )
 
 
@@ -588,6 +630,13 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         if batch_idx == 0:
             self.model.initialize_standardizers(batch)
 
+        # if batch_idx < 2000:
+        #    for i in range(self.model.decoder.n_layers):
+        #        for l in range(i):
+        #            self.model.decoder.get_parameter(f"W_{i}").data[l, :, :] = (
+        #                self.model.decoder.get_parameter(f"W_{i}").data[l, :, :] * 0.0
+        #            )
+
         resid, mlp_out = batch[:, 0], batch[:, 1]
         pre_actvs, features, recons_norm, recons = self.forward(resid)
 
@@ -596,7 +645,8 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         self.n_lifetime_active += (features > 0).sum(0).float()
 
         # Log training metrics using shared method
-        idxs_dead = self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
+        self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
+        idxs_dead = self.update_dead_features(features)
 
         # AUXILLIARY LOSS
         idxs_dead = idxs_dead.repeat(features.shape[0], 1, 1)

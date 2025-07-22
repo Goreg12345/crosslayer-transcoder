@@ -107,21 +107,29 @@ class Encoder(nn.Module):
         self.d_features = d_features
         self.n_layers = n_layers
         self.W = nn.Parameter(torch.empty((n_layers, d_acts, d_features)))
+        self.bias = True
+        if self.bias:
+            self.b = nn.Parameter(torch.empty((n_layers, d_features)))
         self.reset_parameters()
 
     def reset_parameters(self):
         enc_uniform_thresh = 1 / (self.d_features**0.5)
         self.W.data.uniform_(-enc_uniform_thresh, enc_uniform_thresh)
+        if self.bias:
+            self.b.data.zero_()
 
     @torch.no_grad()
     def forward_layer(
         self, acts_norm: Float[torch.Tensor, "batch_size seq d_acts"], layer: int
     ) -> Float[torch.Tensor, "batch_size seq d_features"]:
-        return einsum(
+        pre_actvs = einsum(
             acts_norm,
             self.W[layer],
             "batch_size seq d_acts, d_acts d_features -> batch_size seq d_features",
         )
+        if self.bias:
+            pre_actvs = pre_actvs + self.b[layer]
+        return pre_actvs
 
     def forward(
         self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"], layer: str = "all"
@@ -131,11 +139,14 @@ class Encoder(nn.Module):
             return self.forward_layer(acts_norm, layer)
 
         # for training
-        return einsum(
+        pre_actvs = einsum(
             acts_norm,
             self.W,
             "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
         )
+        if self.bias:
+            pre_actvs = pre_actvs + self.b
+        return pre_actvs
 
 
 class Decoder(nn.Module):
@@ -172,7 +183,7 @@ class Decoder(nn.Module):
         recons = einsum(
             features,
             self.W,
-            "batch_size n_layers d_features, d_features d_acts -> batch_size n_layers d_acts",
+            "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
         )
         return recons
 
@@ -191,6 +202,8 @@ class CrosslayerDecoder(nn.Module):
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         for i in range(self.n_layers):
             self.get_parameter(f"W_{i}").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
+            # for l in range(i):
+            #    self.get_parameter(f"W_{i}").data[l, :, :] = self.get_parameter(f"W_{l}").data[l, :, :] * 0.0
 
     @torch.no_grad()
     def forward_layer(
@@ -215,9 +228,8 @@ class CrosslayerDecoder(nn.Module):
             l_recons = einsum(
                 selected_features,
                 W,
-                "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
+                "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size d_acts",
             )
-            l_recons = l_recons.sum(dim=1)
             recons.append(l_recons)
         recons = torch.stack(recons, dim=1)
         return recons
@@ -230,7 +242,7 @@ class CrossLayerTranscoder(nn.Module):
         input_standardizer: Standardizer,
         output_standardizer: Standardizer,
         encoder: Encoder,
-        decoder: Decoder,
+        decoder: Union[Decoder, CrosslayerDecoder],
     ):
         super().__init__()
 

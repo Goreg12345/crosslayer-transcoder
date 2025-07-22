@@ -223,8 +223,13 @@ class ActivationDataModule(L.LightningDataModule):
         # Set spawn method for shared memory mode (needed for PyTorch tensor sharing)
         import torch.multiprocessing as mp
 
-        if mp.get_start_method(allow_none=True) != "spawn":
-            mp.set_start_method("spawn", force=True)
+        try:
+            if mp.get_start_method(allow_none=True) != "spawn":
+                mp.set_start_method("spawn", force=True)
+            logger.info("Set multiprocessing method to 'spawn' for shared memory compatibility")
+        except RuntimeError as e:
+            logger.warning(f"Could not set spawn method: {e}. Disabling multiprocessing in DataLoader")
+            # If we can't set spawn, disable multiprocessing in the DataLoader
 
         # 1. Create shared memory buffer
         self.shared_buffer = SharedActivationBuffer(
