@@ -13,7 +13,6 @@ from data.data_generator import DataGeneratorProcess
 
 # Export main classes
 from data.datamodule import ActivationDataModule
-from data.dataset import SharedMemoryDataLoader, SharedMemoryDataset
 from data.generation_loop import DataGenerationLoop
 from data.process_monitor import ProcessMonitor
 from data.shared_memory import SharedActivationBuffer
@@ -26,8 +25,6 @@ from data.shared_memory import SharedActivationBuffer
 
 __all__ = [
     "ActivationDataModule",
-    "SharedMemoryDataLoader",
-    "SharedMemoryDataset",
     "SharedActivationBuffer",
     "DataGeneratorProcess",
     "ActivationComputer",

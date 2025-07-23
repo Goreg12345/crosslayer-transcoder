@@ -20,7 +20,7 @@ import torch.multiprocessing as torch_mp
 logger = logging.getLogger(__name__)
 
 
-class SharedActivationBuffer:
+class SharedActivationBuffer(torch.utils.data.IterableDataset):
     """
     Manages a large shared memory buffer for storing activation tensors.
     Provides thread-safe access for reading/writing activations across processes.
@@ -38,6 +38,7 @@ class SharedActivationBuffer:
         generation_batch_size: int = 32,
         max_sequence_length: int = 1024,
         minimum_fill_threshold: float = 0.0,
+        batch_size: int = None,
     ):
         """
         Initialize shared activation buffer.
@@ -53,6 +54,7 @@ class SharedActivationBuffer:
             generation_batch_size: Batch size for activation generation (for pinned buffer sizing)
             max_sequence_length: Max sequence length (for pinned buffer sizing)
             minimum_fill_threshold: Minimum buffer fill ratio (0.0-1.0) before providing activations
+            batch_size: Batch size for the dataset
         """
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
@@ -60,6 +62,7 @@ class SharedActivationBuffer:
         self.activation_dim = activation_dim
         self.dtype = dtype
         self.minimum_fill_threshold = minimum_fill_threshold
+        self.batch_size = batch_size
 
         # Calculate memory requirements for 4D tensor [buffer_size, n_in_out, n_layers, activation_dim]
         self.shape = (buffer_size, n_in_out, n_layers, activation_dim)
@@ -118,6 +121,12 @@ class SharedActivationBuffer:
         }
 
         logger.info("Shared PyTorch activation buffer initialized successfully")
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.get_activations(self.batch_size)
 
     def __getstate__(self):
         """

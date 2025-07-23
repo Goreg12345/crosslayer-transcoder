@@ -45,10 +45,9 @@ class PerLayerTopK(TopK):
 
         topk_features = torch.zeros_like(features)
         topk_vals, topk_idxs = torch.topk(features, self.k, dim=-1, sorted=False)
+        topk_vals = self.relu(topk_vals)  # make sure that features are always positive
         topk_features.scatter_(dim=-1, index=topk_idxs, src=topk_vals)
 
-        # make sure that features are always positive
-        topk_features = self.relu(topk_features)
         return topk_features
 
 
@@ -75,10 +74,9 @@ class BatchTopK(TopK):
         if batch_k == 0:
             return topk_features.reshape(batch_size, n_layers, d_features)
         topk_vals, topk_idxs = torch.topk(features, batch_k, dim=-1, sorted=False)
+        topk_vals = self.relu(topk_vals)  # make sure that features are always positive
         topk_features.scatter_(dim=-1, index=topk_idxs, src=topk_vals)
         topk_features = topk_features.reshape(batch_size, n_layers, d_features)
-        # make sure that features are always positive
-        topk_features = self.relu(topk_features)
 
         # update thresholds
         min_k = topk_vals.min().detach()
@@ -111,12 +109,11 @@ class PerLayerBatchTopK(TopK):
                 topk_features, "layer (batch feature) -> batch layer feature", batch=batch_size
             )
         topk_vals, topk_idxs = torch.topk(features, batch_k, dim=-1, sorted=False)
+        topk_vals = self.relu(topk_vals)  # make sure that features are always positive
         topk_features.scatter_(dim=-1, index=topk_idxs, src=topk_vals)
         topk_features = einops.rearrange(
             topk_features, "layer (batch feature) -> batch layer feature", batch=batch_size
         )
-        # make sure that features are always positive
-        topk_features = self.relu(topk_features)
 
         # update thresholds
         min_k = topk_vals.detach().min(dim=-1).values

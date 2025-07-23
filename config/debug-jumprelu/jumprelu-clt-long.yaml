@@ -5,7 +5,7 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates, not number of batches
-  max_steps: 22_000  # 20M tokens
+  max_steps: 200_000  # 20M tokens
   #limit_train_batches: 10_000
   val_check_interval: 400
   limit_val_batches: 1
@@ -140,7 +140,7 @@ data:
     init_file: "/var/local/glang/activations/clt-activations-10M-shuffled_fp16.h5"
     
     # DataLoader settings
-    batch_size: 1000
+    batch_size: 2000
     num_workers: 10
     prefetch_factor: 2
     shuffle: true

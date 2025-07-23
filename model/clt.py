@@ -144,8 +144,11 @@ class Encoder(nn.Module):
             self.W,
             "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
         )
+        pre_actvs = pre_actvs.contiguous()
+
         if self.bias:
-            pre_actvs = pre_actvs + self.b
+            pre_actvs = pre_actvs + self.b.to(torch.float16)
+
         return pre_actvs
 
 
@@ -196,6 +199,7 @@ class CrosslayerDecoder(nn.Module):
         self.n_layers = n_layers
         for i in range(n_layers):
             self.register_parameter(f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts))))
+        self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -205,14 +209,19 @@ class CrosslayerDecoder(nn.Module):
             # for l in range(i):
             #    self.get_parameter(f"W_{i}").data[l, :, :] = self.get_parameter(f"W_{l}").data[l, :, :] * 0.0
 
+        self.b.data.zero_()
+
     @torch.no_grad()
     def forward_layer(
         self, features: Float[torch.Tensor, "batch_size seq from_layer d_features"], layer: int
     ) -> Float[torch.Tensor, "batch_size seq d_acts"]:
-        return einsum(
-            features,
-            self.get_parameter(f"W_{layer}"),
-            "batch_size seq from_layer d_features, from_layer d_features d_acts -> batch_size seq d_acts",
+        return (
+            einsum(
+                features,
+                self.get_parameter(f"W_{layer}"),
+                "batch_size seq from_layer d_features, from_layer d_features d_acts -> batch_size seq d_acts",
+            )
+            + self.b[layer]
         )
 
     def forward(
@@ -221,7 +230,9 @@ class CrosslayerDecoder(nn.Module):
         if layer != "all":
             return self.forward_layer(features, layer)
 
-        recons = []
+        recons = torch.empty(
+            features.shape[0], self.n_layers, self.d_acts, device=features.device, dtype=features.dtype
+        )
         for l in range(self.n_layers):
             W = self.get_parameter(f"W_{l}")
             selected_features = features[:, : l + 1]
@@ -230,8 +241,8 @@ class CrosslayerDecoder(nn.Module):
                 W,
                 "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size d_acts",
             )
-            recons.append(l_recons)
-        recons = torch.stack(recons, dim=1)
+            recons[:, l, :] = l_recons
+        recons = recons + self.b.to(features.dtype)
         return recons
 
 

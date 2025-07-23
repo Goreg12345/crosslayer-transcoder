@@ -5,9 +5,9 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates, not number of batches
-  max_steps: 10_000  # 20M tokens
+  max_steps: 1_000  # 20M tokens
   #limit_train_batches: 10_000
-  val_check_interval: 200
+  val_check_interval: 100
   limit_val_batches: 1
   check_val_every_n_epoch: null
   enable_checkpointing: false  # We use custom end-of-training checkpoint
@@ -20,14 +20,15 @@ trainer:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "crosslayer-transcoder"
+      name: "staging"
       save_dir: "./wandb"
   callbacks:
     - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints"
-    #- class_path: utils.callbacks.TensorBoardProfilerCallback
-    #  init_args:
-    #    log_dir: "log/profiler"
+    - class_path: utils.callbacks.TensorBoardProfilerCallback
+      init_args:
+        log_dir: "log/profiler"
 
 model:
   class_path: model.clt_lightning.CrossLayerTranscoderModule
@@ -36,16 +37,25 @@ model:
     model:
       class_path: model.clt.CrossLayerTranscoder
       init_args:
-        # Model architecture parameters
-        d_acts: 768
-        d_features: 3_000  # 768 * 8
-        n_layers: 12
+        encoder:
+          class_path: model.clt.Encoder
+          init_args:
+            d_acts: 768
+            d_features: 10_000  # 768 * 8
+            n_layers: 12
+
+        decoder:
+          class_path: model.clt.CrosslayerDecoder
+          init_args:
+            d_acts: 768
+            d_features: 10_000  # 768 * 8
+            n_layers: 12
         
         # Pre-constructed BatchTopK nonlinearity
         nonlinearity:
-          class_path: model.topk.BatchTopK  # or: PerSampleTopK, BatchTopK
+          class_path: model.topk.PerLayerTopK  # or: PerSampleTopK, BatchTopK
           init_args:
-            k: 800_000  # Number of top features to keep per layer (adjust as needed)
+            k: 16  # Number of top features to keep per layer (adjust as needed)
         
         # Pre-constructed standardizers
         input_standardizer:
@@ -72,7 +82,7 @@ model:
     dead_features:
       class_path: metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 3_000
+        n_features: 10_000
         n_layers: 12
         return_per_layer: true
         return_log_freqs: true
@@ -80,7 +90,7 @@ model:
     
     # Training parameters
     learning_rate: 1e-3
-    compile: true
+    compile: false
     
     # Dead features computation settings
     compute_dead_features: true
