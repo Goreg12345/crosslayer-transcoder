@@ -207,6 +207,8 @@ class CrossLayerTranscoderModule(L.LightningModule):
         optimizer: str = "adam",
         beta1: Optional[float] = None,
         beta2: Optional[float] = None,
+        # metrics
+        log_metrics_every: int = 50,
         *args,
         **kwargs,
     ):
@@ -238,6 +240,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.optimizer = optimizer
         self.beta1 = beta1
         self.beta2 = beta2
+        self.log_metrics_every = log_metrics_every
 
         assert (
             self.model.encoder.n_layers == self.model.decoder.n_layers
@@ -431,7 +434,8 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.log("training/loss", loss)
 
         # Log training metrics
-        self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
+        if batch_idx % self.log_metrics_every == 0:
+            self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
 
         return loss
 
@@ -462,11 +466,11 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         if self.optimizer == "adam":
             optimizer = torch.optim.Adam(
-                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2)
+                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2), fused=True
             )
         elif self.optimizer == "adamw":
             optimizer = torch.optim.AdamW(
-                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2)
+                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2), fused=True
             )
         else:
             raise ValueError(f"Optimizer {self.optimizer} not supported")
@@ -580,7 +584,8 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         self.log("training/loss", loss)
 
         # Log training metrics
-        self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
+        if batch_idx % self.log_metrics_every == 0:
+            self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
 
         return loss
 
@@ -645,7 +650,8 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         self.n_lifetime_active += (features > 0).sum(0).float()
 
         # Log training metrics using shared method
-        self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
+        if batch_idx % self.log_metrics_every == 0:
+            self.log_training_metrics(features, recons_norm, recons, mlp_out, batch_idx)
         idxs_dead = self.update_dead_features(features)
 
         # AUXILLIARY LOSS

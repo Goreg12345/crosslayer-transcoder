@@ -11,7 +11,6 @@ import lightning as L
 import torch
 
 from data.data_generator import DataGeneratorProcess
-from data.dataset import SharedMemoryDataLoader, SharedMemoryDataset
 from data.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
@@ -243,6 +242,7 @@ class ActivationDataModule(L.LightningDataModule):
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
             minimum_fill_threshold=self.minimum_fill_threshold,
+            batch_size=self.batch_size,
         )
 
         # 2. Create data generator process
@@ -271,16 +271,13 @@ class ActivationDataModule(L.LightningDataModule):
         self.data_generator.start()
         logger.info("Data generator process started")
 
-        # 4. Create shared memory dataset
-        dataset = SharedMemoryDataset(self.shared_buffer, self.buffer_size)
-
-        # 5. Create shared memory data loader
-        self.data_loader = SharedMemoryDataLoader(
-            shared_buffer=self.shared_buffer,
-            dataset=dataset,
-            data_generator=self.data_generator,
-            batch_size=self.batch_size,
-            pin_memory=self.pin_memory,
+        self.data_loader = torch.utils.data.DataLoader(
+            self.shared_buffer,
+            batch_size=None,
+            num_workers=1,
+            prefetch_factor=3,
+            shuffle=False,
+            pin_memory=True,
         )
 
     def _setup_simple_buffer_loader(self):
