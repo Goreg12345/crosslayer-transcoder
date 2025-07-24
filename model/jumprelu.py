@@ -30,7 +30,7 @@ class _JumpReLUFunction(torch.autograd.Function):
         return grad_input, theta_grad, None
 
 
-@torch.compile
+#  @torch.compile --> potentially causes segmentation faults
 class JumpReLU(torch.nn.Module):
     def __init__(self, theta=0.0, bandwidth=1.0, n_layers=12, d_features=768 * 8):
         super().__init__()

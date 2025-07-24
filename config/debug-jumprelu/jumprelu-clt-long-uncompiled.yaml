@@ -14,7 +14,7 @@ trainer:
   num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
   precision: "16-mixed"
   accelerator: "gpu"
-  devices: [2]  # 4; [1] for cuda:1
+  devices: [3]  # 4; [1] for cuda:1
   accumulate_grad_batches: 1
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
@@ -79,7 +79,7 @@ model:
       class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
       init_args:
         model_name: "openai-community/gpt2"
-        device_map: "cuda:2"
+        device_map: "cuda:3"
         loader_batch_size: 2
     
     # Pre-constructed dead features metric
@@ -94,7 +94,7 @@ model:
     
     # Training parameters
     learning_rate: 1e-4
-    compile: true
+    compile: false
     lr_decay_step: 90_000
     lr_decay_factor: 0.1
 
