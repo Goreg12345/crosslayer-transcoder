@@ -57,6 +57,71 @@ config = DataLoaderConfig(
 loader = actvs_loader_from_config(config, batch_size=2000)
 ```
 
+### GPT-2 Deployment Policies
+
+You can control where the GPT-2 model runs during activation generation:
+
+```python
+from data import ActivationDataModule, DeploymentPolicy
+
+# CPU only - model always runs on CPU
+datamodule = ActivationDataModule(
+    deployment_policy="cpu_only",  # or DeploymentPolicy.CPU_ONLY
+    device_map="cpu",
+    buffer_size=100_000,
+    batch_size=1000
+)
+
+# GPU only - model always runs on GPU (requires CUDA)
+datamodule = ActivationDataModule(
+    deployment_policy="gpu_only",  # or DeploymentPolicy.GPU_ONLY
+    device_map="cuda:0",  # Specify which GPU to use
+    buffer_size=100_000,
+    batch_size=1000
+)
+
+# Multi-GPU deployment
+datamodule = ActivationDataModule(
+    deployment_policy="gpu_only",
+    device_map="cuda:0,1,2,3",  # Use multiple GPUs
+    buffer_size=100_000,
+    batch_size=1000
+)
+
+# Dynamic switching - adapts based on buffer load (default)
+datamodule = ActivationDataModule(
+    deployment_policy="dynamic",  # or DeploymentPolicy.DYNAMIC
+    device_map="auto",  # Auto-detect available devices
+    buffer_size=100_000,
+    batch_size=1000
+)
+```
+
+**Policy Details:**
+- **`cpu_only`**: Model stays on CPU regardless of buffer state. Good for systems with limited GPU memory.
+- **`gpu_only`**: Model stays on GPU regardless of buffer state. Fastest generation but requires sufficient GPU memory.
+- **`dynamic`**: Model switches between CPU/GPU based on buffer fill level (default behavior). Balances speed and resource usage.
+
+**Device Map Options:**
+- **`"cpu"`**: Force CPU-only usage
+- **`"auto"`**: Auto-detect and use all available GPUs, fallback to CPU
+- **`"cuda:0"`**: Use specific GPU device
+- **`"cuda:0,1,2,3"`**: Multi-GPU deployment across specified devices
+- **`"0,1,2"`**: Shorthand for `"cuda:0,1,2"`
+
+**Advanced Usage:**
+```python
+from data import create_deployment_policy, DeploymentPolicy
+
+# Create policy with custom thresholds for dynamic switching
+policy = create_deployment_policy(
+    DeploymentPolicy.DYNAMIC,
+    device_map="cuda:0",
+    cpu_threshold=85.0,  # Switch to CPU when buffer > 85% full
+    gpu_threshold=45.0   # Switch to GPU when buffer < 45% full
+)
+```
+
 ### Context Manager Usage
 
 ```python
@@ -118,7 +183,7 @@ The data loader uses a modular architecture with clean separation of responsibil
 
 #### 3. **Generation Loop** (`generation_loop.py`)
 **Responsibility**: Engineering orchestration and optimization
-- Device management (CPU/GPU switching based on buffer load)
+- Device management with configurable deployment policies (CPU-only, GPU-only, or dynamic switching)
 - Buffer monitoring and decision making
 - Performance optimization
 - Coordinates between different data sources
@@ -197,7 +262,7 @@ The data loader uses a modular architecture with clean separation of responsibil
 ### Performance Features
 
 - **Fast Process Startup**: Custom pickling ensures `start()` returns in milliseconds, not minutes
-- **Adaptive Device Selection**: Automatically switches between CPU/GPU based on buffer pressure
+- **Configurable Device Deployment**: Choose CPU-only, GPU-only, or dynamic CPU/GPU switching based on buffer pressure
 - **Shared Memory**: Zero-copy data sharing between processes using named shared memory segments
 - **Continuous Generation**: Background process keeps buffer filled
 - **Memory Optimization**: Efficient tensor storage and cleanup
@@ -217,6 +282,7 @@ DataLoaderConfig(
     # Model settings  
     model_name="openai-community/gpt2",
     model_dtype=torch.float32,
+    deployment_policy="dynamic", # Device policy: "cpu_only", "gpu_only", or "dynamic"
     
     # Dataset settings
     dataset_name="Skylion007/openwebtext",

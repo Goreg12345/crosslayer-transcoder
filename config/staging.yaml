@@ -41,14 +41,14 @@ model:
           class_path: model.clt.Encoder
           init_args:
             d_acts: 768
-            d_features: 10_000  # 768 * 8
+            d_features: 8_000  # 768 * 8
             n_layers: 12
 
         decoder:
           class_path: model.clt.CrosslayerDecoder
           init_args:
             d_acts: 768
-            d_features: 10_000  # 768 * 8
+            d_features: 8_000  # 768 * 8
             n_layers: 12
         
         # Pre-constructed BatchTopK nonlinearity
@@ -82,7 +82,7 @@ model:
     dead_features:
       class_path: metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 10_000
+        n_features: 8_000
         n_layers: 12
         return_per_layer: true
         return_log_freqs: true
@@ -137,7 +137,8 @@ data:
     
     use_shared_memory: true
 
-    # Device configuration
+    # Deployment policy configuration
+    deployment_policy: "gpu_only"  # "cpu_only", "gpu_only", or "dynamic"
     device_map: "cuda:0"  # "cpu", "auto", "cuda:0", "cuda:0,1,2,3"
 
     # WandB logging configuration for data generation

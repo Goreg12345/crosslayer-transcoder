@@ -27,9 +27,7 @@ class ProcessMonitor:
         """Update the current refresh rate for dashboard display."""
         self._last_refresh_rate = refresh_rate
 
-    def update_dashboard(
-        self, status: str, buffer_stats: Dict[str, Any], current_device: str
-    ) -> None:
+    def update_dashboard(self, status: str, buffer_stats: Dict[str, Any], current_device: str) -> None:
         """
         Update the CLI dashboard with current buffer stats.
         Extracted from existing _update_dashboard method.
@@ -65,7 +63,7 @@ class ProcessMonitor:
         # Get current device info
         if current_device == "disk":
             device_str = "DISK"
-        elif current_device == "cuda":
+        elif current_device.startswith("cuda"):
             device_str = "GPU"
         else:
             device_str = "CPU"
@@ -79,12 +77,11 @@ class ProcessMonitor:
             f"{status:>10}"
         )
 
-        # Use ANSI escape codes to clear line and move cursor to beginning
-        print(f"\033[2K\r{dashboard}", end="", flush=True)
+        # Use ANSI escape codes to move up one line, clear it, print dashboard, then move back down
+        # This allows tqdm to use the current line while we use the line above
+        print(f"\033[1A\033[2K\r{dashboard}\033[1B", end="", flush=True)
 
-    def log_refill_progress(
-        self, refilled_count: int, source: str, buffer_stats: Dict[str, Any]
-    ) -> None:
+    def log_refill_progress(self, refilled_count: int, source: str, buffer_stats: Dict[str, Any]) -> None:
         """Log progress for buffer refilling operations and update dashboard."""
         logger.info(f"Refilled {refilled_count} samples from {source}")
 
@@ -171,6 +168,21 @@ class WandBProcessMonitor(ProcessMonitor):
         # Initialize WandB
         self._init_wandb()
 
+    def _get_device_code(self, device: str) -> int:
+        """Get device code for WandB logging, handling specific GPU devices."""
+        device_lower = device.lower()
+
+        # Handle exact matches first
+        if device_lower in self._device_mapping:
+            return self._device_mapping[device_lower]
+
+        # Handle specific GPU devices like cuda:0, cuda:1, cuda:3, etc.
+        if device_lower.startswith("cuda"):
+            return self._device_mapping["cuda"]  # All CUDA devices map to code 1
+
+        # Unknown device
+        return -1
+
     def _init_wandb(self) -> None:
         """Initialize WandB run for data generation logging."""
         try:
@@ -198,9 +210,7 @@ class WandBProcessMonitor(ProcessMonitor):
             )
 
             self._wandb_available = True
-            logger.info(
-                f"WandB initialized for data generation: {self._wandb_run.name}"
-            )
+            logger.info(f"WandB initialized for data generation: {self._wandb_run.name}")
 
         except ImportError:
             logger.warning("WandB not available, skipping WandB logging")
@@ -219,9 +229,7 @@ class WandBProcessMonitor(ProcessMonitor):
         except Exception as e:
             logger.error(f"Failed to log to WandB: {e}")
 
-    def update_dashboard(
-        self, status: str, buffer_stats: Dict[str, Any], current_device: str
-    ) -> None:
+    def update_dashboard(self, status: str, buffer_stats: Dict[str, Any], current_device: str) -> None:
         """
         Update dashboard and log metrics to WandB.
         Extends parent method with WandB logging.
@@ -236,15 +244,13 @@ class WandBProcessMonitor(ProcessMonitor):
 
             # Convert categorical strings to integers to avoid WandB media type issues
             status_code = self._status_mapping.get(status.upper(), -1)
-            device_code = self._device_mapping.get(current_device.lower(), -1)
+            device_code = self._get_device_code(current_device)
 
             # Prepare metrics for WandB
             metrics = {
                 "data_generation/buffer_valid_samples": buffer_stats["valid_samples"],
                 "data_generation/buffer_total_samples": buffer_stats["buffer_size"],
-                "data_generation/buffer_fill_percentage": buffer_stats[
-                    "valid_percentage"
-                ],
+                "data_generation/buffer_fill_percentage": buffer_stats["valid_percentage"],
                 "data_generation/generation_rate_samples_per_sec": self._last_refresh_rate,
                 "data_generation/uptime_seconds": self.get_uptime(),
                 "data_generation/status_code": status_code,  # Integer instead of string
@@ -253,14 +259,12 @@ class WandBProcessMonitor(ProcessMonitor):
 
             self._log_to_wandb(metrics)
 
-    def log_refill_progress(
-        self, refilled_count: int, source: str, buffer_stats: Dict[str, Any]
-    ) -> None:
+    def log_refill_progress(self, refilled_count: int, source: str, buffer_stats: Dict[str, Any]) -> None:
         """Log refill progress to console and WandB."""
         super().log_refill_progress(refilled_count, source, buffer_stats)
 
         # Convert source to device code for consistent logging
-        source_code = self._device_mapping.get(source.lower(), -1)
+        source_code = self._get_device_code(source)
 
         # Log refill event to WandB
         metrics = {
@@ -275,8 +279,8 @@ class WandBProcessMonitor(ProcessMonitor):
         super().log_device_switch(from_device, to_device, reason)
 
         # Convert device names to codes for consistent logging
-        from_code = self._device_mapping.get(from_device.lower(), -1)
-        to_code = self._device_mapping.get(to_device.lower(), -1)
+        from_code = self._get_device_code(from_device)
+        to_code = self._get_device_code(to_device)
 
         # Log device switch event to WandB
         metrics = {
@@ -293,9 +297,7 @@ class WandBProcessMonitor(ProcessMonitor):
                 import wandb
 
                 wandb.log(
-                    {
-                        "data_generation/last_device_switch_reason": f"{from_device}->{to_device}: {reason}"
-                    },
+                    {"data_generation/last_device_switch_reason": f"{from_device}->{to_device}: {reason}"},
                     commit=False,
                 )
             except Exception as e:

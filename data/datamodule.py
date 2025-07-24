@@ -11,6 +11,7 @@ import lightning as L
 import torch
 
 from data.data_generator import DataGeneratorProcess
+from data.deployment_policy import DeploymentPolicy
 from data.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,8 @@ class ActivationDataModule(L.LightningDataModule):
         # Advanced settings
         use_shared_memory: bool = True,  # Use shared memory streaming by default
         device_map: str = "auto",
+        # Deployment policy
+        deployment_policy: str = "dynamic",  # CPU/GPU deployment policy: "cpu_only", "gpu_only", or "dynamic"
         # WandB logging configuration
         wandb_logging: Optional[dict] = None,
         **kwargs,
@@ -105,6 +108,7 @@ class ActivationDataModule(L.LightningDataModule):
             # Advanced settings
             use_shared_memory: Whether to use shared memory streaming
             device_map: Device map for model loading ("cpu", "auto", "cuda:0", "cuda:0,1,2,3")
+            deployment_policy: GPT-2 deployment policy ("cpu_only", "gpu_only", or "dynamic")
 
             # WandB logging configuration
             wandb_logging: WandB logging configuration
@@ -151,6 +155,7 @@ class ActivationDataModule(L.LightningDataModule):
 
         # Advanced settings
         self.use_shared_memory = use_shared_memory
+        self.deployment_policy = DeploymentPolicy.from_string(deployment_policy)
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -261,6 +266,7 @@ class ActivationDataModule(L.LightningDataModule):
             max_sequence_length=self.max_sequence_length,
             generation_batch_size=self.generation_batch_size,
             refresh_interval=self.refresh_interval,
+            deployment_policy=self.deployment_policy,
             init_file=self.init_file,
             device_map=self.device_map,
             wandb_logging=self.wandb_logging,

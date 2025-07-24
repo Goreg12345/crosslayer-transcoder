@@ -13,6 +13,14 @@ from data.data_generator import DataGeneratorProcess
 
 # Export main classes
 from data.datamodule import ActivationDataModule
+from data.deployment_policy import (
+    BaseDeploymentPolicy,
+    CPUOnlyPolicy,
+    DeploymentPolicy,
+    DynamicPolicy,
+    GPUOnlyPolicy,
+    create_deployment_policy,
+)
 from data.generation_loop import DataGenerationLoop
 from data.process_monitor import ProcessMonitor
 from data.shared_memory import SharedActivationBuffer
@@ -31,4 +39,10 @@ __all__ = [
     "DiskActivationSource",
     "DataGenerationLoop",
     "ProcessMonitor",
+    "DeploymentPolicy",
+    "BaseDeploymentPolicy",
+    "CPUOnlyPolicy",
+    "GPUOnlyPolicy",
+    "DynamicPolicy",
+    "create_deployment_policy",
 ]

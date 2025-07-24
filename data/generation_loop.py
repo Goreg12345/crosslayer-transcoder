@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 
 from data import text_dataset
 from data.activation_sources import ActivationComputer, DiskActivationSource
+from data.deployment_policy import BaseDeploymentPolicy, DeploymentPolicy, create_deployment_policy
 
 # DataLoaderConfig no longer needed - using individual parameters
 from data.process_monitor import ProcessMonitor
@@ -39,6 +40,8 @@ class DataGenerationLoop:
         generation_batch_size: int,
         max_sequence_length: int,
         monitor: ProcessMonitor,
+        deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
+        device_map: str = "auto",
         disk_source: Optional[DiskActivationSource] = None,
     ):
         self.shared_buffer = shared_buffer
@@ -51,13 +54,17 @@ class DataGenerationLoop:
         self.refresh_interval = refresh_interval
         self.generation_batch_size = generation_batch_size
         self.max_sequence_length = max_sequence_length
-        self.cpu_model = None
-        self.gpu_model = None
         self.text_dataset_loader = None
         self.activation_computer = None
         self.monitor = monitor
         self.monitor.log_generation_start()
         self.disk_source = disk_source
+
+        # Create deployment policy instance
+        self.deployment_policy = create_deployment_policy(deployment_policy, device_map)
+
+        # Store model setup parameters for later use
+        self.model_setup_params = {}
 
         # Runtime state
         self.running = True
@@ -67,22 +74,49 @@ class DataGenerationLoop:
         """Set the dataset reference for text data loading."""
         self.dataset = dataset
 
+    def _setup_text_dataset_loader(self) -> None:
+        """Create text dataset loader using the tokenizer from current model."""
+        if self.dataset is None:
+            raise RuntimeError("Dataset must be set before setting up text dataset loader")
+
+        # Get tokenizer from current model (any model will do since tokenizer is the same)
+        current_model = self.deployment_policy.get_current_model()
+        if current_model is None:
+            raise RuntimeError("Models must be set up before creating text dataset loader")
+
+        logger.info("Creating text dataset loader...")
+        token_dataset = text_dataset.TextDataset(
+            self.dataset,
+            current_model.tokenizer,
+            self.generation_batch_size,
+            drop_last_batch=False,
+            seq_len=self.max_sequence_length - 1,  # -1 for BOS token
+        )
+
+        text_dataset_loader = DataLoader(
+            token_dataset,
+            batch_size=None,
+            shuffle=False,
+            num_workers=8,  # Optimal for performance
+            prefetch_factor=4,  # Optimal for performance
+            worker_init_fn=text_dataset.worker_init_fn,
+        )
+        self.text_dataset_loader = iter(text_dataset_loader)
+
     def generation_loop(
         self,
-        cpu_model: Any,
-        gpu_model: Any,
-        text_dataset_loader: Any,
+        model_name: str,
+        model_dtype: torch.dtype,
         activation_computer: ActivationComputer,
     ):
-        """Main generation loop - extracted from existing code."""
-        self.cpu_model = cpu_model
-        self.gpu_model = gpu_model
-        self.text_dataset_loader = text_dataset_loader
-        self.activation_computer = activation_computer
+        """Main generation loop - models are now managed by deployment policy."""
+        # Setup models through deployment policy
+        self.deployment_policy.setup_models(model_name, model_dtype, **self.model_setup_params)
 
-        # Current model and device state
-        self.current_model = self.cpu_model  # Start with CPU
-        self.current_device = "cpu"
+        # Create text dataset loader now that we have models and can access tokenizer
+        self._setup_text_dataset_loader()
+
+        self.activation_computer = activation_computer
 
         last_time = time.time()
 
@@ -93,7 +127,7 @@ class DataGenerationLoop:
             if len(indices_to_refresh) == 0:
                 # Update dashboard when sleeping
                 stats = self.shared_buffer.get_stats()
-                self.monitor.update_dashboard("SLEEPING", stats, self.current_device)
+                self.monitor.update_dashboard("SLEEPING", stats, self.deployment_policy.get_current_device())
                 time.sleep(self.refresh_interval)
                 continue
 
@@ -122,17 +156,20 @@ class DataGenerationLoop:
 
             # Update dashboard
             stats = self.shared_buffer.get_stats()
-            self.monitor.update_dashboard("GENERATING", stats, self.current_device)
+            self.monitor.update_dashboard("GENERATING", stats, self.deployment_policy.get_current_device())
 
     def _generate_activations(self) -> torch.Tensor:
         """
         Generate activation data by processing text through the model.
-        Extracted from existing generate_activations method.
+        Uses deployment policy for device and model management.
 
         Returns:
             Tensor of activations [batch*seq_len, in/out, n_layers, d_model]
         """
-        self._select_device()
+        # Let deployment policy select device based on buffer state
+        stats = self.shared_buffer.get_stats()
+        current_device = self.deployment_policy.select_device(stats)
+        current_model = self.deployment_policy.get_current_model()
 
         try:
             batch, mask = next(self.text_dataset_loader)
@@ -141,7 +178,7 @@ class DataGenerationLoop:
             self.monitor.log_dataset_exhausted()
             token_dataset = text_dataset.TextDataset(
                 self.dataset,
-                self.cpu_model.tokenizer,  # Use CPU model tokenizer (consistent)
+                current_model.tokenizer,  # Use current model tokenizer
                 self.generation_batch_size,
                 drop_last_batch=False,
                 seq_len=self.max_sequence_length - 1,
@@ -158,49 +195,18 @@ class DataGenerationLoop:
             )
             batch, mask = next(self.text_dataset_loader)
 
-        # Move to current device (adaptive CPU/GPU)
-        batch = batch.to(self.current_device)
-        mask = mask.to(self.current_device)
+        # Move to current device
+        batch = batch.to(current_device)
+        mask = mask.to(current_device)
 
         # Prepend BOS token (like in benchmark)
         batch = torch.roll(batch, shifts=1, dims=1)
-        batch[:, 0] = self.current_model.config.bos_token_id
+        batch[:, 0] = current_model.config.bos_token_id
 
         # Extract activations using the activation computer
-        mlp_acts = self.activation_computer.get_next_batch(self.current_model, batch, mask)
+        mlp_acts = self.activation_computer.get_next_batch(current_model, batch, mask)
 
         return mlp_acts
-
-    def _should_move_to_gpu(self, valid_percentage: float) -> bool:
-        """Check if model should be moved to GPU based on buffer fill level."""
-        return valid_percentage < 50.0 and self.current_device == "cpu"
-
-    def _should_move_to_cpu(self, valid_percentage: float) -> bool:
-        """Check if model should be moved to CPU based on buffer fill level."""
-        return valid_percentage > 80.0 and self.current_device == "cuda"
-
-    def _move_model_to_device(self, target_device: str) -> None:
-        """Switch between pre-loaded CPU and GPU models."""
-        if target_device == "cuda":
-            self.current_model = self.gpu_model
-            self.current_device = "cuda"
-        else:
-            self.current_model = self.cpu_model
-            self.current_device = "cpu"
-
-        # Clear GPU cache to clean up activation residue
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    def _select_device(self) -> None:
-        """Select optimal device based on buffer fill level."""
-        stats = self.shared_buffer.get_stats()
-        valid_percentage = stats["valid_percentage"]
-
-        if self._should_move_to_gpu(valid_percentage):
-            self._move_model_to_device("cuda")
-        elif self._should_move_to_cpu(valid_percentage):
-            self._move_model_to_device("cpu")
 
     def refill_from_disk(self, batch_size: int = 40_000):
         """

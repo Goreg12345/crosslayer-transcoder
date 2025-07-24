@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 
 from data import text_dataset
 from data.activation_sources import ActivationComputer, DiskActivationSource
+from data.deployment_policy import DeploymentPolicy
 
 # DataLoaderConfig no longer needed - using individual parameters
 from data.generation_loop import DataGenerationLoop
@@ -46,13 +47,12 @@ class DataGeneratorProcess(mp.Process):
         max_sequence_length: int,
         generation_batch_size: int,
         refresh_interval: float,
+        deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         init_file: Optional[str] = None,
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
     ):
-        super().__init__(
-            daemon=False
-        )  # Can't be daemon if we want to use DataLoader workers
+        super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
 
         # Store parameters directly instead of config object
@@ -69,6 +69,7 @@ class DataGeneratorProcess(mp.Process):
         self.max_sequence_length = max_sequence_length
         self.generation_batch_size = generation_batch_size
         self.refresh_interval = refresh_interval
+        self.deployment_policy = deployment_policy
         self.init_file = init_file
         self.device_map = device_map
 
@@ -148,6 +149,8 @@ class DataGeneratorProcess(mp.Process):
             max_batch_size=self.max_batch_size,
             refresh_interval=self.refresh_interval,
             monitor=self.monitor,
+            deployment_policy=self.deployment_policy,
+            device_map=self.device_map,
             disk_source=self.disk_source,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
@@ -155,57 +158,19 @@ class DataGeneratorProcess(mp.Process):
 
         self.generation_loop.refill_from_disk()
 
-        logger.info(f"Loading CPU model: {self.model_name}")
-        cpu_model = nnsight.LanguageModel(
-            self.model_name,
-            device_map="cpu",
-            dispatch=True,
-            torch_dtype=self.model_dtype,
-        )
-        cpu_model.requires_grad_(False)
-
-        logger.info(f"Loading GPU model: {self.model_name}")
-        gpu_model = nnsight.LanguageModel(
-            self.model_name,
-            device_map=self.device_map,
-            dispatch=True,
-            torch_dtype=self.model_dtype,
-        )
-        gpu_model.requires_grad_(False)
-
         # 2. Load dataset in the process
         logger.info(f"Loading dataset: {self.dataset_name}")
         dataset = load_dataset(self.dataset_name, split=self.dataset_split)
 
-        # 3. Create text dataset with tokenization
-        logger.info("Creating text dataset loader...")
-        token_dataset = text_dataset.TextDataset(
-            dataset,
-            cpu_model.tokenizer,
-            self.generation_batch_size,
-            drop_last_batch=False,
-            seq_len=self.max_sequence_length - 1,  # -1 for BOS token
-        )
-
-        text_dataset_loader = DataLoader(
-            token_dataset,
-            batch_size=None,
-            shuffle=False,
-            num_workers=0,  # Reduced from 8 - fewer workers = faster startup
-            # prefetch_factor=2,  # Reduced prefetch factor
-            # worker_init_fn=text_dataset.worker_init_fn,
-        )
-        text_dataset_loader = iter(text_dataset_loader)
-
-        # 4. Create components
+        # 3. Create components
         activation_computer = ActivationComputer(self.n_layers)
 
-        # Set dataset reference for the loop
+        # Set dataset reference for the loop and start generation
+        # Text dataset creation is now handled in generation_loop after models are set up
         self.generation_loop.set_dataset(dataset)
         self.generation_loop.generation_loop(
-            cpu_model=cpu_model,
-            gpu_model=gpu_model,
-            text_dataset_loader=text_dataset_loader,
+            model_name=self.model_name,
+            model_dtype=self.model_dtype,
             activation_computer=activation_computer,
         )
 
