@@ -34,7 +34,8 @@ class _JumpReLUFunction(torch.autograd.Function):
 class JumpReLU(torch.nn.Module):
     def __init__(self, theta=0.0, bandwidth=1.0, n_layers=12, d_features=768 * 8):
         super().__init__()
-        self.theta = nn.Parameter(torch.full((1, n_layers, d_features), theta))
+        shape = (1, n_layers, d_features) if n_layers > 1 else (1, d_features)
+        self.theta = nn.Parameter(torch.full(shape, theta))
         self.register_buffer("bandwidth", torch.tensor(bandwidth))
 
     def forward(self, input):

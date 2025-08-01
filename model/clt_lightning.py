@@ -2,7 +2,7 @@ import gc
 import os
 import subprocess
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import lightning as L
 import psutil
@@ -16,180 +16,15 @@ from metrics.dead_features import DeadFeatures
 from metrics.replacement_model_accuracy import ReplacementModelAccuracy
 from model.clt import CrosslayerDecoder, CrossLayerTranscoder, Decoder
 from model.jumprelu import JumpReLU
+from model.molt import Molt
 from model.topk import BatchTopK
-
-
-def find_gpu_tensors_with_module_context():
-    """Find GPU tensors with module context and names"""
-    tensors = []
-    total_memory = 0
-
-    # Build comprehensive tensor mapping
-    tensor_name_map = {}
-    module_map = {}
-
-    # Get all loaded modules
-    for obj in gc.get_objects():
-        if isinstance(obj, torch.nn.Module):
-            module_name = obj.__class__.__name__
-
-            # Get parameter names with module context
-            for name, param in obj.named_parameters():
-                if param.is_cuda:
-                    tensor_name_map[id(param)] = f"{module_name}.{name}"
-                    module_map[id(param)] = obj
-
-            # Get buffer names with module context
-            for name, buffer in obj.named_buffers():
-                if buffer.is_cuda:
-                    tensor_name_map[id(buffer)] = f"{module_name}.{name}"
-                    module_map[id(buffer)] = obj
-
-    # Find all GPU tensors
-    for obj in gc.get_objects():
-        if isinstance(obj, torch.Tensor) and obj.is_cuda:
-            size = obj.element_size() * obj.numel()
-            tensor_id = id(obj)
-
-            # Determine tensor name and category
-            if tensor_id in tensor_name_map:
-                tensor_name = tensor_name_map[tensor_id]
-                category = "model"
-            elif hasattr(obj, "grad_fn") and obj.grad_fn is not None:
-                tensor_name = f"intermediate:{obj.grad_fn.__class__.__name__}"
-                category = "computation"
-            elif obj.requires_grad:
-                tensor_name = "gradient"
-                category = "gradient"
-            else:
-                tensor_name = "temporary"
-                category = "temporary"
-
-            tensors.append(
-                {
-                    "name": tensor_name,
-                    "category": category,
-                    "shape": tuple(obj.shape),
-                    "dtype": obj.dtype,
-                    "size_mb": size / (1024**2),
-                    "device": obj.device,
-                    "requires_grad": obj.requires_grad,
-                    "tensor": obj,
-                }
-            )
-            total_memory += size
-
-    # Sort by memory usage (largest first)
-    tensors.sort(key=lambda x: x["size_mb"], reverse=True)
-
-    print(f"Total GPU tensors: {len(tensors)}")
-    print(f"Total memory: {total_memory / (1024**2):.2f} MB")
-
-    # Group by category
-    categories = {}
-    for tensor in tensors:
-        cat = tensor["category"]
-        if cat not in categories:
-            categories[cat] = []
-        categories[cat].append(tensor)
-
-    print("\nBy Category:")
-    for cat, tensor_list in categories.items():
-        total_cat_memory = sum(t["size_mb"] for t in tensor_list)
-        print(f"  {cat}: {len(tensor_list)} tensors, {total_cat_memory:.2f} MB")
-
-    print("\nTop 1000 largest tensors:")
-    for i, tensor_info in enumerate(tensors[:1000]):
-        print(
-            f"{i+1}. [{tensor_info['category']}] {tensor_info['name']}, "
-            f"Shape: {tensor_info['shape']}, "
-            f"Size: {tensor_info['size_mb']:.2f} MB"
-        )
-
-    return tensors
-
-
-def comprehensive_memory_debug():
-    """Get complete GPU memory picture for the correct device"""
-    print("=== GPU Memory Debug ===")
-
-    # Get current device
-    current_device = torch.cuda.current_device()
-    print(f"Current CUDA device: {current_device}")
-
-    # PyTorch's view for current device
-    allocated = torch.cuda.memory_allocated(current_device) / 1024**3
-    reserved = torch.cuda.memory_reserved(current_device) / 1024**3
-    cached = reserved - allocated
-
-    print(f"PyTorch Allocated (cuda:{current_device}): {allocated:.2f} GB")
-    print(f"PyTorch Reserved (cuda:{current_device}): {reserved:.2f} GB")
-    print(f"PyTorch Cached (cuda:{current_device}): {cached:.2f} GB")
-
-    # Check ALL GPUs with nvidia-smi
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,memory.used,memory.total",
-                "--format=csv,nounits,noheader",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            print(f"\nAll GPU memory usage:")
-            for line in result.stdout.strip().split("\n"):
-                if line.strip():
-                    parts = line.split(", ")
-                    if len(parts) >= 3:
-                        gpu_id, used_mb, total_mb = (
-                            parts[0],
-                            int(parts[1]),
-                            int(parts[2]),
-                        )
-                        highlight = f" *** PyTorch is here ***" if int(gpu_id) == current_device else ""
-                        print(
-                            f"  GPU {gpu_id}: {used_mb / 1024:.2f} GB / {total_mb / 1024:.2f} GB{highlight}"
-                        )
-    except Exception as e:
-        print(f"nvidia-smi error: {e}")
-
-    # Check processes on ALL GPUs
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory",
-                "--format=csv,nounits,noheader",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            print(f"\nAll GPU processes:")
-            for line in result.stdout.strip().split("\n"):
-                if line.strip():
-                    parts = line.split(", ")
-                    if len(parts) >= 4:
-                        gpu_uuid, pid, name, memory = (
-                            parts[0],
-                            parts[1],
-                            parts[2],
-                            parts[3],
-                        )
-                        current_pid = os.getpid()
-                        highlight = "*** THIS PROCESS ***" if int(pid) == current_pid else ""
-                        print(f"  GPU {gpu_uuid[:8]}...: PID {pid} ({name}) using {memory} MB {highlight}")
-    except Exception as e:
-        print(f"Error checking GPU processes: {e}")
 
 
 class CrossLayerTranscoderModule(L.LightningModule):
     def __init__(
         self,
         # Pre-constructed modules
-        model: CrossLayerTranscoder,
+        model: Union[CrossLayerTranscoder, Molt],
         replacement_model: Optional[ReplacementModelAccuracy] = None,
         dead_features: Optional[DeadFeatures] = None,
         # Training parameters
@@ -242,14 +77,17 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.beta2 = beta2
         self.log_metrics_every = log_metrics_every
 
-        assert (
-            self.model.encoder.n_layers == self.model.decoder.n_layers
-        ), "Encoder and decoder must have the same number of layers"
+        if isinstance(self.model, Molt):
+            self.register_buffer("last_active", torch.zeros((self.model.n_features,), dtype=torch.long))
+        else:
+            assert (
+                self.model.encoder.n_layers == self.model.decoder.n_layers
+            ), "Encoder and decoder must have the same number of layers"
 
-        self.register_buffer(
-            "last_active",
-            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.long),
-        )
+            self.register_buffer(
+                "last_active",
+                torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.long),
+            )
 
     def configure_model(self):
         # Apply compilation if requested
@@ -663,4 +501,76 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
 
             torch.cuda.memory._record_memory_history(enabled=None)
             exit()
+        return loss
+
+
+class MoltModule(CrossLayerTranscoderModule):
+    def __init__(
+        self,
+        lambda_sparsity: float = 0.0002,
+        c_sparsity: float = 0.1,
+        use_tanh: bool = True,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._lambda = lambda_sparsity
+        self.c = c_sparsity
+        self.use_tanh = use_tanh
+
+    def current_sparsity_penalty(self):
+        n_steps = self.trainer.max_steps
+        current_step = (
+            self.global_step
+        )  # use global step instead of batch idx to work with gradient accumulation
+        cur_lambda = self._lambda * (current_step / n_steps)
+        self.log("training/sparsity_penalty", cur_lambda)
+        return cur_lambda
+
+    def forward(self, batch, layer):
+        return self.model.forward(batch, layer)
+
+    def training_step(self, batch, batch_idx):
+        # torch.cuda.empty_cache()
+        # gc.collect()
+        # batch = torch.stack([batch[:, 0], batch[:, 0]], dim=1)  # TODO: remove this
+        # Initialize standardizers
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
+            self.log("model/d_latents", self.model.d_latents)
+            self.log("model/n_features", self.model.n_features)
+
+        layer = 8
+
+        # Forward pass
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        resid = resid[:, layer]
+        mlp_out = mlp_out[:, layer]
+        gate, recons_norm, recons = self.model.forward(resid, layer)
+
+        self.update_dead_features(gate)
+        # Compute MSE loss
+        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out, layer)) ** 2
+
+        # Compute Sparsity Loss
+        # with torch.no_grad():
+        norms = self.model.transform_norm()
+        weighted_norms = norms * gate
+        self.log("model/weighted_norms_mean", weighted_norms.detach().mean().cpu())
+
+        if self.use_tanh:
+            weighted_norms = torch.tanh(weighted_norms * self.c)  # (batch_size, n_layers, d_features)
+        sparsity = self.current_sparsity_penalty() * weighted_norms.sum(dim=-1).mean()
+        self.log("training/sparsity_loss", sparsity)
+        self.log("L0", (gate > 0.0).float().sum() / gate.shape[0])
+
+        loss = mse.mean() + sparsity
+        self.log("training/mse", mse.mean())
+        self.log("training/loss", loss)
+
+        # Log training metrics
+        if batch_idx % self.log_metrics_every == 0:
+            # self.log_training_metrics(gate, recons_norm, recons, mlp_out, batch_idx)
+            pass
+
         return loss

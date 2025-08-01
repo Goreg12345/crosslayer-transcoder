@@ -40,6 +40,24 @@
             "stopOnEntry": false
         },
         {
+            "name": "Debug Molt",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "cli.py",
+            "args": [
+                "fit",
+                "--config",
+                "config/molt.yaml"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
             "name": "TRAIN",
             "type": "python",
             "request": "launch",

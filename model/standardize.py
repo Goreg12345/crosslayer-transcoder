@@ -7,19 +7,13 @@ class Standardizer(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
 
-    def initialize_from_batch(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
-    ):
+    def initialize_from_batch(self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]):
         pass
 
-    def forward(
-        self, batch: Float[torch.Tensor, "batch_size n_layers actv_dim"], layer="all"
-    ):
+    def forward(self, batch: Float[torch.Tensor, "batch_size n_layers actv_dim"], layer="all"):
         return batch
 
-    def standardize(
-        self, batch: Float[torch.Tensor, "batch_size n_layers actv_dim"], layer="all"
-    ):
+    def standardize(self, batch: Float[torch.Tensor, "batch_size n_layers actv_dim"], layer="all"):
         return batch
 
 
@@ -31,9 +25,7 @@ class DimensionwiseInputStandardizer(Standardizer):
         self.is_initialized = False
 
     @torch.no_grad()
-    def initialize_from_batch(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
-    ):
+    def initialize_from_batch(self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]):
         batch = batch[:, 0]
         self.mean.data = batch.mean(dim=0)
         self.std.data = batch.std(dim=0)
@@ -60,9 +52,7 @@ class DimensionwiseOutputStandardizer(Standardizer):
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
 
-    def initialize_from_batch(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
-    ):
+    def initialize_from_batch(self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]):
         self.mean.data = batch[:, 1].mean(dim=0)
         self.std.data = batch[:, 1].std(dim=0)
         self.std.data.clamp_(min=1e-8)
@@ -96,9 +86,7 @@ class SamplewiseInputStandardizer(Standardizer):
         super().__init__()
 
     @torch.no_grad()
-    def initialize_from_batch(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
-    ):
+    def initialize_from_batch(self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]):
         pass
 
     def forward(
@@ -121,9 +109,7 @@ class LayerwiseInputStandardizer(Standardizer):
         self.is_initialized = False
 
     @torch.no_grad()
-    def initialize_from_batch(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
-    ):
+    def initialize_from_batch(self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]):
         batch = batch[:, 0]
         # exclude the n_exclude largest and smallest values
         topk = batch.topk(self.n_exclude, dim=-1, sorted=False)
@@ -157,9 +143,7 @@ class LayerwiseOutputStandardizer(Standardizer):
         self.n_exclude = n_exclude
         self.is_initialized = False
 
-    def initialize_from_batch(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
-    ):
+    def initialize_from_batch(self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]):
         batch = batch[:, 1]
         # exclude the n_exclude largest and smallest values
         topk = batch.topk(self.n_exclude, dim=-1, sorted=False)
@@ -192,6 +176,4 @@ class LayerwiseOutputStandardizer(Standardizer):
         if layer == "all":
             return (mlp_out - self.mean[None, :, None]) / self.std[None, :, None]
         else:
-            return (mlp_out - self.mean[None, layer, None]) / self.std[
-                None, layer, None
-            ]
+            return (mlp_out - self.mean[None, layer, None]) / self.std[None, layer, None]
