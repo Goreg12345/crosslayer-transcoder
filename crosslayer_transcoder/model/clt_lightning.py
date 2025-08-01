@@ -2,7 +2,7 @@ import gc
 import os
 import subprocess
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import lightning as L
 import psutil
@@ -23,6 +23,7 @@ from crosslayer_transcoder.model.clt import (
     Decoder,
 )
 from crosslayer_transcoder.model.jumprelu import JumpReLU
+from crosslayer_transcoder.model.molt import Molt
 from crosslayer_transcoder.model.topk import BatchTopK
 
 
@@ -30,7 +31,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
     def __init__(
         self,
         # Pre-constructed modules
-        model: CrossLayerTranscoder,
+        model: Union[CrossLayerTranscoder, Molt],
         replacement_model: Optional[ReplacementModelAccuracy] = None,
         dead_features: Optional[DeadFeatures] = None,
         # Training parameters
@@ -85,17 +86,23 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.beta2 = beta2
         self.log_metrics_every = log_metrics_every
 
-        assert self.model.encoder.n_layers == self.model.decoder.n_layers, (
-            "Encoder and decoder must have the same number of layers"
-        )
+        if isinstance(self.model, Molt):
+            self.register_buffer(
+                "last_active",
+                torch.zeros((self.model.n_features,), dtype=torch.long),
+            )
+        else:
+            assert self.model.encoder.n_layers == self.model.decoder.n_layers, (
+                "Encoder and decoder must have the same number of layers"
+            )
 
-        self.register_buffer(
-            "last_active",
-            torch.zeros(
-                (self.model.encoder.n_layers, self.model.encoder.d_features),
-                dtype=torch.long,
-            ),
-        )
+            self.register_buffer(
+                "last_active",
+                torch.zeros(
+                    (self.model.encoder.n_layers, self.model.encoder.d_features),
+                    dtype=torch.long,
+                ),
+            )
 
     def configure_model(self):
         # Apply compilation if requested
@@ -564,4 +571,69 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
 
             torch.cuda.memory._record_memory_history(enabled=None)
             exit()
+        return loss
+
+
+class MoltModule(CrossLayerTranscoderModule):
+    def __init__(
+        self,
+        lambda_sparsity: float = 0.0002,
+        c_sparsity: float = 0.1,
+        use_tanh: bool = True,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._lambda = lambda_sparsity
+        self.c = c_sparsity
+        self.use_tanh = use_tanh
+
+    def current_sparsity_penalty(self):
+        n_steps = self.trainer.max_steps
+        current_step = (
+            self.global_step
+        )  # use global step instead of batch idx to work with gradient accumulation
+        cur_lambda = self._lambda * (current_step / n_steps)
+        self.log("training/sparsity_penalty", cur_lambda)
+        return cur_lambda
+
+    def forward(self, batch, layer):
+        return self.model.forward(batch, layer)
+
+    def training_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
+            self.log("model/d_latents", self.model.d_latents)
+            self.log("model/n_features", self.model.n_features)
+
+        layer = 8
+
+        # Forward pass
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        resid = resid[:, layer]
+        mlp_out = mlp_out[:, layer]
+        gate, recons_norm, recons = self.model.forward(resid, layer)
+
+        self.update_dead_features(gate)
+        # Compute MSE loss
+        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out, layer)) ** 2
+
+        # Compute Sparsity Loss
+        norms = self.model.transform_norm()
+        weighted_norms = norms * gate
+        self.log("model/weighted_norms_mean", weighted_norms.detach().mean().cpu())
+
+        if self.use_tanh:
+            weighted_norms = torch.tanh(weighted_norms * self.c)
+        sparsity = self.current_sparsity_penalty() * weighted_norms.sum(dim=-1).mean()
+        self.log("training/sparsity_loss", sparsity)
+        self.log("L0", (gate > 0.0).float().sum() / gate.shape[0])
+
+        loss = mse.mean() + sparsity
+        self.log("training/mse", mse.mean())
+        self.log("training/loss", loss)
+
+        if batch_idx % self.log_metrics_every == 0:
+            pass
+
         return loss
