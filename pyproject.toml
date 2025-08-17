@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "crosslayer-transcoder"
 version = "0.1.0"
@@ -8,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
-    "torch>=2.7.1",
+    "torch>=2.8.0",
     "nnsight==0.5.0.dev7",
     "datasets>=3.6.0",
     "h5py>=3.13.0",
@@ -16,11 +20,7 @@ dependencies = [
     "jaxtyping>=0.3.2",
     "lightning>=2.5.1",
     "wandb>=0.19.11",
-    "seaborn>=0.13.2",
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
     "transformers>=4.46.0",
-    "requests>=2.32.0",
     "numpy>=1.24.0",
     "jsonargparse[signatures]>=4.27.7",
 ]
@@ -29,8 +29,11 @@ dependencies = [
 dev = [
     "jupyterlab>=4.4.2",
     "ipykernel>=6.29.5",
+    "pytest>=8.4.1",
 ]
 
+[project.scripts]
+clt = "crosslayer_transcoder.main:main"
 
 [tool.uv]
 dev-dependencies = [

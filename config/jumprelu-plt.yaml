@@ -39,7 +39,7 @@ model:
             n_layers: 12
 
         decoder:
-          class_path: crosslayer_transcoder.model.clt.CrosslayerDecoder
+          class_path: crosslayer_transcoder.model.clt.Decoder
           init_args:
             d_acts: 768
             d_features: 10_000

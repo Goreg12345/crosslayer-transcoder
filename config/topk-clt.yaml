@@ -1,24 +1,24 @@
-# Default configuration for CrossLayer Transcoder training
-# This file uses Lightning CLI's automatic class construction
+# Configuration for TopK CrossLayer Transcoder training with auxiliary loss
+# This file uses Lightning CLI's automatic class construction for TopK-based CLTs
 
 seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates. If using gradient accumulation, this is not the number of batches.
-  max_steps: 100_000 
+  max_steps: 100_000  # 20M tokens
   val_check_interval: 1_000
   limit_val_batches: 1
   enable_checkpointing: false  # We use custom end-of-training checkpoint
   num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
   precision: "16-mixed"
   accelerator: "gpu"
-  devices: [0]  # [0] means cuda:0
+  devices: [1]  # [1] for cuda:1
   accumulate_grad_batches: 1
   logger:  # WandB logger is recommended but other loggers are supported as well
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "clt"
-      name: "jumprelu"
+      name: "topk-aux"
       save_dir: "./wandb"
   callbacks:
     - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
@@ -26,7 +26,7 @@ trainer:
         checkpoint_dir: "checkpoints"
 
 model:
-  class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
+  class_path: crosslayer_transcoder.model.clt_lightning.TopKCrossLayerTranscoderModule
   init_args:
     model:
       class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
@@ -35,23 +35,20 @@ model:
           class_path: crosslayer_transcoder.model.clt.Encoder
           init_args:
             d_acts: 768
-            d_features: 10_000
+            d_features: 20_000  # 768 * 26 (larger feature dictionary for TopK)
             n_layers: 12
 
         decoder:
           class_path: crosslayer_transcoder.model.clt.CrosslayerDecoder
           init_args:
             d_acts: 768
-            d_features: 10_000
+            d_features: 20_000  # 768 * 26 (larger feature dictionary for TopK)
             n_layers: 12
         
         nonlinearity:
-          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          class_path: crosslayer_transcoder.model.topk.PerLayerTopK
           init_args:
-            theta: 0.03
-            bandwidth: 0.01
-            n_layers: 12
-            d_features: 10_000
+            k: 16  # Number of top features to keep per layer
         
         input_standardizer:
           class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
@@ -70,31 +67,33 @@ model:
       class_path: crosslayer_transcoder.metrics.replacement_model_accuracy.ReplacementModelAccuracy
       init_args:
         model_name: "openai-community/gpt2"
-        device_map: "cuda:0"  # should match trainer.devices
+        device_map: "cuda:1"  # should match trainer.devices
         loader_batch_size: 2
     
     # Pre-constructed dead features metric
     dead_features:
       class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 10_000
+        n_features: 20_000
         n_layers: 12
         return_per_layer: true
         return_log_freqs: true
         return_neuron_indices: true
     
-
     # Training parameters
     learning_rate: 1e-4
     compile: true  # if using torch.compile
     lr_decay_step: 80_000  # lr is scaled by lr_decay_factor after this many steps
     lr_decay_factor: 0.1
 
-    lambda_sparsity: 0.0007  # sparsity loss weight
-    c_sparsity: 1  # sparsity loss coefficient
-    use_tanh: true  # use tanh nonlinearity in the JumpReLU
-    pre_actv_loss: 1e-6  # pre-activation loss weight
-
+    # TopK auxiliary loss configuration
+    topk_aux:
+      class_path: crosslayer_transcoder.model.topk.PerLayerTopK
+      init_args:
+        k: 512  # Number of top features to keep per layer for auxiliary loss
+    tokens_till_dead: 500_000  # Tokens to process before computing dead features
+    aux_loss_scale: 0.03125  # Scaling factor for auxiliary loss
+    
     # Dead features computation settings
     compute_dead_features: true
     compute_dead_features_every: 500
@@ -103,7 +102,7 @@ data:
   class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
-    buffer_size: 1_000_000  # number of activations to store in the buffer
+    buffer_size: 3_000_000  # number of activations to store in the buffer
     n_in_out: 2  # number of input and output layers
     n_layers: 12  # number of layers in the model
     activation_dim: 768  # dimension of the activations
@@ -132,7 +131,7 @@ data:
     # if null, activations are generated and training starts when the buffer is at least minimum_fill_threshold full
     
     # DataLoader settings
-    batch_size: 1000
+    batch_size: 2000
     num_workers: 10
     prefetch_factor: 2
     shuffle: true
@@ -154,7 +153,7 @@ data:
       enabled: true                           # Enable WandB logging for data generation
       project: "clt"        # WandB project (should match trainer logger)
       group: null                             # Group name (null = auto-generated from training run)
-      run_name: "data-generator-jumprelu"              # Run name suffix
+      run_name: "data-generator-topk-aux"              # Run name suffix
       tags: ["data-generation"]               # Tags for the data generation run
       save_dir: "./wandb"                     # Directory for WandB files
       log_interval: 5.0                       # Logging interval in seconds
