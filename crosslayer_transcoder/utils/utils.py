@@ -6,7 +6,9 @@ import crosslayer_transcoder.data.text_dataset as text_dataset
 
 
 def get_webtext_dataloader(model, batch_size=40):
-    dataset = datasets.load_dataset("Skylion007/openwebtext", split="train")
+    dataset = datasets.load_dataset(
+        "Skylion007/openwebtext", split="train", trust_remote_code=True
+    )
     token_dataset = text_dataset.TextDataset(
         dataset,
         model.tokenizer,
@@ -30,7 +32,9 @@ def get_webtext_dataloader(model, batch_size=40):
 def plot_actvs(actvs):
     if type(actvs) == list:
         # actvs: list(n_layers), every entry tensor batch_size x seq_len x d_acts
-        actvs = torch.stack([actv[0, 50, 300:500] for actv in actvs])  # n_layers x d_acts
+        actvs = torch.stack(
+            [actv[0, 50, 300:500] for actv in actvs]
+        )  # n_layers x d_acts
     else:  # batch_size x n_layers x d_acts
         actvs = actvs[0, :, 300:500]  # n_layers x d_acts
     actvs = actvs.cpu().numpy()
