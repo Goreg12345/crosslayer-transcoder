@@ -14,12 +14,18 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader
 
 from crosslayer_transcoder.data import text_dataset
-from crosslayer_transcoder.data.activation_sources import ActivationComputer, DiskActivationSource
+from crosslayer_transcoder.data.activation_sources import (
+    ActivationComputer,
+    DiskActivationSource,
+)
 from crosslayer_transcoder.data.deployment_policy import DeploymentPolicy
 
 # DataLoaderConfig no longer needed - using individual parameters
 from crosslayer_transcoder.data.generation_loop import DataGenerationLoop
-from crosslayer_transcoder.data.process_monitor import ProcessMonitor, WandBProcessMonitor
+from crosslayer_transcoder.data.process_monitor import (
+    ProcessMonitor,
+    WandBProcessMonitor,
+)
 from crosslayer_transcoder.data.shared_memory import SharedActivationBuffer
 
 logger = logging.getLogger(__name__)
@@ -52,7 +58,9 @@ class DataGeneratorProcess(mp.Process):
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
     ):
-        super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
+        super().__init__(
+            daemon=False
+        )  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
 
         # Store parameters directly instead of config object
@@ -160,7 +168,11 @@ class DataGeneratorProcess(mp.Process):
 
         # 2. Load dataset in the process
         logger.info(f"Loading dataset: {self.dataset_name}")
-        dataset = load_dataset(self.dataset_name, split=self.dataset_split)
+        dataset = load_dataset(
+            self.dataset_name,
+            split=self.dataset_split,
+            trust_remote_code=True,
+        )
 
         # 3. Create components
         activation_computer = ActivationComputer(self.n_layers)
