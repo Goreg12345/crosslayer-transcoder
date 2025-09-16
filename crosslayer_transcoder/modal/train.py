@@ -8,37 +8,43 @@ import modal
 import torch as t
 
 volume = modal.Volume.from_name("clt-checkpoints", create_if_missing=True)
+cache_volume = modal.Volume.from_name("cache", create_if_missing=True)
 
-image = modal.Image.debian_slim(python_version="3.12").pip_install(
-    "torch>=2.8.0",
-    "nnsight==0.5.0.dev7",
-    "datasets==3.6.0",
-    "h5py>=3.13.0",
-    "einops>=0.8.1",
-    "jaxtyping>=0.3.2",
-    "lightning>=2.5.1",
-    "wandb>=0.19.11",
-    "transformers>=4.46.0",
-    "numpy>=1.24.0",
-    "jsonargparse[signatures]>=4.27.7",
-)
-
-image = image.add_local_python_source("crosslayer_transcoder")
-
-
-app = modal.App("clt-train", image=image)
-
-wandb_secret = modal.Secret.from_name("wandb-secret")
-
-
+cache_volume_path = Path("/hf")
 volume_path = Path("/experiments")
+HF_HOME_PATH = cache_volume_path
 ACTIVATIONS_PATH = volume_path / "activations"
 CHECKPOINTS_PATH = volume_path / "checkpoints"
 WANDB_PATH = volume_path / "wandb"
 
-volumes = {volume_path: volume}
+volumes = {volume_path: volume, cache_volume_path: cache_volume}
+
+image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install(
+        "torch>=2.8.0",
+        "nnsight==0.5.0.dev7",
+        "datasets==3.6.0",
+        "h5py>=3.13.0",
+        "einops>=0.8.1",
+        "jaxtyping>=0.3.2",
+        "lightning>=2.5.1",
+        "wandb>=0.19.11",
+        "transformers>=4.46.0",
+        "numpy>=1.24.0",
+        "jsonargparse[signatures]>=4.27.7",
+        "huggingface_hub[hf_transfer]",
+    )
+    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": HF_HOME_PATH.as_posix()})
+    .add_local_python_source("crosslayer_transcoder")
+)
+
+wandb_secret = modal.Secret.from_name("wandb-secret")
 
 retries = modal.Retries(initial_delay=0.0, max_retries=10)
+
+app = modal.App("clt-train", image=image)
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,10 +65,10 @@ def ensure_directories():
     secrets=[wandb_secret],
 )
 def train_interruptible(*args, **kwargs):
-    train(*args, **kwargs)
+    train(*args, **kwargs, volume=volume)
 
 
-def train(experiment):
+def train(experiment, volume=None):
     ensure_directories()
     experiment_dir = CHECKPOINTS_PATH / experiment
     last_checkpoint = experiment_dir / "last.ckpt"
@@ -73,6 +79,7 @@ def train(experiment):
             ACTIVATIONS_PATH,
             experiment_dir,
             resume_from_checkpoint=last_checkpoint,
+            volume=volume,
         )
         print("⚡️ training finished successfully")
     else:
@@ -106,9 +113,11 @@ def get_checkpoint(checkpoint_dir):
     )
 
 
-def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None):
+def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None, volume=None):
     import lightning as L
     from lightning.pytorch.loggers import WandbLogger
+
+    L.seed_everything(42)
 
     model = get_model()
     train_loader = get_train_loader(
@@ -118,7 +127,7 @@ def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None):
     wandb_logger = WandbLogger(project="clt-train-modal")
 
     logger.info("Compiling model")
-    # model = t.compile(model)
+    model = t.compile(model)
     logger.info("Model compiled")
 
     trainer = L.Trainer(
@@ -126,6 +135,7 @@ def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None):
         val_check_interval=1_000,
         limit_val_batches=1,
         check_val_every_n_epoch=None,
+        num_sanity_val_steps=0,
         callbacks=[checkpoint_callback],
         precision="16-true",
         accelerator="gpu",
@@ -136,17 +146,72 @@ def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None):
         accumulate_grad_batches=1,
     )
 
+    datamodule = get_datamodule()
+
     if resume_from_checkpoint is not None:
         trainer.fit(
             model=model,
-            train_dataloaders=train_loader,
+            # train_dataloaders=train_loader,
             ckpt_path=resume_from_checkpoint,
+            datamodule=datamodule,
         )
     else:
         logger.info("Training model from scratch")
-        trainer.fit(model, train_loader)
+        trainer.fit(model, datamodule=datamodule)
 
 
+def get_datamodule():
+    from crosslayer_transcoder.data.datamodule import ActivationDataModule
+
+    return ActivationDataModule(
+        # Buffer settings
+        buffer_size=1_000_000,
+        n_in_out=2,
+        n_layers=12,
+        activation_dim=768,
+        dtype="float16",
+        max_batch_size=50000,
+        # Model settings for activation generation
+        model_name="openai-community/gpt2",
+        model_dtype="float32",
+        # Dataset settings
+        dataset_name="Skylion007/openwebtext",
+        dataset_split="train",
+        max_sequence_length=1024,
+        # Generation settings
+        generation_batch_size=10,
+        refresh_interval=0.1,
+        # Memory settings
+        shared_memory_name="activation_buffer",
+        timeout_seconds=30,
+        # File paths
+        init_file=None,
+        # DataLoader settings
+        batch_size=1000,
+        num_workers=10,
+        prefetch_factor=2,
+        shuffle=True,
+        persistent_workers=True,
+        pin_memory=True,
+        minimum_fill_threshold=0.2,
+        use_shared_memory=True,
+        # Device configuration
+        device_map="cuda:0",
+        deployment_policy="gpu_only",
+        # WandB logging configuration for data generation
+        wandb_logging={
+            "enabled": True,
+            "project": "clt",
+            "group": None,
+            "run_name": "data-generator-jumprelu",
+            "tags": ["data-generation"],
+            "save_dir": "./wandb",
+            "log_interval": 5.0,
+        },
+    )
+
+
+@volume_commit(volume)
 def get_model(checkpoint_path=None):
     from crosslayer_transcoder.model.clt_lightning import (
         JumpReLUCrossLayerTranscoderModule,
@@ -218,6 +283,7 @@ def get_model(checkpoint_path=None):
     )
 
 
+@volume_commit(volume)
 def get_train_loader(data_dir, file_name="clt-activations-10M.h5", accessor="tensor"):
     print("⚡ setting up data")
     buffer = DiscBuffer(data_dir / file_name, accessor)
