@@ -51,11 +51,12 @@ def train(experiment, volume=None):
             experiment_dir,
             resume_from_checkpoint=last_checkpoint,
             volume=volume,
+            experiment_id=experiment,
         )
         print("⚡️ training finished successfully")
     else:
         print("⚡️ starting training from scratch")
-        train_model(ACTIVATIONS_PATH, experiment_dir)
+        train_model(ACTIVATIONS_PATH, experiment_dir, experiment_id=experiment)
 
 
 @volume_commit(volume)
@@ -70,7 +71,13 @@ def get_checkpoint(checkpoint_dir):
     )
 
 
-def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None, volume=None):
+def train_model(
+    data_dir,
+    checkpoint_dir,
+    resume_from_checkpoint=None,
+    volume=None,
+    experiment_id=None,
+):
     import lightning as L
     from lightning.pytorch.loggers import WandbLogger
 
@@ -78,7 +85,11 @@ def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None, volume=No
 
     model = get_model()
     checkpoint_callback = get_checkpoint(checkpoint_dir)
-    wandb_logger = WandbLogger(project="clt-train-modal")
+    wandb_id = experiment_id if experiment_id is not None else uuid4().hex[:8]
+    wandb_name = f"jumprelu{'-' + experiment_id if experiment_id is not None else ''}"
+    wandb_logger = WandbLogger(
+        project="clt-train-modal", id=wandb_id, resume="allow", name=wandb_name
+    )
 
     # logger.info("Compiling model")
     # model = t.compile(model)
