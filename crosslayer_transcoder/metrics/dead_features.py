@@ -38,7 +38,9 @@ class DeadFeatures(Metric):
         )
 
     def update(self, features: torch.Tensor):
-        self.n_active += (features.detach().cpu() > 0.0).sum(dim=0).to(self.n_active.device)
+        self.n_active += (
+            (features.detach().cpu() > 0.0).sum(dim=0).to(self.n_active.device)
+        )
         self.n_total += features.shape[0]
 
     def compute(self):
@@ -53,5 +55,7 @@ class DeadFeatures(Metric):
         if self.return_per_layer:
             return_dict["per_layer"] = (self.n_active == 0.0).float().mean(dim=1)
         if self.return_log_freqs:
-            return_dict["log_freqs"] = torch.clamp(torch.log10(self.n_active / self.n_total), min=-10)
+            return_dict["log_freqs"] = torch.clamp(
+                torch.log10(self.n_active / self.n_total), min=-10
+            )
         return return_dict

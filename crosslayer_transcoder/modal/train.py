@@ -1,50 +1,20 @@
-from pathlib import Path
 import logging
 from typing import Optional
 
-from crosslayer_transcoder.model.jumprelu import JumpReLU
 from crosslayer_transcoder.utils.buffer import DiscBuffer
-import modal
 import torch as t
 
-volume = modal.Volume.from_name("clt-checkpoints", create_if_missing=True)
-cache_volume = modal.Volume.from_name("cache", create_if_missing=True)
-
-cache_volume_path = Path("/hf")
-volume_path = Path("/experiments")
-HF_HOME_PATH = cache_volume_path
-ACTIVATIONS_PATH = volume_path / "activations"
-CHECKPOINTS_PATH = volume_path / "checkpoints"
-WANDB_PATH = volume_path / "wandb"
-
-volumes = {volume_path: volume, cache_volume_path: cache_volume}
-
-image = (
-    modal.Image.debian_slim(python_version="3.12")
-    .pip_install(
-        "torch>=2.8.0",
-        "nnsight==0.5.0.dev7",
-        "datasets==3.6.0",
-        "h5py>=3.13.0",
-        "einops>=0.8.1",
-        "jaxtyping>=0.3.2",
-        "lightning>=2.5.1",
-        "wandb>=0.19.11",
-        "transformers>=4.46.0",
-        "numpy>=1.24.0",
-        "jsonargparse[signatures]>=4.27.7",
-        "huggingface_hub[hf_transfer]",
-    )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": HF_HOME_PATH.as_posix()})
-    .add_local_python_source("crosslayer_transcoder")
+from crosslayer_transcoder.modal.app import (
+    app,
+    volume_commit,
+    volumes,
+    retries,
+    wandb_secret,
+    volume,
+    ACTIVATIONS_PATH,
+    CHECKPOINTS_PATH,
+    WANDB_PATH,
 )
-
-wandb_secret = modal.Secret.from_name("wandb-secret")
-
-retries = modal.Retries(initial_delay=0.0, max_retries=10)
-
-app = modal.App("clt-train", image=image)
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,8 +28,8 @@ def ensure_directories():
 
 @app.function(
     volumes=volumes,
-    gpu="a10g",
-    retries=retries,
+    gpu="A100-40GB",
+    # retries=retries,
     max_inputs=1,
     timeout=60 * 60 * 24,
     secrets=[wandb_secret],
@@ -70,6 +40,7 @@ def train_interruptible(*args, **kwargs):
 
 def train(experiment, volume=None):
     ensure_directories()
+
     experiment_dir = CHECKPOINTS_PATH / experiment
     last_checkpoint = experiment_dir / "last.ckpt"
 
@@ -85,20 +56,6 @@ def train(experiment, volume=None):
     else:
         print("⚡️ starting training from scratch")
         train_model(ACTIVATIONS_PATH, experiment_dir)
-
-
-def volume_commit(volume):
-    def inner(func):
-        def wrapper(*args, **kwargs):
-            logger.info("Committing volume")
-            result = func(*args, **kwargs)
-            volume.commit()
-            logger.info("Volume committed")
-            return result
-
-        return wrapper
-
-    return inner
 
 
 @volume_commit(volume)
@@ -120,15 +77,12 @@ def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None, volume=No
     L.seed_everything(42)
 
     model = get_model()
-    train_loader = get_train_loader(
-        data_dir=data_dir, file_name="openai-community_gpt2.h5", accessor="activations"
-    )
     checkpoint_callback = get_checkpoint(checkpoint_dir)
     wandb_logger = WandbLogger(project="clt-train-modal")
 
-    logger.info("Compiling model")
-    model = t.compile(model)
-    logger.info("Model compiled")
+    # logger.info("Compiling model")
+    # model = t.compile(model)
+    # logger.info("Model compiled")
 
     trainer = L.Trainer(
         max_steps=100_000,
@@ -137,13 +91,15 @@ def train_model(data_dir, checkpoint_dir, resume_from_checkpoint=None, volume=No
         check_val_every_n_epoch=None,
         num_sanity_val_steps=0,
         callbacks=[checkpoint_callback],
-        precision="16-true",
+        precision="16-mixed",
         accelerator="gpu",
         devices=[0],
         logger=wandb_logger,
         # strategy="ddp",
         # callbacks=[TBProfilerCallback()],
         accumulate_grad_batches=1,
+        # gradient_clip_val=0.5,
+        # gradient_clip_algorithm="norm",
     )
 
     datamodule = get_datamodule()
@@ -173,7 +129,7 @@ def get_datamodule():
         max_batch_size=50000,
         # Model settings for activation generation
         model_name="openai-community/gpt2",
-        model_dtype="float32",
+        model_dtype="float16",
         # Dataset settings
         dataset_name="Skylion007/openwebtext",
         dataset_split="train",
@@ -185,7 +141,8 @@ def get_datamodule():
         shared_memory_name="activation_buffer",
         timeout_seconds=30,
         # File paths
-        init_file=None,
+        init_file=str(ACTIVATIONS_PATH / "openai-community_gpt2.h5"),
+        accessor="activations",
         # DataLoader settings
         batch_size=1000,
         num_workers=10,
@@ -194,7 +151,7 @@ def get_datamodule():
         persistent_workers=True,
         pin_memory=True,
         minimum_fill_threshold=0.2,
-        use_shared_memory=True,
+        use_shared_memory=False,
         # Device configuration
         device_map="cuda:0",
         deployment_policy="gpu_only",
@@ -206,17 +163,20 @@ def get_datamodule():
             "run_name": "data-generator-jumprelu",
             "tags": ["data-generation"],
             "save_dir": "./wandb",
-            "log_interval": 5.0,
+            "log_interval": 1.0,
         },
     )
 
 
 @volume_commit(volume)
-def get_model(checkpoint_path=None):
+def get_model(
+    checkpoint_path=None,
+):
     from crosslayer_transcoder.model.clt_lightning import (
         JumpReLUCrossLayerTranscoderModule,
     )
     from crosslayer_transcoder.model.clt import CrossLayerTranscoder
+    from crosslayer_transcoder.model.jumprelu import JumpReLU
     from crosslayer_transcoder.model.clt import Encoder
     from crosslayer_transcoder.model.clt import CrosslayerDecoder
     from crosslayer_transcoder.model.standardize import DimensionwiseInputStandardizer
@@ -236,6 +196,7 @@ def get_model(checkpoint_path=None):
         d_features=10_000,
         n_layers=12,
     )
+
     replacement_model = ReplacementModelAccuracy(
         model_name="openai-community/gpt2",
         device_map="cuda:0",
@@ -250,20 +211,22 @@ def get_model(checkpoint_path=None):
         return_neuron_indices=True,
     )
 
+    input_standardizer = DimensionwiseInputStandardizer(
+        n_layers=12,
+        activation_dim=768,
+    )
+    output_standardizer = DimensionwiseOutputStandardizer(
+        n_layers=12,
+        activation_dim=768,
+    )
+    nonlinearity = JumpReLU(theta=0.03, bandwidth=0.01, n_layers=12, d_features=10_000)
+
     clt = CrossLayerTranscoder(
         encoder=encoder,
         decoder=decoder,
-        input_standardizer=DimensionwiseInputStandardizer(
-            n_layers=12,
-            activation_dim=768,
-        ),
-        output_standardizer=DimensionwiseOutputStandardizer(
-            n_layers=12,
-            activation_dim=768,
-        ),
-        nonlinearity=JumpReLU(
-            theta=0.03, bandwidth=0.01, n_layers=12, d_features=10_000
-        ),
+        input_standardizer=input_standardizer,
+        output_standardizer=output_standardizer,
+        nonlinearity=nonlinearity,
     )
 
     return JumpReLUCrossLayerTranscoderModule(
@@ -271,7 +234,7 @@ def get_model(checkpoint_path=None):
         replacement_model=replacement_model,
         dead_features=dead_features,
         learning_rate=1e-4,
-        compile=True,
+        compile=False,
         lr_decay_step=80_000,
         lr_decay_factor=0.1,
         lambda_sparsity=0.0007,

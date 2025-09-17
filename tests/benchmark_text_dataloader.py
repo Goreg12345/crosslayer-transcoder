@@ -11,7 +11,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-from data import text_dataset
+from crosslayer_transcoder.data import text_dataset
 
 
 def benchmark_textdataset(
@@ -187,7 +187,7 @@ def compare_workers():
     worker_configs = [0, 1, 2, 4]
 
     for num_workers in worker_configs:
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"Testing with {num_workers} workers")
         print("=" * 50)
 
