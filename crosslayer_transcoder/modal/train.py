@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+from uuid import uuid4
 
 from crosslayer_transcoder.utils.buffer import DiscBuffer
 import torch as t
@@ -210,6 +211,7 @@ def get_model(
 
     replacement_model = ReplacementModelAccuracy(
         model_name="openai-community/gpt2",
+        dataset_name="roneneldan/TinyStories",
         device_map="cuda:0",
         loader_batch_size=2,
     )

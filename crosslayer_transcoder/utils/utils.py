@@ -5,10 +5,8 @@ from torch.utils.data import DataLoader
 import crosslayer_transcoder.data.text_dataset as text_dataset
 
 
-def get_webtext_dataloader(model, batch_size=40):
-    dataset = datasets.load_dataset(
-        "Skylion007/openwebtext", split="train", trust_remote_code=True
-    )
+def get_webtext_dataloader(model, dataset_name="Skylion007/openwebtext", batch_size=40):
+    dataset = datasets.load_dataset(dataset_name, split="train", trust_remote_code=True)
     token_dataset = text_dataset.TextDataset(
         dataset,
         model.tokenizer,
