@@ -55,6 +55,7 @@ class DataGeneratorProcess(mp.Process):
         refresh_interval: float,
         deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         init_file: Optional[str] = None,
+        accessor: str = "tensor",
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
     ):
@@ -79,6 +80,7 @@ class DataGeneratorProcess(mp.Process):
         self.refresh_interval = refresh_interval
         self.deployment_policy = deployment_policy
         self.init_file = init_file
+        self.accessor = accessor
         self.device_map = device_map
 
         # WandB configuration
@@ -107,7 +109,9 @@ class DataGeneratorProcess(mp.Process):
         # 5. Setup disk source if available
         if self.init_file and os.path.exists(self.init_file):
             logger.info(f"Setting up disk source: {self.init_file}")
-            self.disk_source = DiskActivationSource(self.init_file, dtype=self.dtype)
+            self.disk_source = DiskActivationSource(
+                self.init_file, dtype=self.dtype, accessor=self.accessor
+            )
         else:
             self.disk_source = None
         print("disk source available", self.disk_source is not None)
@@ -147,24 +151,29 @@ class DataGeneratorProcess(mp.Process):
 
         # 6. Create generation loop with all dependencies
         # Note: DataGenerationLoop will need to be updated to accept individual parameters too
-        self.generation_loop = DataGenerationLoop(
-            shared_buffer=self.shared_buffer,
-            buffer_size=self.buffer_size,
-            n_in_out=self.n_in_out,
-            n_layers=self.n_layers,
-            activation_dim=self.activation_dim,
-            dtype=self.dtype,
-            max_batch_size=self.max_batch_size,
-            refresh_interval=self.refresh_interval,
-            monitor=self.monitor,
-            deployment_policy=self.deployment_policy,
-            device_map=self.device_map,
-            disk_source=self.disk_source,
-            generation_batch_size=self.generation_batch_size,
-            max_sequence_length=self.max_sequence_length,
-        )
+        try:
+            self.generation_loop = DataGenerationLoop(
+                shared_buffer=self.shared_buffer,
+                buffer_size=self.buffer_size,
+                n_in_out=self.n_in_out,
+                n_layers=self.n_layers,
+                activation_dim=self.activation_dim,
+                dtype=self.dtype,
+                max_batch_size=self.max_batch_size,
+                refresh_interval=self.refresh_interval,
+                monitor=self.monitor,
+                deployment_policy=self.deployment_policy,
+                device_map=self.device_map,
+                disk_source=self.disk_source,
+                generation_batch_size=self.generation_batch_size,
+                max_sequence_length=self.max_sequence_length,
+            )
 
-        self.generation_loop.refill_from_disk()
+            logger.info("Refilling from disk")
+            self.generation_loop.refill_from_disk()
+            logger.info("Refilled from disk")
+        except Exception as e:
+            logger.error(f"Error refilling from disk: {e}")
 
         # 2. Load dataset in the process
         logger.info(f"Loading dataset: {self.dataset_name}")

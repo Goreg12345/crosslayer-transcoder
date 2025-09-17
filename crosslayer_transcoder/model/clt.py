@@ -148,16 +148,39 @@ class Encoder(nn.Module):
         if layer != "all":
             return self.forward_layer(acts_norm, layer)
 
+        assert acts_norm.shape == (acts_norm.shape[0], self.n_layers, self.d_acts), (
+            f"acts_norm shape: {acts_norm.shape}, expected: {(acts_norm.shape[0], self.n_layers, self.d_acts)}"
+        )
+
         # for training
         pre_actvs = einsum(
             acts_norm,
             self.W,
             "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
         )
+
+        assert not pre_actvs.isnan().any(), "pre_actvs contains NaN values"
+
         pre_actvs = pre_actvs.contiguous()
+
+        assert pre_actvs.shape == (
+            acts_norm.shape[0],
+            self.n_layers,
+            self.d_features,
+        ), (
+            f"pre_actvs shape: {pre_actvs.shape}, expected: {(acts_norm.shape[0], self.n_layers, self.d_features)}"
+        )
 
         if self.bias:
             pre_actvs = pre_actvs + self.b.to(torch.float16)
+
+        assert pre_actvs.shape == (
+            acts_norm.shape[0],
+            self.n_layers,
+            self.d_features,
+        ), (
+            f"pre_actvs shape: {pre_actvs.shape}, expected: {(acts_norm.shape[0], self.n_layers, self.d_features)}"
+        )
 
         return pre_actvs
 
@@ -297,7 +320,6 @@ class CrossLayerTranscoder(nn.Module):
         self.encoder.reset_parameters()
         self.decoder.reset_parameters()
 
-    @torch._dynamo.disable()
     def initialize_standardizers(
         self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
     ):
@@ -314,12 +336,30 @@ class CrossLayerTranscoder(nn.Module):
     ]:
         acts = self.input_standardizer(acts)
 
+        # detect NaN values in input batch
+        if torch.isnan(acts).any():
+            raise ValueError("NaN values in input batch after standardization")
+
         pre_actvs = self.encoder(acts)
+
+        if torch.isnan(pre_actvs).any():
+            raise ValueError("NaN values in output batch after encoder")
 
         features = self.nonlinearity(pre_actvs)
 
+        if torch.isnan(features).any():
+            raise ValueError("NaN values in output batch after nonlinearity")
+
         recons_norm = self.decoder(features)
 
+        # detect NaN values in output batch
+        if torch.isnan(recons_norm).any():
+            raise ValueError("NaN values in output batch after decoder")
+
         recons = self.output_standardizer(recons_norm)
+
+        # detect NaN values in output batch
+        if torch.isnan(recons).any():
+            raise ValueError("NaN values in output batch after output standardization")
 
         return pre_actvs, features, recons_norm, recons

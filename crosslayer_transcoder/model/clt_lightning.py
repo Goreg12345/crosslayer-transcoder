@@ -291,7 +291,8 @@ class CrossLayerTranscoderModule(L.LightningModule):
             self.model.initialize_standardizers(batch)
 
         resid, mlp_out = batch[:, 0], batch[:, 1]
-        _, features, recons_norm, recons = self.forward(resid)
+        with torch.autograd.detect_anomaly(True):
+            _, features, recons_norm, recons = self.forward(resid)
 
         self.update_dead_features(features)
 
@@ -420,9 +421,26 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         if batch_idx == 0:
             self.model.initialize_standardizers(batch)
 
+        # detect NaN values in input batch
+        if torch.isnan(batch).any():
+            raise ValueError("NaN values in input batch")
+
         # Forward pass
         resid, mlp_out = batch[:, 0], batch[:, 1]
         pre_actvs, features, recons_norm, recons = self.forward(resid)
+
+        # detect NaN values in output batch
+        if (
+            torch.isnan(pre_actvs).any()
+            or torch.isnan(features).any()
+            or torch.isnan(recons_norm).any()
+            or torch.isnan(recons).any()
+        ):
+            print(f"pre_actvs: {torch.isnan(pre_actvs)}")
+            print(f"features: {torch.isnan(features)}")
+            print(f"recons_norm: {torch.isnan(recons_norm)}")
+            print(f"recons: {torch.isnan(recons)}")
+            raise ValueError("NaN values in output batch")
 
         self.update_dead_features(features)
         # Compute MSE loss
@@ -431,6 +449,7 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         # Compute Sparsity Loss
         # with torch.no_grad():
         if isinstance(self.model.decoder, CrosslayerDecoder):
+            # shape(features):[batch, n_layers, d_features]]
             dec_norms = torch.zeros_like(features[:1])
             for l in range(self.model.decoder.n_layers):
                 W = self.model.decoder.get_parameter(
@@ -442,9 +461,16 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         elif isinstance(self.model.decoder, Decoder):
             dec_norms = torch.sqrt((self.model.decoder.W**2).sum(dim=-1))
 
+        assert not dec_norms.isnan().any(), "dec_norms contains NaN values"
+        assert not features.isnan().any(), "features contains NaN values"
+
         weighted_features = features * dec_norms * self.c
         self.log(
             "model/weighted_features_mean", weighted_features.detach().mean().cpu()
+        )
+
+        assert not weighted_features.isnan().any(), (
+            "weighted_features contains NaN values"
         )
 
         if self.use_tanh:

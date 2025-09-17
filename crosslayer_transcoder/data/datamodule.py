@@ -48,6 +48,7 @@ class ActivationDataModule(L.LightningDataModule):
         timeout_seconds: int = 30,
         # File paths
         init_file: Optional[str] = None,
+        accessor: str = "tensor",
         # DataLoader settings
         batch_size: int = 4000,
         num_workers: int = 20,
@@ -96,6 +97,7 @@ class ActivationDataModule(L.LightningDataModule):
 
             # File paths
             init_file: Path to initial HDF5 activation file
+            accessor: Accessor for the initial HDF5 activation file
 
             # DataLoader settings
             batch_size: Training batch size
@@ -144,6 +146,7 @@ class ActivationDataModule(L.LightningDataModule):
 
         # File paths
         self.init_file = init_file
+        self.accessor = accessor
 
         # DataLoader settings
         self.batch_size = batch_size
@@ -176,7 +179,13 @@ class ActivationDataModule(L.LightningDataModule):
         """Estimate total memory usage in GB."""
         # Buffer memory: [buffer_size, n_in_out, n_layers, activation_dim]
         element_size = torch.tensor([], dtype=self.torch_dtype).element_size()
-        buffer_memory = self.buffer_size * self.n_in_out * self.n_layers * self.activation_dim * element_size
+        buffer_memory = (
+            self.buffer_size
+            * self.n_in_out
+            * self.n_layers
+            * self.activation_dim
+            * element_size
+        )
 
         # Validity mask memory
         validity_memory = self.buffer_size  # 1 byte per sample
@@ -230,9 +239,13 @@ class ActivationDataModule(L.LightningDataModule):
         try:
             if mp.get_start_method(allow_none=True) != "spawn":
                 mp.set_start_method("spawn", force=True)
-            logger.info("Set multiprocessing method to 'spawn' for shared memory compatibility")
+            logger.info(
+                "Set multiprocessing method to 'spawn' for shared memory compatibility"
+            )
         except RuntimeError as e:
-            logger.warning(f"Could not set spawn method: {e}. Disabling multiprocessing in DataLoader")
+            logger.warning(
+                f"Could not set spawn method: {e}. Disabling multiprocessing in DataLoader"
+            )
             # If we can't set spawn, disable multiprocessing in the DataLoader
 
         # 1. Create shared memory buffer
@@ -268,6 +281,7 @@ class ActivationDataModule(L.LightningDataModule):
             refresh_interval=self.refresh_interval,
             deployment_policy=self.deployment_policy,
             init_file=self.init_file,
+            accessor=self.accessor,
             device_map=self.device_map,
             wandb_logging=self.wandb_logging,
         )
@@ -294,12 +308,19 @@ class ActivationDataModule(L.LightningDataModule):
 
         import torch.multiprocessing as mp
 
-        if sys.platform.startswith("linux") and mp.get_start_method(allow_none=True) != "fork":
+        if (
+            sys.platform.startswith("linux")
+            and mp.get_start_method(allow_none=True) != "fork"
+        ):
             try:
                 mp.set_start_method("fork", force=True)
-                logger.info("Set multiprocessing method to 'fork' for h5py compatibility")
+                logger.info(
+                    "Set multiprocessing method to 'fork' for h5py compatibility"
+                )
             except RuntimeError:
-                logger.warning("Could not set fork method, using num_workers=0 for h5py safety")
+                logger.warning(
+                    "Could not set fork method, using num_workers=0 for h5py safety"
+                )
                 # If we can't set fork, force single-threaded to avoid pickling issues
                 self.num_workers = 0
                 self.persistent_workers = False
@@ -310,9 +331,9 @@ class ActivationDataModule(L.LightningDataModule):
             )
 
         # Use simple DiscBuffer approach (like current train.py)
-        from utils.buffer import DiscBuffer
+        from crosslayer_transcoder.utils.buffer import DiscBuffer
 
-        buffer = DiscBuffer(self.init_file, "tensor")
+        buffer = DiscBuffer(self.init_file, self.accessor)
 
         self.data_loader = torch.utils.data.DataLoader(
             buffer,
