@@ -26,7 +26,9 @@ class ReplacementModel(torch.nn.Module):
             )
 
             for layer in range(self.n_layers):
-                mlp_in = self.gpt2.transformer.h[layer].ln_2.input  # (batch, seq, d_acts)
+                mlp_in = self.gpt2.transformer.h[
+                    layer
+                ].ln_2.input  # (batch, seq, d_acts)
 
                 mlp_in_norm = clt.input_standardizer(mlp_in, layer=layer).detach()
 
@@ -42,7 +44,9 @@ class ReplacementModel(torch.nn.Module):
                 elif isinstance(clt.nonlinearity, torch.nn.ReLU):
                     features[..., layer, :] = torch.relu(pre_actvs)
                 else:
-                    post_actvs = clt.nonlinearity(pre_actvs, layer=layer).detach()  # batchxseq, 1, n_features
+                    post_actvs = clt.nonlinearity(
+                        pre_actvs, layer=layer
+                    ).detach()  # batchxseq, 1, n_features
                     features[..., layer, :] = post_actvs.reshape(
                         tokens.shape[0], tokens.shape[1], self.n_features
                     )
@@ -64,12 +68,22 @@ class ReplacementModelAccuracy(Metric):
     Computes the accuracy of the replacement model and the KL divergence between the logits of the GPT-2 and the replacement model.
     """
 
-    def __init__(self, model_name="openai-community/gpt2", device_map="auto", loader_batch_size=5):
+    def __init__(
+        self,
+        model_name="openai-community/gpt2",
+        device_map="auto",
+        loader_batch_size=5,
+        dataset_name="Skylion007/openwebtext",
+    ):
         super().__init__()
-        self.gpt2 = nnsight.LanguageModel(model_name, device_map=device_map, dispatch=True)
+        self.gpt2 = nnsight.LanguageModel(
+            model_name, device_map=device_map, dispatch=True
+        )
         self.gpt2.requires_grad_(False)
         self.replacement_model = ReplacementModel(self.gpt2)
-        self.loader = get_webtext_dataloader(self.gpt2, batch_size=loader_batch_size)
+        self.loader = get_webtext_dataloader(
+            self.gpt2, dataset_name=dataset_name, batch_size=loader_batch_size
+        )
         self.add_state("n_correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("n_total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state(
@@ -92,7 +106,13 @@ class ReplacementModelAccuracy(Metric):
         )
         tokens = torch.cat([bos, tokens], dim=1)
         mask = torch.cat(
-            [torch.zeros((tokens.shape[0], 1), dtype=torch.bool, device=tokens.device), mask], dim=1
+            [
+                torch.zeros(
+                    (tokens.shape[0], 1), dtype=torch.bool, device=tokens.device
+                ),
+                mask,
+            ],
+            dim=1,
         )
         return tokens, mask
 
@@ -115,10 +135,14 @@ class ReplacementModelAccuracy(Metric):
                 mask_flat = mask.reshape(-1)
                 logits_gpt2 = logits_gpt2.logits
                 logits_gpt2 = logits_gpt2.reshape(-1, logits_gpt2.shape[-1])[mask_flat]
-                logits_replacement = logits_replacement.reshape(-1, logits_replacement.shape[-1])[mask_flat]
+                logits_replacement = logits_replacement.reshape(
+                    -1, logits_replacement.shape[-1]
+                )[mask_flat]
 
                 self.n_correct += (
-                    (logits_gpt2.argmax(dim=-1) == logits_replacement.argmax(dim=-1)).int().sum()
+                    (logits_gpt2.argmax(dim=-1) == logits_replacement.argmax(dim=-1))
+                    .int()
+                    .sum()
                 )
                 self.n_total += mask.sum()
                 self.kl_div += torch.nn.functional.kl_div(
