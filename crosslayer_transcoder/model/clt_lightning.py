@@ -103,20 +103,24 @@ class CrossLayerTranscoderModule(L.LightningModule):
             print("Compiling model")
             self = torch.compile(self)
 
-        if self.trainer.num_devices > 1:
-            from crosslayer_transcoder.model.parallel import (
-                ColParallelEncoder,
-                ParallelNonlinearity,
-                RowParallelDecoder,
-            )
+        try:
+            if self.__getattribute__("trainer") and self.trainer.num_devices > 1:
+                from crosslayer_transcoder.model.parallel import (
+                    ColParallelEncoder,
+                    ParallelNonlinearity,
+                    RowParallelDecoder,
+                )
 
-            tp_mesh = self.device_mesh["tensor_parallel"]
-            plan = {
-                "encoder": ColParallelEncoder(use_local_output=False),
-                "nonlinearity": ParallelNonlinearity(use_local_output=False),
-                "decoder": RowParallelDecoder(),
-            }
-            parallelize_module(self, tp_mesh, plan)
+                tp_mesh = self.device_mesh["tensor_parallel"]
+                plan = {
+                    "encoder": ColParallelEncoder(use_local_output=False),
+                    "nonlinearity": ParallelNonlinearity(use_local_output=False),
+                    "decoder": RowParallelDecoder(),
+                }
+                parallelize_module(self, tp_mesh, plan)
+        except Exception as e:
+            print(f"Error parallelizing model: {e}")
+            pass
 
     def forward(
         self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]
