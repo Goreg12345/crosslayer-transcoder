@@ -30,7 +30,11 @@ dev = [
     "jupyterlab>=4.4.2",
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
+    "circuit-tracer"
 ]
+
+[tool.uv.sources]
+circuit-tracer = { path = "../circuit-tracer", editable = true }
 
 [project.scripts]
 clt = "crosslayer_transcoder.main:main"
