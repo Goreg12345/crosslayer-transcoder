@@ -26,10 +26,7 @@ class _JumpReLUFunction(torch.autograd.Function):
         grad_input = grad_output.clone()
         grad_input[input < 0] = 0
 
-        theta_grad = (
-            -(theta / bandwidth) * rectangle((input - theta) / bandwidth) * grad_output
-        )
-
+        theta_grad = -(theta / bandwidth) * rectangle((input - theta) / bandwidth) * grad_output
         return grad_input, theta_grad, None
 
 
@@ -49,9 +46,7 @@ class HeavysideStep(torch.autograd.Function):
     def forward(ctx, input, theta, bandwidth):
         ctx.save_for_backward(input, theta)
         ctx.bandwidth = bandwidth
-        return torch.where(
-            input - theta > 0, torch.ones_like(input), torch.zeros_like(input)
-        )
+        return torch.where(input - theta > 0, torch.ones_like(input), torch.zeros_like(input))
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -60,7 +55,5 @@ class HeavysideStep(torch.autograd.Function):
         grad_input = grad_output.clone()
         grad_input = grad_output * 0.0
 
-        theta_grad = (
-            -(1.0 / bandwidth) * rectangle((input - theta) / bandwidth) * grad_output
-        )
+        theta_grad = -(1.0 / bandwidth) * rectangle((input - theta) / bandwidth) * grad_output
         return grad_input, theta_grad, None
