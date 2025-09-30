@@ -32,6 +32,7 @@ image = (
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HOME": HF_HOME_PATH.as_posix()})
     .add_local_python_source("crosslayer_transcoder", "tests")
+    .add_local_dir("config", "/config")
 )
 
 wandb_secret = modal.Secret.from_name("wandb-secret")
