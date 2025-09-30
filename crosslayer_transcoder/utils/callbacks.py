@@ -13,6 +13,10 @@ from torch.profiler import (
     tensorboard_trace_handler,
 )
 
+from crosslayer_transcoder.utils.convert_to_circuit_tracer import (
+    convert_model_to_circuit_tracer,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,3 +58,14 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
+
+
+class CircuitTracerCallback(L.Callback):
+    """Callback to convert the model to a circuit-tracer model."""
+
+    def __init__(self, save_dir: str = "clt_module"):
+        super().__init__()
+        self.save_dir = Path(save_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        convert_model_to_circuit_tracer(pl_module, self.save_dir)
