@@ -6,14 +6,11 @@ from typing import List, Union
 from huggingface_hub import upload_folder
 import torch
 import yaml
-from einops import einops
 from safetensors.torch import save_file
-from torch.export.graph_signature import OutputKind
 
 from crosslayer_transcoder.model.clt import (
     CrosslayerDecoder,
     Encoder,
-    SimpleCrossLayerTranscoder,
 )
 from crosslayer_transcoder.model.clt_lightning import (
     CrossLayerTranscoderModule,
