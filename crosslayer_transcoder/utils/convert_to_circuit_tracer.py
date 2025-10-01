@@ -1,11 +1,12 @@
 # simple file to convert the lightning model to a circuit-tracer model
+import logging
 import os
 from pathlib import Path
 from typing import List, Union
 
-from huggingface_hub import upload_folder
 import torch
 import yaml
+from huggingface_hub import upload_folder
 from safetensors.torch import save_file
 
 from crosslayer_transcoder.model.clt import (
@@ -17,6 +18,9 @@ from crosslayer_transcoder.model.clt_lightning import (
     JumpReLUCrossLayerTranscoderModule,
     TopKCrossLayerTranscoderModule,
 )
+
+logger = logging.getLogger(__name__)
+
 
 CLTModule = Union[
     CrossLayerTranscoderModule,
@@ -51,6 +55,7 @@ def convert_model_to_circuit_tracer(
 
     encoder = lightning_module.model.encoder
     decoder = lightning_module.model.decoder
+    nonlinearity = lightning_module.model.nonlinearity
     n_layers = encoder.n_layers
     d_acts = encoder.d_acts  # -> d_model
     d_features = encoder.d_features  # -> d_transcoder
@@ -71,7 +76,11 @@ def convert_model_to_circuit_tracer(
                 if hasattr(decoder, "b")
                 else torch.zeros(d_acts)
             ),
-            # TODO: add non-lin params like threshold
+            f"threshold_{source_layer}": (
+                nonlinearity.theta.cpu()
+                if hasattr(nonlinearity, "theta")
+                else torch.zeros(d_features)
+            ),
         }
 
         # TODO: check names
@@ -113,21 +122,21 @@ def upload_to_hub(save_dir: str, repo_id: str, repo_type: str = "model"):
 
 
 if __name__ == "__main__":
-    from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
+    from crosslayer_transcoder.metrics.dead_features import DeadFeatures
+    from crosslayer_transcoder.metrics.replacement_model_accuracy import (
+        ReplacementModelAccuracy,
+    )
     from crosslayer_transcoder.model.clt import (
+        CrosslayerDecoder,
         CrossLayerTranscoder,
         Encoder,
-        CrosslayerDecoder,
     )
+    from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
     from crosslayer_transcoder.model.jumprelu import JumpReLU
     from crosslayer_transcoder.model.standardize import (
         DimensionwiseInputStandardizer,
         DimensionwiseOutputStandardizer,
     )
-    from crosslayer_transcoder.metrics.replacement_model_accuracy import (
-        ReplacementModelAccuracy,
-    )
-    from crosslayer_transcoder.metrics.dead_features import DeadFeatures
 
     # Create components based on default.yaml config
     encoder = Encoder(d_acts=768, d_features=10_000, n_layers=12)
