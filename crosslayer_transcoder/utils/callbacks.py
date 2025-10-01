@@ -67,5 +67,18 @@ class CircuitTracerCallback(L.Callback):
         super().__init__()
         self.save_dir = Path(save_dir)
 
+    def _convert_model(self, pl_module):
+        convert_model_to_circuit_tracer(pl_module, self.save_dir.as_posix())
+        logger.info(f"Circuit-tracer model saved to {self.save_dir.as_posix()}")
+
+    def on_train_start(self, trainer, pl_module):
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Saving circuit-tracer model to {self.save_dir.as_posix()}")
+
+        self._convert_model(pl_module)
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        self._convert_model(pl_module)
+
     def on_train_end(self, trainer, pl_module):
-        convert_model_to_circuit_tracer(pl_module, self.save_dir)
+        self._convert_model(pl_module)
