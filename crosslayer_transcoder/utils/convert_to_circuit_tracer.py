@@ -41,6 +41,7 @@ def save_decoder_dict(decoder_dict: dict, path: str):
 def convert_model_to_circuit_tracer(
     lightning_module: CLTModule,
     save_dir: str,
+    # TODO: check the hooks
     feature_input_hook: str = "blocks.{layer}.hook_resid_pre",
     feature_output_hook: str = "blocks.{layer}.hook_mlp_out",
 ):
