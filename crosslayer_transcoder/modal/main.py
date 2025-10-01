@@ -1,3 +1,4 @@
+import os
 import sys
 from crosslayer_transcoder.modal.app import app, volumes, wandb_secret, retries
 from crosslayer_transcoder.main import main as lightning_cli_main
