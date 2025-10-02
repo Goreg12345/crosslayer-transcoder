@@ -16,6 +16,7 @@ from torch.profiler import (
 from crosslayer_transcoder.utils.convert_to_circuit_tracer import (
     convert_model_to_circuit_tracer,
 )
+from crosslayer_transcoder.utils.hf import upload_to_hub
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +83,18 @@ class CircuitTracerCallback(L.Callback):
 
     def on_train_end(self, trainer, pl_module):
         self._convert_model(pl_module)
+
+
+class HuggingFaceCallback(L.Callback):
+    """Callback to upload the model to Hugging Face."""
+
+    def __init__(
+        self, repo_id: str, repo_type: str = "model", save_dir: str = "clt_module"
+    ):
+        super().__init__()
+        self.repo_id = repo_id
+        self.repo_type = repo_type
+        self.save_dir = Path(save_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        upload_to_hub(self.save_dir.as_posix(), self.repo_id, self.repo_type)

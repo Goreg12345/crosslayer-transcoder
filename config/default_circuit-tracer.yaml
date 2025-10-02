@@ -27,6 +27,11 @@ trainer:
     - class_path: crosslayer_transcoder.utils.callbacks.CircuitTracerCallback
       init_args:
         save_dir: "/experiments/checkpoints"
+    - class_path: crosslayer_transcoder.utils.callbacks.HuggingFaceCallback
+      init_args:
+        repo_id: "jiito/clt_test_gpt2_zero"
+        repo_type: "model"
+        save_dir: "/experiments/checkpoints"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
