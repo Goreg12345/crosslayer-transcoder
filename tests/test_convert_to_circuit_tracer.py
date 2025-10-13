@@ -1,9 +1,7 @@
-from crosslayer_transcoder.utils.convert_to_circuit_tracer import (
-    convert_model_to_circuit_tracer,
-)
+from crosslayer_transcoder.utils.converters.circuit_tracer import CircuitTracerConverter
 
 
-def test_convert_to_circuit_tracer():
+def test_circuit_tracer_converter():
     from crosslayer_transcoder.metrics.dead_features import DeadFeatures
     from crosslayer_transcoder.model.clt import (
         CrosslayerDecoder,
@@ -38,10 +36,6 @@ def test_convert_to_circuit_tracer():
         output_standardizer=output_standardizer,
     )
 
-    # replacement_model = ReplacementModelAccuracy(
-    #     model_name="openai-community/gpt2", device_map="mps", loader_batch_size=2
-    # )
-
     dead_features = DeadFeatures(
         n_features=10_000,
         n_layers=12,
@@ -52,7 +46,6 @@ def test_convert_to_circuit_tracer():
 
     clt_module = CrossLayerTranscoderModule(
         model=model,
-        # replacement_model=replacement_model,
         dead_features=dead_features,
         learning_rate=1e-4,
         compile=True,
@@ -62,8 +55,13 @@ def test_convert_to_circuit_tracer():
         compute_dead_features_every=500,
     )
 
-    convert_model_to_circuit_tracer(clt_module, "clt_module")
+    # Use the new CircuitTracerConverter directly
+    import pathlib
+
+    save_dir = pathlib.Path("clt_module")
+    converter = CircuitTracerConverter(save_dir=save_dir)
+    converter.convert(clt_module)
 
 
 if __name__ == "__main__":
-    test_convert_to_circuit_tracer()
+    test_circuit_tracer_converter()
