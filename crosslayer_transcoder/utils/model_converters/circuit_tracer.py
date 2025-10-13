@@ -1,3 +1,4 @@
+from einops import einsum
 from crosslayer_transcoder.utils.model_converter import CLTModule, ModelConverter
 import torch
 import yaml
@@ -19,25 +20,40 @@ class CircuitTracerConverter(ModelConverter):
 
     def convert(self, model: CLTModule) -> CLTModule:
         encoder = model.model.encoder
+        input_standardizer = model.model.input_standardizer
+        output_standardizer = model.model.output_standardizer
         decoder = model.model.decoder
         nonlinearity = model.model.nonlinearity
         n_layers = encoder.n_layers
         d_acts = encoder.d_acts  # -> d_model
         d_features = encoder.d_features  # -> d_transcoder
 
+        # fold in the input standardization
+        W_enc_folded = encoder.W / input_standardizer.std
+        b_enc_folded = encoder.b - (
+            einsum(
+                input_standardizer.mean,
+                W_enc_folded,
+                "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
+            )
+        )
+
+        # TODO: check/assert shapes
+        b_dec_folded = decoder.b * output_standardizer.std + output_standardizer.mean
+
+        # encoder
         for source_layer in range(encoder.n_layers):
-            # encoder
             layer_encoder_dict = {
-                f"W_enc_{source_layer}": encoder.W[source_layer]
+                f"W_enc_{source_layer}": W_enc_folded[source_layer]
                 .T.contiguous()
                 .cpu(),  # Transpose!
                 f"b_enc_{source_layer}": (
-                    encoder.b[source_layer].cpu()
+                    b_enc_folded[source_layer].cpu()
                     if hasattr(encoder, "b")
                     else torch.zeros(encoder.d_features)
                 ),
                 f"b_dec_{source_layer}": (
-                    decoder.b[source_layer].cpu()
+                    b_dec_folded[source_layer].cpu()
                     if hasattr(decoder, "b")
                     else torch.zeros(d_acts)
                 ),
@@ -57,14 +73,18 @@ class CircuitTracerConverter(ModelConverter):
 
         for k in range(source_layer, n_layers):
             # get decoder mat for layer i --> k
+
             decoder_w_k = decoder.get_parameter(f"W_{k}")
-            dec_i_k = decoder_w_k[source_layer, ...]
+            # TODO: check shapes
+            decoder_w_k_folded = decoder_w_k * output_standardizer.std
+            dec_i_k = decoder_w_k_folded[source_layer, ...]
             assert dec_i_k.shape == (
                 d_features,
                 d_acts,
             )
             output_dec_i[:, k - source_layer, ...] = dec_i_k.cpu()
 
+        # TODO: fold in the output standardization
         decoder_dict = {f"W_dec_{source_layer}": output_dec_i}
 
         save_file(decoder_dict, f"{self.save_dir}/W_dec_{source_layer}.safetensors")

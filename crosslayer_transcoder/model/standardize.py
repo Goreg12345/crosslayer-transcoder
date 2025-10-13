@@ -35,7 +35,7 @@ class DimensionwiseInputStandardizer(Standardizer):
     def initialize_from_batch(
         self, batch: Float[torch.Tensor, "batch_size io n_layers actv_dim"]
     ):
-        batch = batch[:, 0]
+        batch = batch[:, 0]  # input
         self.mean.data = batch.mean(dim=0)
         self.std.data = batch.std(dim=0)
         self.std.data.clamp_(min=1e-8)
