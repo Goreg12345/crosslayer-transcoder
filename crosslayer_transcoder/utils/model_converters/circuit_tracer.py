@@ -3,6 +3,7 @@ from crosslayer_transcoder.utils.model_converter import CLTModule, ModelConverte
 import torch
 import yaml
 from safetensors.torch import save_file
+from pathlib import Path
 
 
 class CircuitTracerConverter(ModelConverter):
@@ -12,7 +13,7 @@ class CircuitTracerConverter(ModelConverter):
         feature_input_hook: str = "blocks.{layer}.hook_resid_pre",
         feature_output_hook: str = "blocks.{layer}.hook_mlp_out",
     ):
-        self.save_dir = save_dir
+        self.save_dir = Path(save_dir)
         self.feature_input_hook = feature_input_hook
         self.feature_output_hook = feature_output_hook
 
@@ -29,17 +30,25 @@ class CircuitTracerConverter(ModelConverter):
         d_features = encoder.d_features  # -> d_transcoder
 
         # fold in the input standardization
-        W_enc_folded = encoder.W / input_standardizer.std
-        b_enc_folded = encoder.b - (
-            einsum(
-                input_standardizer.mean,
-                W_enc_folded,
-                "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
+        assert encoder.W.shape == (n_layers, d_acts, d_features)
+        assert input_standardizer.std.shape == (n_layers, d_acts)
+        W_enc_folded = encoder.W.float() / input_standardizer.std.unsqueeze(-1)
+
+        # TODO: check if bias is present
+        if hasattr(encoder, "b"):
+            b_enc_folded = encoder.b - (
+                einsum(
+                    input_standardizer.mean.float(),
+                    W_enc_folded.float(),
+                    "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
+                )
             )
-        )
 
         # TODO: check/assert shapes
-        b_dec_folded = decoder.b * output_standardizer.std + output_standardizer.mean
+        b_dec_folded = (
+            decoder.b.float() * output_standardizer.std.float()
+            + output_standardizer.mean.float()
+        )
 
         # encoder
         for source_layer in range(encoder.n_layers):
@@ -73,10 +82,15 @@ class CircuitTracerConverter(ModelConverter):
 
         for k in range(source_layer, n_layers):
             # get decoder mat for layer i --> k
-
             decoder_w_k = decoder.get_parameter(f"W_{k}")
-            # TODO: check shapes
-            decoder_w_k_folded = decoder_w_k * output_standardizer.std
+
+            # [n_layers, d_features, d_acts] * [n_layers, d_acts]
+            # NOTE: we want to multiply every feature by the activation std
+            assert output_standardizer.std.shape == (n_layers, d_acts)
+            assert decoder_w_k.shape == (n_layers, d_features, d_acts)
+            decoder_w_k_folded = (
+                decoder_w_k.float() * output_standardizer.std.unsqueeze(1).float()
+            )
             dec_i_k = decoder_w_k_folded[source_layer, ...]
             assert dec_i_k.shape == (
                 d_features,
@@ -84,7 +98,6 @@ class CircuitTracerConverter(ModelConverter):
             )
             output_dec_i[:, k - source_layer, ...] = dec_i_k.cpu()
 
-        # TODO: fold in the output standardization
         decoder_dict = {f"W_dec_{source_layer}": output_dec_i}
 
         save_file(decoder_dict, f"{self.save_dir}/W_dec_{source_layer}.safetensors")
