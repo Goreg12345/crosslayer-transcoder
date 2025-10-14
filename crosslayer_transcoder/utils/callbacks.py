@@ -13,10 +13,10 @@ from torch.profiler import (
     tensorboard_trace_handler,
 )
 
-from crosslayer_transcoder.utils.convert_to_circuit_tracer import (
-    convert_model_to_circuit_tracer,
-)
 from crosslayer_transcoder.utils.hf import upload_to_hub
+from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
+    CircuitTracerConverter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,10 @@ class CircuitTracerCallback(L.Callback):
         self.save_dir = Path(save_dir)
 
     def _convert_model(self, pl_module):
-        convert_model_to_circuit_tracer(pl_module, self.save_dir.as_posix())
+        circuit_tracer_converter = CircuitTracerConverter(
+            save_dir=self.save_dir.as_posix()
+        )
+        circuit_tracer_converter.convert(pl_module)
         logger.info(f"Circuit-tracer model saved to {self.save_dir.as_posix()}")
 
     def on_train_start(self, trainer, pl_module):
