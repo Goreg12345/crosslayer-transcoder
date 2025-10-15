@@ -4,7 +4,7 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates. If using gradient accumulation, this is not the number of batches.
-  max_steps: 20
+  max_steps: 2
   val_check_interval: 2
   limit_val_batches: 1
   enable_checkpointing: false  # We use custom end-of-training checkpoint
@@ -43,33 +43,33 @@ model:
           init_args:
             d_acts: 768
             d_features: 48
-            n_layers: 2
+            n_layers: 12
 
         decoder:
           class_path: crosslayer_transcoder.model.clt.CrosslayerDecoder
           init_args:
             d_acts: 768
             d_features: 48
-            n_layers: 2
+            n_layers: 12
         
         nonlinearity:
           class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
           init_args:
             theta: 0.03
             bandwidth: 0.01
-            n_layers: 2
+            n_layers: 12
             d_features: 48
         
         input_standardizer:
           class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
           init_args:
-            n_layers: 2
+            n_layers: 12
             activation_dim: 768
         
         output_standardizer:
           class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
           init_args:
-            n_layers: 2
+            n_layers: 12
             activation_dim: 768
 
     # Pre-constructed replacement model
@@ -85,7 +85,7 @@ model:
       class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
       init_args:
         n_features: 48
-        n_layers: 2
+        n_layers: 12
         return_per_layer: true
         return_log_freqs: true
         return_neuron_indices: true
@@ -93,7 +93,7 @@ model:
 
     # Training parameters
     learning_rate: 1e-4
-    compile: true  # if using torch.compile
+    compile: false  # if using torch.compile
     lr_decay_step: 80_000  # lr is scaled by lr_decay_factor after this many steps
     lr_decay_factor: 0.1
 
@@ -110,9 +110,9 @@ data:
   class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
-    buffer_size: 200  # number of activations to store in the buffer
+    buffer_size: 10  # number of activations to store in the buffer
     n_in_out: 2  # number of input and output layers
-    n_layers: 2  # number of layers in the model
+    n_layers: 12  # number of layers in the model
     activation_dim: 768  # dimension of the activations
     dtype: "float16"  # dtype of the activations
     max_batch_size: 50  # maximum batch size for the data loader
@@ -124,7 +124,7 @@ data:
     # Dataset settings
     dataset_name: "roneneldan/TinyStories"
     dataset_split: "train"
-    max_sequence_length: 128
+    max_sequence_length: 2048
     
     # Generation settings
     generation_batch_size: 2
@@ -152,8 +152,8 @@ data:
     use_shared_memory: true
 
     # Device configuration
-    device_map: "cuda:0"  # "cpu", "auto", "cuda:0", "cuda:0,1,2,3"
-    deployment_policy: "gpu_only"  # "cpu_only", "gpu_only", or "dynamic"
+    device_map: "auto"  # "cpu", "auto", "cuda:0", "cuda:0,1,2,3"
+    deployment_policy: "dynamic"  # "cpu_only", "gpu_only", or "dynamic"
     # dynamic will use CPU and only GPU if the buffer is almost empty to refill fast. Use this if you use a single GPU and have a beefy CPU.
 
     # WandB logging configuration for data generation
