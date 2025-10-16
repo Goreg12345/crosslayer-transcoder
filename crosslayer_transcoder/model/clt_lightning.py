@@ -15,7 +15,12 @@ from torch.distributed.tensor.parallel import parallelize_module
 import wandb
 from crosslayer_transcoder.metrics.dead_features import DeadFeatures
 from crosslayer_transcoder.metrics.replacement_model_accuracy import ReplacementModelAccuracy
-from crosslayer_transcoder.model.clt import CrosslayerDecoder, CrossLayerTranscoder, Decoder
+from crosslayer_transcoder.model.clt import (
+    CrosslayerDecoder,
+    CrossLayerTranscoder,
+    Decoder,
+    MatryoshkaCrosslayerDecoder,
+)
 from crosslayer_transcoder.model.jumprelu import JumpReLU
 from crosslayer_transcoder.model.topk import BatchTopK
 
@@ -147,7 +152,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
         # Log encoder/decoder direction magnitudes
         lens = self.model.encoder.W.norm(p=2, dim=1)  # (n_layers, d_features)
         self.log("model/encoder_direction_magnitude", lens.mean())
-        if isinstance(self.model.decoder, CrosslayerDecoder):
+        if isinstance(self.model.decoder, (CrosslayerDecoder, MatryoshkaCrosslayerDecoder)):
             lens_dec = [
                 self.model.decoder.get_parameter(f"W_{l}").norm(p=2, dim=-1).flatten()
                 for l in range(self.model.decoder.n_layers)
@@ -217,6 +222,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
             self.compute_dead_features
             and self.dead_features is not None
             and self.global_step % self.compute_dead_features_every == 0
+            and self.dead_features.n_total > 0  # Only compute if we have data
         ):
             features_stats = self.dead_features.compute()
             dead_total = features_stats["mean"]
@@ -513,4 +519,116 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
 
             torch.cuda.memory._record_memory_history(enabled=None)
             exit()
+        return loss
+
+
+class MatryoshkaTopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
+    def __init__(
+        self,
+        topk_aux: torch.nn.Module,
+        tokens_till_dead: int = 100_000,
+        aux_loss_scale: float = 1 / 32,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.tokens_till_dead = tokens_till_dead
+        self.topk_aux = topk_aux
+        self.aux_loss_scale = aux_loss_scale
+
+    def log_matryoshka_activation_frequencies(self, features_stats):
+        """Log log activation frequencies per group and layer for matryoshka structure."""
+        if not isinstance(self.model.decoder, MatryoshkaCrosslayerDecoder):
+            return
+
+        # Only proceed if dead_features metric is available and has log_freqs
+        if not self.compute_dead_features or self.dead_features is None:
+            return
+
+        if "log_freqs" not in features_stats:
+            return
+
+        # Get group indices from the decoder
+        group_indices = self.model.decoder.group_indices
+        n_groups = len(group_indices) - 1
+
+        dead_log_freqs = features_stats["log_freqs"]  # (n_layers, d_features)
+
+        # Log log frequencies per group and layer
+        if self.logger and (
+            isinstance(self.logger.experiment, wandb.wandb_run.Run)
+            or (isinstance(self.logger, L.pytorch.loggers.WandbLogger))
+        ):
+            for layer in range(self.model.encoder.n_layers):
+                for group_idx in range(n_groups):
+                    start_idx = group_indices[group_idx]
+                    end_idx = group_indices[group_idx + 1]
+
+                    # Get log frequencies for this layer and group
+                    group_log_freqs = dead_log_freqs[layer, start_idx:end_idx]
+
+                    # Log to wandb
+                    self.logger.experiment.log(
+                        {f"groups/log_feature_density/layer_{layer}_group_{group_idx}": group_log_freqs},
+                        step=self.global_step,
+                    )
+
+                    # Log mean log frequency for this group
+                    self.log(
+                        f"groups/log_feature_density_mean/layer_{layer}_group_{group_idx}",
+                        group_log_freqs.mean(),
+                    )
+
+    def training_step(self, batch, batch_idx):
+        # torch.cuda.empty_cache()
+        # gc.collect()
+
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
+
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        pre_actvs, features, recons_norm, recons = self.forward(resid)
+
+        mse = (recons_norm - self.model.output_standardizer.standardize(mlp_out).unsqueeze(1)) ** 2
+
+        # Log training metrics using shared method
+        if batch_idx % self.log_metrics_every == 0:
+            # Get features_stats before calling log_training_metrics (which resets the metric)
+            features_stats = None
+            if (
+                self.compute_dead_features
+                and self.dead_features is not None
+                and self.global_step % self.compute_dead_features_every == 0
+            ):
+                # Only compute if we have accumulated enough data
+                if self.dead_features.n_total > 0:
+                    features_stats = self.dead_features.compute()
+
+            self.log_training_metrics(
+                features, recons_norm[:, -1, :, :], recons[:, -1, :, :], mlp_out, batch_idx
+            )
+
+            # Log matryoshka activation frequencies if dead_features are computed
+            if features_stats is not None:
+                self.log_matryoshka_activation_frequencies(features_stats)
+
+        idxs_dead = self.update_dead_features(features)
+
+        # AUXILLIARY LOSS
+        idxs_dead = idxs_dead.repeat(features.shape[0], 1, 1)
+        dead_pre_actvs = torch.where(idxs_dead, pre_actvs, -torch.inf)
+        dead_features = self.topk_aux(dead_pre_actvs)
+        aux_recons = self.model.decoder(dead_features)[:, -1, :, :]
+        recons_err = self.model.output_standardizer.standardize(mlp_out) - recons_norm[:, -1, :, :]
+        aux_loss = (aux_recons - recons_err) ** 2
+
+        aux_loss = torch.nan_to_num(aux_loss, 0.0)
+
+        loss = mse.mean() + self.aux_loss_scale * aux_loss.mean()
+        self.log("training/aux_loss", aux_loss.mean())
+        self.log("training/loss", loss)
+
+        for group_idx in range(recons.shape[1]):
+            self.log(f"groups/mse_{group_idx}", mse[:, group_idx, :, :].mean())
+
         return loss

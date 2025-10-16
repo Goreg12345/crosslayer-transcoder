@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -246,6 +246,80 @@ class CrosslayerDecoder(nn.Module):
         return recons
 
 
+class MatryoshkaCrosslayerDecoder(nn.Module):
+    def __init__(self, d_acts: int, d_features: int, n_layers: int, group_indices: List[int]):
+        super().__init__()
+        self.d_acts = d_acts
+        self.d_features = d_features
+        self.n_layers = n_layers
+
+        assert group_indices[0] == 0
+        assert group_indices[-1] == d_features
+        self.group_indices = group_indices
+
+        for i in range(n_layers):
+            self.register_parameter(f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts))))
+        self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
+        for i in range(self.n_layers):
+            self.get_parameter(f"W_{i}").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
+            # for l in range(i):
+            #    self.get_parameter(f"W_{i}").data[l, :, :] = self.get_parameter(f"W_{l}").data[l, :, :] * 0.0
+
+        self.b.data.zero_()
+
+    @torch.no_grad()
+    def forward_layer(
+        self, features: Float[torch.Tensor, "batch_size seq from_layer d_features"], layer: int
+    ) -> Float[torch.Tensor, "batch_size seq d_acts"]:
+        return (
+            einsum(
+                features,
+                self.get_parameter(f"W_{layer}"),
+                "batch_size seq from_layer d_features, from_layer d_features d_acts -> batch_size seq d_acts",
+            )
+            + self.b[layer]
+        )
+
+    def forward(
+        self, features: Float[torch.Tensor, "batch_size n_layers d_features"], layer: str = "all"
+    ) -> Float[torch.Tensor, "batch_size n_layers d_acts"]:
+        if layer != "all":
+            return self.forward_layer(features, layer)
+
+        # (batch, n_groups, n_layers, d_acts)
+        recons = torch.zeros(
+            features.shape[0],
+            len(self.group_indices) - 1,
+            self.n_layers,
+            self.d_acts,
+            device=features.device,
+            dtype=features.dtype,
+        )
+        # initialize first group with decoder bias
+        recons[:, 0, :, :] = self.b.unsqueeze(0)
+        for l in range(self.n_layers):
+            W = self.get_parameter(f"W_{l}")
+            for group_idx, (start_idx, end_idx) in enumerate(
+                zip(self.group_indices[:-1], self.group_indices[1:])
+            ):
+                group_features = features[..., : l + 1, start_idx:end_idx]
+                group_decoder_W = W[:, start_idx:end_idx, :]
+                group_recons = einsum(
+                    group_features,
+                    group_decoder_W,
+                    "batch layer d_group_features, layer d_group_features d_acts -> batch d_acts",
+                )
+                if group_idx == 0:
+                    recons[:, group_idx, l, :] = group_recons  # + recons[:, group_idx, l, :]
+                else:
+                    recons[:, group_idx, l, :] = recons[:, group_idx - 1, l, :] + group_recons
+        return recons
+
+
 class CrossLayerTranscoder(nn.Module):
     def __init__(
         self,
@@ -253,7 +327,7 @@ class CrossLayerTranscoder(nn.Module):
         input_standardizer: Standardizer,
         output_standardizer: Standardizer,
         encoder: Encoder,
-        decoder: Union[Decoder, CrosslayerDecoder],
+        decoder: Union[Decoder, CrosslayerDecoder, MatryoshkaCrosslayerDecoder],
     ):
         super().__init__()
 
