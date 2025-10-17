@@ -34,7 +34,6 @@ class CircuitTracerConverter(ModelConverter):
         assert input_standardizer.std.shape == (n_layers, d_acts)
         W_enc_folded = encoder.W.float() / input_standardizer.std.unsqueeze(-1)
 
-        # TODO: check if bias is present
         if hasattr(encoder, "b"):
             b_enc_folded = encoder.b - (
                 einsum(

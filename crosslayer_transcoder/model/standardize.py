@@ -53,6 +53,35 @@ class DimensionwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[layer]) / self.std[layer]
 
+    def fold_in_encoder(
+        self,
+        W_enc: Float[torch.Tensor, "n_layers actv_dim d_features"],
+        b_enc: Float[torch.Tensor, "n_layers d_features"],
+    ):
+        assert self.std.shape == (W_enc.shape[0], W_enc.shape[1])
+
+        W_enc_folded = W_enc / self.std.unsqueeze(-1)
+
+        # b_enc_folded = b_enc - (
+        #     einsum(
+        #         self.mean.float(),
+        #         W_enc_folded.float(),
+        #         "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
+        #     )
+        # )
+
+        # b_enc_folded = b_enc - ((self.mean / self.std).unsqueeze(-1) * W_enc)
+
+        b_enc_folded = b_enc - (
+            einsum(
+                (self.mean.float() / self.std.float()),
+                W_enc.float(),
+                "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
+            )
+        )
+
+        return W_enc_folded, b_enc_folded
+
 
 class DimensionwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
