@@ -110,6 +110,21 @@ class DimensionwiseOutputStandardizer(Standardizer):
         else:
             return (mlp_out - self.mean[layer]) / self.std[layer]
 
+    def fold_in_decoder_weights_layer(
+        self,
+        W_dec: Float[torch.Tensor, "layers d_features d_acts"],
+        layer: int,
+    ):
+        print("W_dec.shape:", W_dec.shape)
+        print("self.std.shape:", self.std.shape)
+
+        # Decoder is going to have dim 0 == i layers
+        std = self.std[layer]
+
+        W_dec_folded = W_dec * std.unsqueeze(0).unsqueeze(0)
+
+        return W_dec_folded
+
 
 class SamplewiseInputStandardizer(Standardizer):
     def __init__(self):

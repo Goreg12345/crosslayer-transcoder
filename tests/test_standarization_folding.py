@@ -1,8 +1,12 @@
 import torch
 from einops import einsum
+from torch.func import functional_call
 
-from crosslayer_transcoder.model.clt import Encoder
-from crosslayer_transcoder.model.standardize import DimensionwiseInputStandardizer
+from crosslayer_transcoder.model.clt import CrosslayerDecoder, Encoder
+from crosslayer_transcoder.model.standardize import (
+    DimensionwiseInputStandardizer,
+    DimensionwiseOutputStandardizer,
+)
 
 
 def test_math_sanity_check():
@@ -97,3 +101,62 @@ def test_encoder_standarization_folding():
 
     # test equality
     assert torch.allclose(pre_actvs, pre_actvs_folded, rtol=1e-7, atol=1e-9)
+
+
+def test_decoder_standarization_folding():
+    # create test tensors
+
+    batch_size = 100
+    d_acts = 768
+    d_feats = 32
+    n_layers = 12
+
+    torch.manual_seed(42)
+
+    dtype = torch.float64
+
+    encoder_batch = torch.randn((batch_size, 2, n_layers, d_acts), dtype=dtype)
+
+    decoder = CrosslayerDecoder(
+        d_acts=d_acts, d_features=d_feats, n_layers=n_layers
+    ).to(dtype)
+    output_std = DimensionwiseOutputStandardizer(
+        n_layers=n_layers, activation_dim=d_acts
+    ).to(dtype)
+
+    output_std.initialize_from_batch(batch=encoder_batch)
+
+    # run tensors through the orignal forward passes
+
+    test_features = torch.randn((batch_size, n_layers, d_feats), dtype=dtype)
+
+    recons_norm = decoder(test_features)
+
+    recons = output_std(recons_norm)
+
+    # fold in
+
+    folded_params = {}
+    for layer in range(n_layers):
+        w_dec_folded = output_std.fold_in_decoder_weights_layer(
+            decoder.get_parameter(f"W_{layer}"),
+            layer,
+        )
+        assert w_dec_folded.shape == decoder.get_parameter(f"W_{layer}").shape
+        folded_params[f"W_{layer}"] = torch.nn.Parameter(w_dec_folded.clone().detach())
+
+    # fold bias
+    b_dec_folded = decoder.b * output_std.std + output_std.mean
+    folded_params["b"] = torch.nn.Parameter(b_dec_folded.clone().detach())
+
+    print("folded_params:", folded_params.keys())
+
+    recons_folded = functional_call(
+        decoder, folded_params, test_features, {"layer": "all"}
+    )
+
+    diff = recons - recons_folded
+    print("max diff:", diff.max().item(), "mean diff:", diff.mean().item())
+
+    # test equality
+    assert torch.allclose(recons, recons_folded, rtol=1e-7, atol=1e-9)
