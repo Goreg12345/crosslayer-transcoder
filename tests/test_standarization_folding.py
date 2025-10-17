@@ -87,14 +87,11 @@ def test_encoder_standarization_folding():
     w_enc_folded, b_enc_folded = input_std.fold_in_encoder(encoder.W, encoder.b)
     # run inputs with folded
 
-    pre_actvs_folded = einsum(
-        resid,
-        w_enc_folded,
-        "batch_size n_layers d_acts, n_layers d_acts d_features -> batch_size n_layers d_features",
-    )
-    pre_actvs_folded = pre_actvs_folded.contiguous()
-
-    pre_actvs_folded = pre_actvs_folded + b_enc_folded
+    folded_params = {
+        "W": torch.nn.Parameter(w_enc_folded.clone().detach()),
+        "b": torch.nn.Parameter(b_enc_folded.clone().detach()),
+    }
+    pre_actvs_folded = functional_call(encoder, folded_params, resid, {"layer": "all"})
 
     diff = pre_actvs - pre_actvs_folded
     print("max diff:", diff.max().item(), "mean diff:", diff.mean().item())
