@@ -5,6 +5,50 @@ from crosslayer_transcoder.model.clt import Encoder
 from crosslayer_transcoder.model.standardize import DimensionwiseInputStandardizer
 
 
+def test_math_sanity_check():
+    batch_size, d_acts, d_feats, n_layers = 100, 768, 32, 12
+    torch.manual_seed(42)
+    dtype = torch.float64
+    batch = torch.randn((batch_size, 2, n_layers, d_acts), dtype=dtype)
+    encoder = Encoder(d_acts=d_acts, d_features=d_feats, n_layers=n_layers).to(dtype)
+
+    input_std = DimensionwiseInputStandardizer(
+        n_layers=n_layers, activation_dim=d_acts
+    ).to(dtype)
+    input_std.initialize_from_batch(batch=batch)
+
+    resid = batch[:, 0]
+    W = encoder.W
+    b = encoder.b
+    mean, std = input_std.mean, input_std.std
+
+    W_div_std = W / std.unsqueeze(-1)
+
+    lhs = (
+        einsum(
+            (resid - mean) / std,
+            W,
+            "batch n_layers d_acts, n_layers d_acts d_features -> batch n_layers d_features",
+        )
+        + b
+    )
+    rhs = (
+        einsum(
+            resid,
+            W_div_std,
+            "batch n_layers d_acts, n_layers d_acts d_features -> batch n_layers d_features",
+        )
+        + b
+        - einsum(
+            mean,
+            W_div_std,
+            "n_layers d_acts, n_layers d_acts d_features -> n_layers d_features",
+        )
+    )
+
+    assert torch.allclose(lhs, rhs, rtol=1e-7, atol=1e-9)
+
+
 def test_encoder_standarization_folding():
     # create test tensors
 
@@ -15,14 +59,16 @@ def test_encoder_standarization_folding():
 
     torch.manual_seed(42)
 
-    batch = torch.randn((batch_size, 2, n_layers, d_acts))
+    dtype = torch.float64
 
-    encoder = Encoder(d_acts=d_acts, d_features=d_feats, n_layers=n_layers)
-    input_std = DimensionwiseInputStandardizer(n_layers=n_layers, activation_dim=d_acts)
+    batch = torch.randn((batch_size, 2, n_layers, d_acts), dtype=dtype)
+
+    encoder = Encoder(d_acts=d_acts, d_features=d_feats, n_layers=n_layers).to(dtype)
+    input_std = DimensionwiseInputStandardizer(
+        n_layers=n_layers, activation_dim=d_acts
+    ).to(dtype)
 
     input_std.initialize_from_batch(batch=batch)
-
-    assert (input_std.std > 1e-8).all(), "Std values too small"
 
     # run tensors through the orignal forward passes
 
@@ -35,7 +81,6 @@ def test_encoder_standarization_folding():
     # fold in
 
     w_enc_folded, b_enc_folded = input_std.fold_in_encoder(encoder.W, encoder.b)
-
     # run inputs with folded
 
     pre_actvs_folded = einsum(
@@ -47,6 +92,8 @@ def test_encoder_standarization_folding():
 
     pre_actvs_folded = pre_actvs_folded + b_enc_folded
 
-    # test equality
+    diff = pre_actvs - pre_actvs_folded
+    print("max diff:", diff.max().item(), "mean diff:", diff.mean().item())
 
-    assert torch.allclose(pre_actvs, pre_actvs_folded)
+    # test equality
+    assert torch.allclose(pre_actvs, pre_actvs_folded, rtol=1e-7, atol=1e-9)

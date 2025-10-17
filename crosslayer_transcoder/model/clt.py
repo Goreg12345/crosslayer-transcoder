@@ -147,7 +147,7 @@ class Encoder(nn.Module):
         pre_actvs = pre_actvs.contiguous()
 
         if self.bias:
-            pre_actvs = pre_actvs + self.b.to(torch.float16)
+            pre_actvs = pre_actvs + self.b.to(acts_norm.dtype)
 
         return pre_actvs
 
