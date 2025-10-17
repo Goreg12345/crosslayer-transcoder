@@ -29,25 +29,11 @@ class CircuitTracerConverter(ModelConverter):
         d_acts = encoder.d_acts  # -> d_model
         d_features = encoder.d_features  # -> d_transcoder
 
-        # fold in the input standardization
-        assert encoder.W.shape == (n_layers, d_acts, d_features)
-        assert input_standardizer.std.shape == (n_layers, d_acts)
-        W_enc_folded = encoder.W.float() / input_standardizer.std.unsqueeze(-1)
-
-        if hasattr(encoder, "b"):
-            b_enc_folded = encoder.b - (
-                einsum(
-                    input_standardizer.mean.float(),
-                    W_enc_folded.float(),
-                    "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
-                )
-            )
-
-        # TODO: check/assert shapes
-        b_dec_folded = (
-            decoder.b.float() * output_standardizer.std.float()
-            + output_standardizer.mean.float()
+        W_enc_folded, b_enc_folded = input_standardizer.fold_in_encoder(
+            encoder.W.float(), encoder.b.float()
         )
+
+        b_dec_folded = output_standardizer.fold_in_decoder_bias(decoder.b.float())
 
         # encoder
         for source_layer in range(encoder.n_layers):
@@ -71,7 +57,6 @@ class CircuitTracerConverter(ModelConverter):
                     else torch.zeros(d_features)
                 ),
             }
-            # TODO: check names
             save_file(
                 layer_encoder_dict, f"{self.save_dir}/W_enc_{source_layer}.safetensors"
             )
@@ -83,12 +68,9 @@ class CircuitTracerConverter(ModelConverter):
             # get decoder mat for layer i --> k
             decoder_w_k = decoder.get_parameter(f"W_{k}")
 
-            # [n_layers, d_features, d_acts] * [n_layers, d_acts]
-            # NOTE: we want to multiply every feature by the activation std
-            assert output_standardizer.std.shape == (n_layers, d_acts)
-            assert decoder_w_k.shape == (n_layers, d_features, d_acts)
-            decoder_w_k_folded = (
-                decoder_w_k.float() * output_standardizer.std.unsqueeze(1).float()
+            # fold in output standardization for decoder weights using standardizer method
+            decoder_w_k_folded = output_standardizer.fold_in_decoder_weights_layer(
+                decoder_w_k.float(), k
             )
             dec_i_k = decoder_w_k_folded[source_layer, ...]
             assert dec_i_k.shape == (
