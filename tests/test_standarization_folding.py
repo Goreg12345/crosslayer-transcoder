@@ -67,18 +67,14 @@ def test_math_sanity_check():
 
 
 def test_math_sanity_check():
-    batch_size, d_acts, d_feats, n_layers = 100, 768, 32, 12
-    torch.manual_seed(42)
-    dtype = torch.float64
-    batch = torch.randn((batch_size, 2, n_layers, d_acts), dtype=dtype)
-    encoder = Encoder(d_acts=d_acts, d_features=d_feats, n_layers=n_layers).to(dtype)
+    encoder = Encoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS).to(DTYPE)
 
     input_std = DimensionwiseInputStandardizer(
-        n_layers=n_layers, activation_dim=d_acts
-    ).to(dtype)
-    input_std.initialize_from_batch(batch=batch)
+        n_layers=N_LAYERS, activation_dim=D_ACTS
+    ).to(DTYPE)
+    input_std.initialize_from_batch(batch=BATCH)
 
-    resid = batch[:, 0]
+    resid = BATCH[:, 0]
     W = encoder.W
     b = encoder.b
     mean, std = input_std.mean, input_std.std
@@ -107,7 +103,7 @@ def test_math_sanity_check():
         )
     )
 
-    assert torch.allclose(lhs, rhs, rtol=1e-7, atol=1e-9)
+    assert_allclose(lhs, rhs)
 
 
 def test_encoder_standarization_folding():
