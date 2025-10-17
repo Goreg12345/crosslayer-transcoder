@@ -116,7 +116,7 @@ def test_decoder_standarization_folding():
         assert w_dec_folded.shape == decoder.get_parameter(f"W_{layer}").shape
         folded_params[f"W_{layer}"] = torch.nn.Parameter(w_dec_folded.clone().detach())
 
-    b_dec_folded = decoder.b * output_std.std + output_std.mean
+    b_dec_folded = output_std.fold_in_decoder_bias(decoder.b)
     folded_params["b"] = torch.nn.Parameter(b_dec_folded.clone().detach())
 
     recons_folded = functional_call(

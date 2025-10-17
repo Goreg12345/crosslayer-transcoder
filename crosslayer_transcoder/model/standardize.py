@@ -125,6 +125,12 @@ class DimensionwiseOutputStandardizer(Standardizer):
 
         return W_dec_folded
 
+    def fold_in_decoder_bias(
+        self,
+        b_dec: Float[torch.Tensor, "n_layers d_acts"],
+    ):
+        return b_dec * self.std + self.mean
+
 
 class SamplewiseInputStandardizer(Standardizer):
     def __init__(self):
