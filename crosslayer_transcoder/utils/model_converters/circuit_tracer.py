@@ -1,9 +1,10 @@
-from einops import einsum
-from crosslayer_transcoder.utils.model_converter import CLTModule, ModelConverter
+from pathlib import Path
+
 import torch
 import yaml
 from safetensors.torch import save_file
-from pathlib import Path
+
+from crosslayer_transcoder.utils.model_converter import CLTModule, ModelConverter
 
 
 class CircuitTracerConverter(ModelConverter):
@@ -26,8 +27,8 @@ class CircuitTracerConverter(ModelConverter):
         decoder = model.model.decoder
         nonlinearity = model.model.nonlinearity
         n_layers = encoder.n_layers
-        d_acts = encoder.d_acts  # -> d_model
-        d_features = encoder.d_features  # -> d_transcoder
+        d_acts = encoder.d_acts  # -> circuit-tracer.d_model
+        d_features = encoder.d_features  # -> circuit-tracer.d_transcoder
 
         W_enc_folded, b_enc_folded = input_standardizer.fold_in_encoder(
             encoder.W.float(), encoder.b.float()
@@ -41,16 +42,8 @@ class CircuitTracerConverter(ModelConverter):
                 f"W_enc_{source_layer}": W_enc_folded[source_layer]
                 .T.contiguous()
                 .cpu(),  # Transpose!
-                f"b_enc_{source_layer}": (
-                    b_enc_folded[source_layer].cpu()
-                    if hasattr(encoder, "b")
-                    else torch.zeros(encoder.d_features)
-                ),
-                f"b_dec_{source_layer}": (
-                    b_dec_folded[source_layer].cpu()
-                    if hasattr(decoder, "b")
-                    else torch.zeros(d_acts)
-                ),
+                f"b_enc_{source_layer}": (b_enc_folded[source_layer].cpu()),
+                f"b_dec_{source_layer}": (b_dec_folded[source_layer].cpu()),
                 f"threshold_{source_layer}": (
                     nonlinearity.theta.cpu()
                     if hasattr(nonlinearity, "theta")
@@ -61,7 +54,6 @@ class CircuitTracerConverter(ModelConverter):
                 layer_encoder_dict, f"{self.save_dir}/W_enc_{source_layer}.safetensors"
             )
 
-        # decoder
         output_dec_i = torch.zeros([d_features, n_layers - source_layer, d_acts])
 
         for k in range(source_layer, n_layers):
@@ -83,7 +75,6 @@ class CircuitTracerConverter(ModelConverter):
 
         save_file(decoder_dict, f"{self.save_dir}/W_dec_{source_layer}.safetensors")
 
-        # Create config
         config = {
             "model_kind": "cross_layer_transcoder",
             "feature_input_hook": self.feature_input_hook,
