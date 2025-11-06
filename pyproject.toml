@@ -14,7 +14,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch>=2.8.0",
     "nnsight==0.5.0.dev7",
-    "datasets>=3.6.0",
+    "datasets==3.6.0",
     "h5py>=3.13.0",
     "einops>=0.8.1",
     "jaxtyping>=0.3.2",
@@ -24,7 +24,8 @@ dependencies = [
     "numpy>=1.24.0",
     "jsonargparse[signatures]>=4.27.7",
     "modal>=1.1.4",
-    "circuit-tracer@git+https://github.com/safety-research/circuit-tracer.git@main"
+    "circuit-tracer@git+https://github.com/safety-research/circuit-tracer.git@main",
+    "hf-transfer>=0.1.9",
 ]
 
 [project.optional-dependencies]
