@@ -65,9 +65,7 @@ class EndOfTrainingCheckpointCallback(L.Callback):
 class ModelConversionCallback(L.Callback):
     """Callback to convert the model to a circuit-tracer model."""
 
-    def __init__(
-        self, save_dir: str = "clt_module", kinds: List[str] = ["circuit_tracer"]
-    ):
+    def __init__(self, save_dir: str = "clt_module", kinds=["circuit_tracer"]):
         super().__init__()
         self.save_dir = Path(save_dir)
         self.kinds = kinds
@@ -83,6 +81,9 @@ class ModelConversionCallback(L.Callback):
             logger.info(
                 f"{kind} model converted and saved to {self.save_dir.as_posix()}"
             )
+
+    def on_test_end(self, trainer, pl_module):
+        self._convert_model(pl_module)
 
 
 class HuggingFaceCallback(L.Callback):
