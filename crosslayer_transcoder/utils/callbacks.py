@@ -2,9 +2,11 @@
 Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
+from ast import List
 import logging
 from pathlib import Path
 
+from huggingface_hub import upload_folder
 import lightning as L
 from torch.profiler import (
     ProfilerActivity,
@@ -13,7 +15,6 @@ from torch.profiler import (
     tensorboard_trace_handler,
 )
 
-from crosslayer_transcoder.utils.hf import upload_to_hub
 from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
     CircuitTracerConverter,
 )
@@ -61,31 +62,27 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         trainer.save_checkpoint(checkpoint_path)
 
 
-class CircuitTracerCallback(L.Callback):
+class ModelConversionCallback(L.Callback):
     """Callback to convert the model to a circuit-tracer model."""
 
-    def __init__(self, save_dir: str = "clt_module"):
+    def __init__(
+        self, save_dir: str = "clt_module", kinds: List[str] = ["circuit_tracer"]
+    ):
         super().__init__()
         self.save_dir = Path(save_dir)
+        self.kinds = kinds
+        self.converters = {
+            "circuit_tracer": CircuitTracerConverter,
+        }
 
     def _convert_model(self, pl_module):
-        circuit_tracer_converter = CircuitTracerConverter(
-            save_dir=self.save_dir.as_posix()
-        )
-        circuit_tracer_converter.convert(pl_module)
-        logger.info(f"Circuit-tracer model saved to {self.save_dir.as_posix()}")
-
-    def on_train_start(self, trainer, pl_module):
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Saving circuit-tracer model to {self.save_dir.as_posix()}")
-
-        self._convert_model(pl_module)
-
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        self._convert_model(pl_module)
-
-    def on_train_end(self, trainer, pl_module):
-        self._convert_model(pl_module)
+        for kind in self.kinds:
+            converter = self.converters[kind](save_dir=self.save_dir.as_posix())
+            # NOTE: conversion also does the saving
+            converter.convert(pl_module)
+            logger.info(
+                f"{kind} model converted and saved to {self.save_dir.as_posix()}"
+            )
 
 
 class HuggingFaceCallback(L.Callback):
@@ -100,4 +97,8 @@ class HuggingFaceCallback(L.Callback):
         self.save_dir = Path(save_dir)
 
     def on_train_end(self, trainer, pl_module):
-        upload_to_hub(self.save_dir.as_posix(), self.repo_id, self.repo_type)
+        upload_folder(
+            folder_path=self.save_dir.as_posix(),
+            repo_id=self.repo_id,
+            repo_type=self.repo_type,
+        )
