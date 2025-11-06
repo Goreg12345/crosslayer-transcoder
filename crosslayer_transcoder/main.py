@@ -27,7 +27,7 @@ class CrossLayerTranscoderCLI(LightningCLI):
         )
 
 
-def main(*args):
+def main():
     """Main entry point for training."""
     # Set up wandb directories
     os.environ.setdefault("WANDB_DIR", f"{os.getcwd()}/wandb")
@@ -45,7 +45,6 @@ def main(*args):
             "prog": "CrossLayer Transcoder Training",
             "description": "Train CrossLayer Transcoder models for neural network interpretability",
         },
-        args=args,
     )
 
 
