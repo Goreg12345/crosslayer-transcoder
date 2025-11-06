@@ -17,11 +17,6 @@ CLTModule = Union[
 
 
 class ModelConverter(ABC):
-    def __init__(
-        self,
-    ):
-        pass
-
     @abstractmethod
     def convert(self, model: CLTModule) -> CLTModule:
         pass
