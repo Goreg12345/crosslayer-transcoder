@@ -24,6 +24,7 @@ dependencies = [
     "numpy>=1.24.0",
     "jsonargparse[signatures]>=4.27.7",
     "modal>=1.1.4",
+    "circuit-tracer@git+https://github.com/safety-research/circuit-tracer.git@main"
 ]
 
 [project.optional-dependencies]
@@ -34,8 +35,6 @@ dev = [
     "circuit-tracer"
 ]
 
-[tool.uv.sources]
-circuit-tracer = { path = "../circuit-tracer", editable = true }
 
 [project.scripts]
 clt = "crosslayer_transcoder.main:main"
@@ -46,6 +45,9 @@ dev-dependencies = [
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references=true
 
 [tool.black]
 line-length = 110
