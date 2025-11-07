@@ -1,3 +1,4 @@
+from einops import einsum
 import torch
 import torch.nn as nn
 from jaxtyping import Float
@@ -52,6 +53,25 @@ class DimensionwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[layer]) / self.std[layer]
 
+    def fold_in_encoder(
+        self,
+        W_enc: Float[torch.Tensor, "n_layers actv_dim d_features"],
+        b_enc: Float[torch.Tensor, "n_layers d_features"],
+    ):
+        assert self.std.shape == (W_enc.shape[0], W_enc.shape[1])
+
+        W_enc_folded = W_enc / self.std.unsqueeze(-1)
+
+        b_enc_folded = b_enc - (
+            einsum(
+                self.mean,
+                W_enc_folded,
+                "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
+            )
+        )
+
+        return W_enc_folded, b_enc_folded
+
 
 class DimensionwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
@@ -89,6 +109,27 @@ class DimensionwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean) / self.std
         else:
             return (mlp_out - self.mean[layer]) / self.std[layer]
+
+    def fold_in_decoder_weights_layer(
+        self,
+        W_dec: Float[torch.Tensor, "layers d_features d_acts"],
+        layer: int,
+    ):
+        print("W_dec.shape:", W_dec.shape)
+        print("self.std.shape:", self.std.shape)
+
+        # Decoder is going to have dim 0 == i layers
+        std = self.std[layer]
+
+        W_dec_folded = W_dec * std.unsqueeze(0).unsqueeze(0)
+
+        return W_dec_folded
+
+    def fold_in_decoder_bias(
+        self,
+        b_dec: Float[torch.Tensor, "n_layers d_acts"],
+    ):
+        return b_dec * self.std + self.mean
 
 
 class SamplewiseInputStandardizer(Standardizer):
