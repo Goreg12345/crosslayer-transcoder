@@ -57,26 +57,26 @@ class CircuitTracerConverter(ModelConverter):
                 layer_encoder_dict, f"{self.save_dir}/W_enc_{source_layer}.safetensors"
             )
 
-        output_dec_i = torch.zeros([d_features, n_layers - source_layer, d_acts])
+            output_dec_i = torch.zeros([d_features, n_layers - source_layer, d_acts])
 
-        for k in range(source_layer, n_layers):
-            # get decoder mat for layer i --> k
-            decoder_w_k = decoder.get_parameter(f"W_{k}")
+            for k in range(source_layer, n_layers):
+                # get decoder mat for layer i --> k
+                decoder_w_k = decoder.get_parameter(f"W_{k}")
 
-            # fold in output standardization for decoder weights using standardizer method
-            decoder_w_k_folded = output_standardizer.fold_in_decoder_weights_layer(
-                decoder_w_k.float(), k
-            )
-            dec_i_k = decoder_w_k_folded[source_layer, ...]
-            assert dec_i_k.shape == (
-                d_features,
-                d_acts,
-            )
-            output_dec_i[:, k - source_layer, ...] = dec_i_k.cpu()
+                # fold in output standardization for decoder weights using standardizer method
+                decoder_w_k_folded = output_standardizer.fold_in_decoder_weights_layer(
+                    decoder_w_k.float(), k
+                )
+                dec_i_k = decoder_w_k_folded[source_layer, ...]
+                assert dec_i_k.shape == (
+                    d_features,
+                    d_acts,
+                )
+                output_dec_i[:, k - source_layer, ...] = dec_i_k.cpu()
 
-        decoder_dict = {f"W_dec_{source_layer}": output_dec_i}
+            decoder_dict = {f"W_dec_{source_layer}": output_dec_i}
 
-        save_file(decoder_dict, f"{self.save_dir}/W_dec_{source_layer}.safetensors")
+            save_file(decoder_dict, f"{self.save_dir}/W_dec_{source_layer}.safetensors")
 
         config = {
             "model_kind": "cross_layer_transcoder",
