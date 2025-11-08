@@ -16,5 +16,6 @@ CLTModule = Union[
 
 class ModelConverter(ABC):
     @abstractmethod
-    def convert(self, model: CLTModule) -> CLTModule:
+    # TODO: single resp
+    def convert_and_save(self, model: CLTModule) -> None:
         pass

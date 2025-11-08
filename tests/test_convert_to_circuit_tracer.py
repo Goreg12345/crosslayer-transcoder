@@ -61,7 +61,7 @@ def test_circuit_tracer_converter():
 
     save_dir = pathlib.Path("clt_module")
     converter = CircuitTracerConverter(save_dir=save_dir)
-    converter.convert(clt_module)
+    converter.convert_and_save(clt_module)
 
 
 if __name__ == "__main__":

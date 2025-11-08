@@ -76,8 +76,7 @@ class ModelConversionCallback(L.Callback):
     def _convert_model(self, pl_module):
         for kind in self.kinds:
             converter = self.converters[kind](save_dir=self.save_dir.as_posix())
-            # NOTE: conversion also does the saving
-            converter.convert(pl_module)
+            converter.convert_and_save(pl_module)
             logger.info(
                 f"{kind} model converted and saved to {self.save_dir.as_posix()}"
             )

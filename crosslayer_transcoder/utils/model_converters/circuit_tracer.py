@@ -4,7 +4,10 @@ import torch
 import yaml
 from safetensors.torch import save_file
 
-from crosslayer_transcoder.utils.model_converter import CLTModule, ModelConverter
+from crosslayer_transcoder.utils.model_converters.model_converter import (
+    CLTModule,
+    ModelConverter,
+)
 
 
 class CircuitTracerConverter(ModelConverter):
@@ -20,7 +23,7 @@ class CircuitTracerConverter(ModelConverter):
 
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-    def convert(self, model: CLTModule) -> CLTModule:
+    def convert_and_save(self, model):
         encoder = model.model.encoder
         input_standardizer = model.model.input_standardizer
         output_standardizer = model.model.output_standardizer
