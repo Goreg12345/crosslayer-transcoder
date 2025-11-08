@@ -14,8 +14,14 @@ from torch.distributed.tensor.parallel import parallelize_module
 
 import wandb
 from crosslayer_transcoder.metrics.dead_features import DeadFeatures
-from crosslayer_transcoder.metrics.replacement_model_accuracy import ReplacementModelAccuracy
-from crosslayer_transcoder.model.clt import CrosslayerDecoder, CrossLayerTranscoder, Decoder
+from crosslayer_transcoder.metrics.replacement_model_accuracy import (
+    ReplacementModelAccuracy,
+)
+from crosslayer_transcoder.model.clt import (
+    CrosslayerDecoder,
+    CrossLayerTranscoder,
+    Decoder,
+)
 from crosslayer_transcoder.model.jumprelu import JumpReLU
 from crosslayer_transcoder.model.topk import BatchTopK
 
@@ -49,7 +55,9 @@ class CrossLayerTranscoderModule(L.LightningModule):
     ):
         super().__init__(*args, **kwargs)
 
-        self.save_hyperparameters(ignore=["model", "replacement_model", "dead_features"])
+        self.save_hyperparameters(
+            ignore=["model", "replacement_model", "dead_features"]
+        )
         # torch.cuda.memory._record_memory_history(max_entries=100_000)
 
         # Store pre-constructed modules
@@ -77,13 +85,16 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.beta2 = beta2
         self.log_metrics_every = log_metrics_every
 
-        assert (
-            self.model.encoder.n_layers == self.model.decoder.n_layers
-        ), "Encoder and decoder must have the same number of layers"
+        assert self.model.encoder.n_layers == self.model.decoder.n_layers, (
+            "Encoder and decoder must have the same number of layers"
+        )
 
         self.register_buffer(
             "last_active",
-            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.long),
+            torch.zeros(
+                (self.model.encoder.n_layers, self.model.encoder.d_features),
+                dtype=torch.long,
+            ),
         )
 
     def configure_model(self):
@@ -107,7 +118,9 @@ class CrossLayerTranscoderModule(L.LightningModule):
             }
             parallelize_module(self, tp_mesh, plan)
 
-    def forward(self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
+    def forward(
+        self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],  # pre_actvs
         Float[torch.Tensor, "batch_size n_layers d_features"],  # features
         Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons_norm
@@ -130,13 +143,18 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         ss_err = (mlp_out_norm - recons_norm) ** 2
         ss_err = ss_err.sum(dim=0)
-        ss_total = ((mlp_out_norm - mlp_out_norm.mean(dim=0, keepdim=True)) ** 2).sum(dim=0)
+        ss_total = ((mlp_out_norm - mlp_out_norm.mean(dim=0, keepdim=True)) ** 2).sum(
+            dim=0
+        )
         fvu = (ss_err / ss_total).mean()  # (n_layers, d_model)
         self.log("metrics/fraction_of_variance_unexplained", fvu)
         fvu_per_layer = (ss_err / ss_total).mean(dim=-1)
         assert fvu_per_layer.shape == (self.model.encoder.n_layers,)
         for layer in range(self.model.encoder.n_layers):
-            self.log(f"layers/fraction_of_variance_unexplained/layer_{layer}", fvu_per_layer[layer])
+            self.log(
+                f"layers/fraction_of_variance_unexplained/layer_{layer}",
+                fvu_per_layer[layer],
+            )
 
         # number of tokens seen
         if not hasattr(self, "tokens_seen"):
@@ -171,7 +189,8 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.log("metrics/recons_standardized_std", recons_norm.std())
         self.log(
             "metrics/L0_avg_per_layer",
-            torch.count_nonzero(active_features) / (features.shape[0] * features.shape[1]),
+            torch.count_nonzero(active_features)
+            / (features.shape[0] * features.shape[1]),
         )
 
         # Magnitude of feature activations - memory efficient version
@@ -197,7 +216,9 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         # Log L0 table per layer
         if batch_idx % 500 == 1:
-            l0_per_layer = torch.count_nonzero(active_features, dim=(0, 2)) / features.shape[0]
+            l0_per_layer = (
+                torch.count_nonzero(active_features, dim=(0, 2)) / features.shape[0]
+            )
 
             if self.logger and isinstance(self.logger.experiment, wandb.wandb_run.Run):
                 table = wandb.Table(
@@ -205,7 +226,11 @@ class CrossLayerTranscoderModule(L.LightningModule):
                     columns=["layer", "L0"],
                 )
                 self.logger.experiment.log(
-                    {"layers/L0_per_layer": wandb.plot.bar(table, "layer", "L0", title="L0 per Layer")},
+                    {
+                        "layers/L0_per_layer": wandb.plot.bar(
+                            table, "layer", "L0", title="L0 per Layer"
+                        )
+                    },
                     step=self.global_step,
                 )
 
@@ -234,7 +259,11 @@ class CrossLayerTranscoderModule(L.LightningModule):
                 ):
                     for layer in range(dead_log_freqs.shape[0]):
                         self.logger.experiment.log(
-                            {f"layers/log_feature_density/layer_{layer}": dead_log_freqs[layer]},
+                            {
+                                f"layers/log_feature_density/layer_{layer}": dead_log_freqs[
+                                    layer
+                                ]
+                            },
                             step=self.global_step,
                         )
                     self.logger.experiment.log(
@@ -304,11 +333,17 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         if self.optimizer == "adam":
             optimizer = torch.optim.Adam(
-                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2), fused=True
+                self.parameters(),
+                lr=self.learning_rate,
+                betas=(self.beta1, self.beta2),
+                fused=True,
             )
         elif self.optimizer == "adamw":
             optimizer = torch.optim.AdamW(
-                self.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2), fused=True
+                self.parameters(),
+                lr=self.learning_rate,
+                betas=(self.beta1, self.beta2),
+                fused=True,
             )
         else:
             raise ValueError(f"Optimizer {self.optimizer} not supported")
@@ -398,7 +433,9 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         if isinstance(self.model.decoder, CrosslayerDecoder):
             dec_norms = torch.zeros_like(features[:1])
             for l in range(self.model.decoder.n_layers):
-                W = self.model.decoder.get_parameter(f"W_{l}")  # (from_layer, d_features, d_acts)
+                W = self.model.decoder.get_parameter(
+                    f"W_{l}"
+                )  # (from_layer, d_features, d_acts)
                 dec_norms[:, : l + 1] = dec_norms[:, : l + 1] + (W**2).sum(dim=-1)
             dec_norms = dec_norms.sqrt()
 
@@ -406,11 +443,17 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
             dec_norms = torch.sqrt((self.model.decoder.W**2).sum(dim=-1))
 
         weighted_features = features * dec_norms * self.c
-        self.log("model/weighted_features_mean", weighted_features.detach().mean().cpu())
+        self.log(
+            "model/weighted_features_mean", weighted_features.detach().mean().cpu()
+        )
 
         if self.use_tanh:
-            weighted_features = torch.tanh(weighted_features)  # (batch_size, n_layers, d_features)
-        sparsity = self.current_sparsity_penalty() * weighted_features.sum(dim=[1, 2]).mean()
+            weighted_features = torch.tanh(
+                weighted_features
+            )  # (batch_size, n_layers, d_features)
+        sparsity = (
+            self.current_sparsity_penalty() * weighted_features.sum(dim=[1, 2]).mean()
+        )
         self.log("training/sparsity_loss", sparsity)
 
         # Compute Pre-activation Loss
@@ -462,7 +505,10 @@ class TopKCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         self.aux_loss_scale = aux_loss_scale
         self.register_buffer(
             "last_active",
-            torch.zeros((self.model.encoder.n_layers, self.model.encoder.d_features), dtype=torch.long),
+            torch.zeros(
+                (self.model.encoder.n_layers, self.model.encoder.d_features),
+                dtype=torch.long,
+            ),
         )
 
     def training_step(self, batch, batch_idx):
