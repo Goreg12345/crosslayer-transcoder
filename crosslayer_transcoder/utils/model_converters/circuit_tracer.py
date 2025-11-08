@@ -46,10 +46,9 @@ class CircuitTracerConverter(ModelConverter):
                 .cpu(),  # Transpose!
                 f"b_enc_{source_layer}": (b_enc_folded[source_layer].cpu()),
                 f"b_dec_{source_layer}": (b_dec_folded[source_layer].cpu()),
+                # TODO: double check non-linearity compatibility
                 f"threshold_{source_layer}": (
-                    nonlinearity.theta.cpu()
-                    if hasattr(nonlinearity, "theta")
-                    else torch.zeros(d_features)
+                    nonlinearity.theta[:, source_layer, :].cpu()
                 ),
             }
             save_file(

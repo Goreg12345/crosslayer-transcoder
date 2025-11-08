@@ -1,29 +1,39 @@
-from circuit_tracer.utils.hf_utils import load_transcoder_from_hub
-import torch
+import pathlib
+import shutil
+from circuit_tracer.transcoder.cross_layer_transcoder import load_clt
 
-# TODO: try the conversion and then try uploading
+from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
+    CircuitTracerConverter,
+)
 
 
-def validate_upload(repo_id: str):
+def test_circuit_tracer_integration(clt_module):
     """Verify uploaded model loads correctly."""
 
-    # Load from HuggingFace
-    transcoder, config = load_transcoder_from_hub(
-        repo_id,
-        device=torch.device("cpu"),
-        dtype=torch.float32,
-        lazy_encoder=False,
+    save_dir = pathlib.Path("clt_module_test")
+    feature_input_hook = "blocks.{layer}.hook_resid_pre"
+    feature_output_hook = "blocks.{layer}.hook_mlp_out"
+
+    converter = CircuitTracerConverter(
+        save_dir=save_dir,
+        feature_input_hook=feature_input_hook,
+        feature_output_hook=feature_output_hook,
+    )
+    converter.convert_and_save(clt_module)
+
+    transcoder = load_clt(
+        clt_path=save_dir.as_posix(),
         lazy_decoder=False,
+        lazy_encoder=False,
+        feature_input_hook=feature_input_hook,
+        feature_output_hook=feature_output_hook,
     )
 
-    print(
-        f"✓ Dimensions: {transcoder.n_layers}L x {transcoder.d_transcoder}F x {transcoder.d_model}D"
-    )
-    print(f"✓ Encoder weights match")
-    print(f"✓ Config: {config['model_kind']}")
+    assert transcoder.n_layers == clt_module.model.encoder.n_layers
+    assert transcoder.d_transcoder == clt_module.model.encoder.d_features
+    assert transcoder.d_model == clt_module.model.encoder.d_acts
+    assert transcoder.feature_input_hook == feature_input_hook
+    assert transcoder.feature_output_hook == feature_output_hook
 
-
-if __name__ == "__main__":
-    validate_upload(
-        repo_id="jiito/clt_test_gpt2_zero",
-    )
+    # cleanup
+    shutil.rmtree(save_dir)
