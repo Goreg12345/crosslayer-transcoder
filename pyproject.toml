@@ -23,6 +23,7 @@ dependencies = [
     "transformers>=4.46.0",
     "numpy>=1.24.0",
     "jsonargparse[signatures]>=4.27.7",
+    "dotenv>=0.9.9",
 ]
 
 [project.optional-dependencies]
