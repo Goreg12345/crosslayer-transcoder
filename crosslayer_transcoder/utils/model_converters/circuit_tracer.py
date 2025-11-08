@@ -5,7 +5,6 @@ import yaml
 from safetensors.torch import save_file
 
 from crosslayer_transcoder.utils.model_converters.model_converter import (
-    CLTModule,
     ModelConverter,
 )
 
