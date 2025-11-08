@@ -1,6 +1,8 @@
 from circuit_tracer.utils.hf_utils import load_transcoder_from_hub
 import torch
 
+# TODO: try the conversion and then try uploading
+
 
 def validate_upload(repo_id: str):
     """Verify uploaded model loads correctly."""

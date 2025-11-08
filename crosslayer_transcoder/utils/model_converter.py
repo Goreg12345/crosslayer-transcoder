@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Union
 
-import lightning as L
-
 from crosslayer_transcoder.model.clt_lightning import (
     CrossLayerTranscoderModule,
     JumpReLUCrossLayerTranscoderModule,

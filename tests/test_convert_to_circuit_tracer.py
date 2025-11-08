@@ -1,4 +1,7 @@
-from crosslayer_transcoder.utils.converters.circuit_tracer import CircuitTracerConverter
+from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
+    CircuitTracerConverter,
+)
+import pathlib
 
 
 def test_circuit_tracer_converter():
@@ -15,6 +18,7 @@ def test_circuit_tracer_converter():
         DimensionwiseOutputStandardizer,
     )
 
+    # TODO: find a better way to build the clt_module
     # Create components based on default.yaml config
     encoder = Encoder(d_acts=768, d_features=10_000, n_layers=12)
 
@@ -54,9 +58,6 @@ def test_circuit_tracer_converter():
         compute_dead_features=True,
         compute_dead_features_every=500,
     )
-
-    # Use the new CircuitTracerConverter directly
-    import pathlib
 
     save_dir = pathlib.Path("clt_module")
     converter = CircuitTracerConverter(save_dir=save_dir)
