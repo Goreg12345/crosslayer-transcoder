@@ -66,46 +66,6 @@ def test_math_sanity_check():
     assert_allclose(lhs, rhs)
 
 
-def test_math_sanity_check():
-    encoder = Encoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS).to(DTYPE)
-
-    input_std = DimensionwiseInputStandardizer(
-        n_layers=N_LAYERS, activation_dim=D_ACTS
-    ).to(DTYPE)
-    input_std.initialize_from_batch(batch=BATCH)
-
-    resid = BATCH[:, 0]
-    W = encoder.W
-    b = encoder.b
-    mean, std = input_std.mean, input_std.std
-
-    W_div_std = W / std.unsqueeze(-1)
-
-    lhs = (
-        einsum(
-            (resid - mean) / std,
-            W,
-            "batch n_layers d_acts, n_layers d_acts d_features -> batch n_layers d_features",
-        )
-        + b
-    )
-    rhs = (
-        einsum(
-            resid,
-            W_div_std,
-            "batch n_layers d_acts, n_layers d_acts d_features -> batch n_layers d_features",
-        )
-        + b
-        - einsum(
-            mean,
-            W_div_std,
-            "n_layers d_acts, n_layers d_acts d_features -> n_layers d_features",
-        )
-    )
-
-    assert_allclose(lhs, rhs)
-
-
 def test_encoder_standarization_folding():
     encoder = Encoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS).to(DTYPE)
     input_std = DimensionwiseInputStandardizer(
