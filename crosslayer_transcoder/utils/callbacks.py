@@ -82,7 +82,8 @@ class ModelConversionCallback(L.Callback):
                 f"{kind} model converted and saved to {self.save_dir.as_posix()}"
             )
 
-    def on_test_end(self, trainer, pl_module):
+    # TODO: for testing, just turn on the train batch end
+    def on_train_batch_end(self, trainer, pl_module):
         self._convert_model(pl_module)
 
 
