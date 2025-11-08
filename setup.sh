@@ -54,6 +54,82 @@ if [ $? -eq 0 ]; then
     # Fix permissions for all executables in .venv/bin
     chmod +x .venv/bin/*
     
+    # Setup environment variables
+    echo ""
+    echo -e "${BLUE}🔑 Setting up environment variables...${NC}"
+    
+    # Create .env from template if it doesn't exist
+    if [ ! -f ".env" ]; then
+        if [ -f ".env.template" ]; then
+            cp .env.template .env
+            echo -e "${GREEN}✅ Created .env file from template${NC}"
+        else
+            echo -e "${YELLOW}⚠️  .env.template not found, creating .env file${NC}"
+            touch .env
+        fi
+    else
+        echo -e "${GREEN}✅ .env file already exists${NC}"
+    fi
+    
+    # Function to prompt for environment variable
+    prompt_env_var() {
+        local var_name="$1"
+        local var_description="$2"
+        local current_value="${!var_name}"
+        
+        # Check if already set in environment
+        if [ -n "$current_value" ]; then
+            echo -e "${GREEN}✅ $var_name already set in environment${NC}"
+            # Ensure it's in .env file
+            if ! grep -q "^${var_name}=" .env 2>/dev/null; then
+                echo "${var_name}=${current_value}" >> .env
+            fi
+            return
+        fi
+        
+        # Check if set in .env file
+        if [ -f ".env" ]; then
+            local env_value=$(grep "^${var_name}=" .env | cut -d '=' -f 2-)
+            if [ -n "$env_value" ]; then
+                echo -e "${GREEN}✅ $var_name already set in .env file${NC}"
+                export "${var_name}=${env_value}"
+                return
+            fi
+        fi
+        
+        # Prompt user
+        echo ""
+        echo -e "${YELLOW}${var_description}${NC}"
+        echo -e "${BLUE}[Press Enter to skip]${NC}"
+        read -p "${var_name}=" user_input
+        
+        # Update .env file
+        if grep -q "^${var_name}=" .env 2>/dev/null; then
+            # Update existing line
+            sed -i.bak "s|^${var_name}=.*|${var_name}=${user_input}|" .env && rm .env.bak
+        else
+            # Add new line
+            echo "${var_name}=${user_input}" >> .env
+        fi
+        
+        # Export if not empty
+        if [ -n "$user_input" ]; then
+            export "${var_name}=${user_input}"
+            echo -e "${GREEN}✅ $var_name set and exported${NC}"
+        else
+            echo -e "${YELLOW}⚠️  $var_name left empty (required for training)${NC}"
+        fi
+    }
+    
+    # Prompt for each environment variable
+    prompt_env_var "HF_TOKEN" "HuggingFace API token - required for model/dataset access"
+    prompt_env_var "NDIF_API_KEY" "NDIF API key - required for training"
+    prompt_env_var "WANDB_API_KEY" "Weights & Biases API key - required for logging"
+    
+    echo ""
+    echo -e "${BLUE}📝 Environment variables saved to .env file${NC}"
+    echo ""
+    
     # Add uv to PATH permanently by updating shell profile
     UV_PATH_EXPORT='export PATH="$HOME/.local/bin:$PATH"'
     
