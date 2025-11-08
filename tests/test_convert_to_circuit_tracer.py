@@ -2,9 +2,12 @@ from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
     CircuitTracerConverter,
 )
 import pathlib
+import pytest
+import shutil
 
 
-def test_circuit_tracer_converter():
+@pytest.fixture
+def clt_module():
     from crosslayer_transcoder.metrics.dead_features import DeadFeatures
     from crosslayer_transcoder.model.clt import (
         CrosslayerDecoder,
@@ -18,8 +21,6 @@ def test_circuit_tracer_converter():
         DimensionwiseOutputStandardizer,
     )
 
-    # TODO: find a better way to build the clt_module
-    # Create components based on default.yaml config
     encoder = Encoder(d_acts=768, d_features=10_000, n_layers=12)
 
     decoder = CrosslayerDecoder(d_acts=768, d_features=10_000, n_layers=12)
@@ -59,10 +60,25 @@ def test_circuit_tracer_converter():
         compute_dead_features_every=500,
     )
 
+    return clt_module
+
+
+def test_circuit_tracer_converter(clt_module):
     save_dir = pathlib.Path("clt_module")
     converter = CircuitTracerConverter(save_dir=save_dir)
     converter.convert_and_save(clt_module)
 
+    assert save_dir.exists()
+    assert (
+        len(list(save_dir.glob("*.safetensors")))
+        == clt_module.model.encoder.n_layers * 2
+    )
 
-if __name__ == "__main__":
-    test_circuit_tracer_converter()
+    assert (save_dir / "config.yaml").exists()
+
+    for layer in range(12):
+        assert (save_dir / f"W_enc_{layer}.safetensors").exists()
+        assert (save_dir / f"W_dec_{layer}.safetensors").exists()
+
+    # cleanup
+    shutil.rmtree(save_dir)
