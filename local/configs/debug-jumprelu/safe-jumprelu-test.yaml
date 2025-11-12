@@ -1,0 +1,160 @@
+# Test configuration with safer JumpReLU implementation
+# This file uses Lightning CLI's automatic class construction
+
+seed_everything: 42
+
+trainer:
+  max_steps: 10_000  # Short test run
+  val_check_interval: 1000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  precision: "16-mixed"
+  accelerator: "gpu"
+  devices: [1]
+  accumulate_grad_batches: 1
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-jumprelu"
+      name: "safe-jumprelu-test"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints"
+
+model:
+  class_path: model.clt_lightning.JumpReLUCrossLayerTranscoderModule
+  init_args:
+    # Pre-constructed CrossLayerTranscoder model
+    model:
+      class_path: model.clt.CrossLayerTranscoder
+      init_args:
+        # Model architecture parameters
+        encoder:
+          class_path: model.clt.Encoder
+          init_args:
+            d_acts: 768
+            d_features: 8_000  # Smaller for testing
+            n_layers: 12
+
+        decoder:
+          class_path: model.clt.CrosslayerDecoder
+          init_args:
+            d_acts: 768
+            d_features: 8_000  # Smaller for testing
+            n_layers: 12
+        
+        # Use the safer JumpReLU implementation
+        nonlinearity:
+          class_path: model.jumprelu_safe.SafeJumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 12
+            d_features: 8_000
+        
+        # Pre-constructed standardizers
+        input_standardizer:
+          class_path: model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+        
+        output_standardizer:
+          class_path: model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+    # Pre-constructed replacement model
+    replacement_model:
+      class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
+      init_args:
+        model_name: "openai-community/gpt2"
+        device_map: "cuda:1"
+        loader_batch_size: 2
+    
+    # Pre-constructed dead features metric
+    dead_features:
+      class_path: metrics.dead_features.DeadFeatures
+      init_args:
+        n_features: 8_000
+        n_layers: 12
+        return_per_layer: true
+        return_log_freqs: true
+        return_neuron_indices: true
+    
+    # Training parameters
+    learning_rate: 1e-4
+    compile: false  # Disable compilation for testing
+    lr_decay_step: 90_000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.0005
+    c_sparsity: 1
+    use_tanh: true
+
+    # Dead features computation settings
+    compute_dead_features: true
+    compute_dead_features_every: 500
+
+data:
+  class_path: data.datamodule.ActivationDataModule
+  init_args:
+    # Buffer settings
+    buffer_size: 1_000_000  # Smaller for testing
+    n_in_out: 2
+    n_layers: 12
+    activation_dim: 768
+    dtype: "float16"
+    max_batch_size: 10000  # Smaller for testing
+    
+    # Model settings for activation generation
+    model_name: "openai-community/gpt2"
+    model_dtype: "float32"
+    
+    # Dataset settings
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    max_sequence_length: 1024
+    
+    # Generation settings
+    generation_batch_size: 5  # Smaller for testing
+    refresh_interval: 0.1
+    
+    # Memory settings
+    shared_memory_name: "activation_buffer_test"
+    timeout_seconds: 30
+    
+    # File paths
+    init_file: "/var/local/glang/activations/clt-activations-10M-shuffled_fp16.h5"
+    
+    # DataLoader settings
+    batch_size: 1000  # Smaller for testing
+    num_workers: 5  # Fewer workers for testing
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+    
+    minimum_fill_threshold: 0.01
+
+    use_shared_memory: true
+
+    # Device configuration
+    device_map: "cuda:0"
+
+    # WandB logging configuration for data generation
+    wandb_logging:
+      enabled: true
+      project: "crosslayer-transcoder"
+      group: null
+      run_name: "data-generator-test"
+      tags: ["data-generation", "test"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null 

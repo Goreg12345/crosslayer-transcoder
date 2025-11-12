@@ -13,117 +13,125 @@ from einops import einsum, rearrange
 from jaxtyping import Float
 from torch.distributed._tensor.placement_types import Partial, Replicate, Shard
 from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.tensor import (DeviceMesh, DTensor, Replicate, Shard,
-                                      distribute_module, distribute_tensor)
-from torch.distributed.tensor._dtensor_spec import DTensorSpec
-from torch.distributed.tensor._op_schema import OpSchema  # OpSpec,
-from torch.distributed.tensor._op_schema import (OpStrategy, PlacementStrategy,
-                                                 RuntimeSchemaInfo,
-                                                 StrategyType, _is_inplace_op)
-from torch.distributed.tensor._ops.utils import (is_tensor_dim_sharded,
-                                                 normalize_dim,
-                                                 register_op_strategy)
-from torch.distributed.tensor.parallel import (RowwiseParallel,
-                                               parallelize_module)
+from torch.distributed.tensor import (
+    DeviceMesh,
+    DTensor,
+    Replicate,
+    Shard,
+    distribute_module,
+    distribute_tensor,
+)
+from torch.distributed.tensor._ops.utils import (
+    is_tensor_dim_sharded,
+    normalize_dim,
+    register_op_strategy,
+)
+from torch.distributed.tensor.parallel import RowwiseParallel, parallelize_module
 from torch.distributed.tensor.parallel.style import ParallelStyle
-from torch.distributed.tensor.placement_types import (Placement, Replicate,
-                                                      Shard)
+from torch.distributed.tensor.placement_types import Placement, Replicate, Shard
 from torch.nn.modules.activation import ReLU
 
 import wandb
 from jumprelu import JumpReLU
 from metrics.replacement_model_accuracy import ReplacementModelAccuracy
 
-aten = torch.ops.aten  # convenience alias
+# from torch.distributed.tensor._dtensor_spec import DTensorSpec
+# from torch.distributed.tensor._op_schema import OpSchema  # OpSpec,
+# from torch.distributed.tensor._op_schema import (OpStrategy, PlacementStrategy,
+#  RuntimeSchemaInfo,
+#  StrategyType, _is_inplace_op)
 
 
-@register_op_strategy([aten.select.int])
-def select_int_strategy(op_schema):
-    """
-    args_schema layout in 2.7.1:
-        (input_strategy: OpStrategy, selected_dim: int, index: int)
-
-    Returns one PlacementStrategy per input layout.
-    """
-
-    # unpack schema -----------------------------------------------------------
-    input_strategy: OpStrategy = op_schema.args_schema[0]
-    selected_dim: int = op_schema.args_schema[1]
-
-    # handle negative dims once
-    ndim = input_strategy.shape.__len__()
-    selected_dim = selected_dim if selected_dim >= 0 else selected_dim + ndim
-
-    out_strategy = OpStrategy([])
-
-    # iterate over every existing placement configuration ---------------------
-    for plan in input_strategy.strategies:
-        in_spec: DTensorSpec = plan.output_spec
-        new_placements = []
-
-        for placement in in_spec.placements:
-            if placement.is_shard():
-                shard_dim = cast(Shard, placement).dim
-
-                if shard_dim == selected_dim:
-                    raise NotImplementedError(
-                        "Selecting along a dimension that is sharded "
-                        "is not supported on PyTorch-2.7.1."
-                    )
-                # shift shard index left if we dropped an earlier dimension
-                if shard_dim > selected_dim:
-                    shard_dim -= 1
-                placement = Shard(shard_dim)
-
-            # Replicate or Partial stay as-is
-            new_placements.append(placement)
-
-        out_spec = DTensorSpec(mesh=in_spec.mesh, placements=tuple(new_placements))
-
-        out_strategy.strategies.append(
-            PlacementStrategy(output_specs=out_spec, input_specs=(in_spec,))
-        )
-
-    return out_strategy
+# aten = torch.ops.aten  # convenience alias
 
 
-@register_op_strategy([aten.masked_fill_.Scalar])
-def masked_fill_scalar_strategy(op_schema):
-    """
-    Works on PyTorch 2.7.1 DTensor.
-    args_schema = (data_strategy: OpStrategy,
-                   mask_strategy: OpStrategy,
-                   value: float)
-    """
-    data_strat, mask_strat = op_schema.args_schema[:2]
-    assert isinstance(data_strat, OpStrategy) and isinstance(mask_strat, OpStrategy)
+# @register_op_strategy([aten.select.int])
+# def select_int_strategy(op_schema):
+#     """
+#     args_schema layout in 2.7.1:
+#         (input_strategy: OpStrategy, selected_dim: int, index: int)
 
-    out_strat = OpStrategy([])
+#     Returns one PlacementStrategy per input layout.
+#     """
 
-    for d_plan in data_strat.strategies:
-        d_spec: DTensorSpec = d_plan.output_spec
+#     # unpack schema -----------------------------------------------------------
+#     input_strategy: OpStrategy = op_schema.args_schema[0]
+#     selected_dim: int = op_schema.args_schema[1]
 
-        # find compatible mask specs
-        compatibles = []
-        for m_plan in mask_strat.strategies:
-            m_spec: DTensorSpec = m_plan.output_spec
-            if not m_spec.is_sharded():
-                compatibles.append(m_spec)  # replicated mask always fine
-            elif m_spec.placements == d_spec.placements:
-                compatibles.append(m_spec)  # identical sharding dim + partition
+#     # handle negative dims once
+#     ndim = input_strategy.shape.__len__()
+#     selected_dim = selected_dim if selected_dim >= 0 else selected_dim + ndim
 
-        if not compatibles:
-            raise NotImplementedError("mask sharding not compatible with data")
+#     out_strategy = OpStrategy([])
 
-        # one placement per compatible mask, no cost field
-        for m_spec in compatibles:
-            out_strat.strategies.append(
-                PlacementStrategy(
-                    output_specs=d_spec,
-                    input_specs=(d_spec, m_spec),  # first two args matter
-                )
-            )
-    return out_strat
+#     # iterate over every existing placement configuration ---------------------
+#     for plan in input_strategy.strategies:
+#         in_spec: DTensorSpec = plan.output_spec
+#         new_placements = []
+
+#         for placement in in_spec.placements:
+#             if placement.is_shard():
+#                 shard_dim = cast(Shard, placement).dim
+
+#                 if shard_dim == selected_dim:
+#                     raise NotImplementedError(
+#                         "Selecting along a dimension that is sharded "
+#                         "is not supported on PyTorch-2.7.1."
+#                     )
+#                 # shift shard index left if we dropped an earlier dimension
+#                 if shard_dim > selected_dim:
+#                     shard_dim -= 1
+#                 placement = Shard(shard_dim)
+
+#             # Replicate or Partial stay as-is
+#             new_placements.append(placement)
+
+#         out_spec = DTensorSpec(mesh=in_spec.mesh, placements=tuple(new_placements))
+
+#         out_strategy.strategies.append(
+#             PlacementStrategy(output_specs=out_spec, input_specs=(in_spec,))
+#         )
+
+#     return out_strategy
+
+
+# @register_op_strategy([aten.masked_fill_.Scalar])
+# def masked_fill_scalar_strategy(op_schema):
+#     """
+#     Works on PyTorch 2.7.1 DTensor.
+#     args_schema = (data_strategy: OpStrategy,
+#                    mask_strategy: OpStrategy,
+#                    value: float)
+#     """
+#     data_strat, mask_strat = op_schema.args_schema[:2]
+#     assert isinstance(data_strat, OpStrategy) and isinstance(mask_strat, OpStrategy)
+
+#     out_strat = OpStrategy([])
+
+#     for d_plan in data_strat.strategies:
+#         d_spec: DTensorSpec = d_plan.output_spec
+
+#         # find compatible mask specs
+#         compatibles = []
+#         for m_plan in mask_strat.strategies:
+#             m_spec: DTensorSpec = m_plan.output_spec
+#             if not m_spec.is_sharded():
+#                 compatibles.append(m_spec)  # replicated mask always fine
+#             elif m_spec.placements == d_spec.placements:
+#                 compatibles.append(m_spec)  # identical sharding dim + partition
+
+#         if not compatibles:
+#             raise NotImplementedError("mask sharding not compatible with data")
+
+#         # one placement per compatible mask, no cost field
+#         for m_spec in compatibles:
+#             out_strat.strategies.append(
+#                 PlacementStrategy(
+#                     output_specs=d_spec,
+#                     input_specs=(d_spec, m_spec),  # first two args matter
+#                 )
+#             )
+#     return out_strat
 
 
 """
@@ -157,29 +165,29 @@ def slice_backward_strategy(op_schema):
 """
 
 
-@register_op_strategy(
-    aten.slice_backward.default,
-)
-def slice_backward_rules(op_schema):
-    # func: slice_backward(Tensor grad_output, SymInt[] input_sizes, int dim, SymInt start, SymInt end, SymInt step) -> Tensor
-    args_schema = op_schema.args_schema
-    input_strategy, dim = args_schema[0], args_schema[2]
-    assert isinstance(input_strategy, OpStrategy), f"{input_strategy}"
-    output_strategies = []
-    for placement_strategy in input_strategy.strategies:
-        output_spec = placement_strategy.output_spec
-        new_placements: list[Placement] = []
-        for placement in output_spec.placements:
-            # Redistribute to replicate only if the dim is sharded and matches the slice dim
-            if isinstance(placement, Shard) and placement.dim == dim:
-                new_placements.append(Replicate())
-                print("using replicate in slice_backward_rules")
-            else:
-                new_placements.append(placement)
-        new_spec = DTensorSpec(output_spec.mesh, tuple(new_placements))
-        new_strategy = PlacementStrategy(output_specs=new_spec)
-        output_strategies.append(new_strategy)
-    return OpStrategy(output_strategies)
+# @register_op_strategy(
+#     aten.slice_backward.default,
+# )
+# def slice_backward_rules(op_schema):
+#     # func: slice_backward(Tensor grad_output, SymInt[] input_sizes, int dim, SymInt start, SymInt end, SymInt step) -> Tensor
+#     args_schema = op_schema.args_schema
+#     input_strategy, dim = args_schema[0], args_schema[2]
+#     assert isinstance(input_strategy, OpStrategy), f"{input_strategy}"
+#     output_strategies = []
+#     for placement_strategy in input_strategy.strategies:
+#         output_spec = placement_strategy.output_spec
+#         new_placements: list[Placement] = []
+#         for placement in output_spec.placements:
+#             # Redistribute to replicate only if the dim is sharded and matches the slice dim
+#             if isinstance(placement, Shard) and placement.dim == dim:
+#                 new_placements.append(Replicate())
+#                 print("using replicate in slice_backward_rules")
+#             else:
+#                 new_placements.append(placement)
+#         new_spec = DTensorSpec(output_spec.mesh, tuple(new_placements))
+#         new_strategy = PlacementStrategy(output_specs=new_spec)
+#         output_strategies.append(new_strategy)
+#     return OpStrategy(output_strategies)
 
 
 class Encoder(nn.Module):
@@ -250,14 +258,9 @@ class Decoder(nn.Module):
     ) -> Float[torch.Tensor, "batch_size n_layers d_acts"]:
         recons = []
         dec_norms = torch.zeros_like(features[:1])  # 1 n_layers d_features
-        features.register_hook(debug_backward_hook("features"))
         for l in range(self.config.get("n_layers", 12)):
             W = self.get_parameter(f"W_{l}")
-            W.register_hook(debug_backward_hook(f"W_{l}"))
             selected_features = features[:, : l + 1]
-            selected_features.register_hook(
-                debug_backward_hook(f"selected_features_{l}")
-            )
             # this slicing will call slice_backward() in autograd and this will force an all gather for some reason
             # but features should be Shard(2) so
             l_recons = einsum(
@@ -265,9 +268,7 @@ class Decoder(nn.Module):
                 W,
                 "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
             )
-            l_recons.register_hook(debug_backward_hook(f"l_recons_{l}"))
             l_recons = l_recons.sum(dim=1)
-            l_recons.register_hook(debug_backward_hook(f"l_recons_sum_{l}"))
             recons.append(l_recons)
             # dec_norms_slice = dec_norms[:, : l + 1]
             ##dec_norms_slice.register_hook(debug_backward_hook(f"dec_norms_slice_{l}"))
@@ -281,7 +282,6 @@ class Decoder(nn.Module):
         #    recons, "n_layers batch_size d_acts -> batch_size n_layers d_acts"
         # )  # stack + transpose
         recons = torch.stack(recons, dim=1)
-        recons.register_hook(debug_backward_hook("recons"))
         # recons = torch.zeros_like(torch.stack(recons, dim=1))
 
         # Sparsity -> l1 norm of l2 norms -> like in Anthropic's first implementation

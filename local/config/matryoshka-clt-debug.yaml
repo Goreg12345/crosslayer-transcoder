@@ -1,0 +1,170 @@
+# Debug Configuration for Matryoshka CrossLayer Transcoder
+# Smaller training run for debugging on GPU 1
+
+seed_everything: 42
+
+trainer:
+  # Reduced training steps for debugging
+  max_steps: 1_000  # Much smaller for debugging
+  val_check_interval: 100  # More frequent validation
+  limit_val_batches: 1
+  enable_checkpointing: true
+  num_sanity_val_steps: 0
+  precision: "16-mixed"
+  accelerator: "gpu"
+  devices: [1]  # Using GPU 1 for debugging
+  accumulate_grad_batches: 1
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "matryoshka-clt-debug"
+      name: "matryoshka-clt-debug"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        dirpath: "local/checkpoints"
+        filename: "matryoshka-clt-debug-{epoch}-{step}"
+        save_top_k: 1
+        monitor: "training/loss"
+        mode: "min"
+        save_last: false
+    - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
+      init_args:
+        checkpoint_dir: "local/checkpoints"
+    - class_path: crosslayer_transcoder.utils.callbacks.TensorBoardProfilerCallback
+      init_args:
+        log_dir: "local/log/profiler"
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MatryoshkaTopKCrossLayerTranscoderModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
+      init_args:
+        encoder:
+          class_path: crosslayer_transcoder.model.clt.Encoder
+          init_args:
+            d_acts: 768
+            d_features: 17000
+            n_layers: 12
+
+        decoder:
+          class_path: crosslayer_transcoder.model.clt.MatryoshkaCrosslayerDecoder
+          init_args:
+            d_acts: 768
+            d_features: 17000
+            n_layers: 12
+            group_indices: [0, 531, 1593, 3717, 7965, 17000]
+        
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.topk.PerLayerTopK
+          init_args:
+            k: 16
+        
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+        
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+    # Debug replacement model on GPU 1
+    replacement_model:
+      class_path: crosslayer_transcoder.metrics.replacement_model_accuracy.ReplacementModelAccuracy
+      init_args:
+        model_name: "openai-community/gpt2"
+        device_map: "cuda:1"  # Using GPU 1
+        loader_batch_size: 1  # Reduced batch size for debugging
+    
+    # Dead features metric
+    dead_features:
+      class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
+      init_args:
+        n_features: 17000
+        n_layers: 12
+        return_per_layer: true
+        return_log_freqs: true
+        return_neuron_indices: true
+    
+    # Training parameters
+    learning_rate: 2e-4
+    compile: false  # Disabled for debugging
+    lr_decay_step: 800  # Reduced for shorter training
+    lr_decay_factor: 0.1
+
+    # TopK auxiliary loss configuration
+    topk_aux:
+      class_path: crosslayer_transcoder.model.topk.PerLayerTopK
+      init_args:
+        k: 512
+    tokens_till_dead: 50_000  # Reduced for debugging
+    aux_loss_scale: 0.03125
+    
+    # Dead features computation settings
+    compute_dead_features: true
+    compute_dead_features_every: 100  # More frequent for debugging
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    # Reduced buffer settings for debugging
+    buffer_size: 100_000  # Much smaller buffer
+    n_in_out: 2
+    n_layers: 12
+    activation_dim: 768
+    dtype: "float16"
+    max_batch_size: 10000  # Reduced batch size
+    
+    # Model settings
+    model_name: "openai-community/gpt2"
+    model_dtype: "float32"
+    
+    # Dataset settings
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    max_sequence_length: 1024
+    
+    # Generation settings
+    generation_batch_size: 5  # Reduced for debugging
+    refresh_interval: 0.1
+    
+    # Memory settings
+    shared_memory_name: "activation_buffer_debug"
+    timeout_seconds: 30
+    
+    # File paths
+    init_file: "/var/local/glang/activations/clt-activations-10M-shuffled_fp16.h5"
+    
+    # DataLoader settings
+    batch_size: 100  # Much smaller batch size for debugging
+    num_workers: 2  # Reduced workers
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+    
+    minimum_fill_threshold: 0.0
+
+    use_shared_memory: true
+
+    # Device configuration
+    device_map: "cuda:1"  # Using GPU 1
+    deployment_policy: "gpu_only"
+
+    # WandB logging configuration
+    wandb_logging:
+      enabled: true
+      project: "matryoshka-clt-debug"
+      group: null
+      run_name: "data-generator-matryoshka-clt-debug"
+      tags: ["data-generation", "debug"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null
