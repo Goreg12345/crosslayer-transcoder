@@ -57,8 +57,3 @@ def plot_actvs(actvs):
     # Adjust layout to prevent overlap
     plt.tight_layout()
 
-
-def load_model_from_lightning_checkpoint(model, checkpoint_path):
-    checkpoint = torch.load(checkpoint_path)
-    model.load_state_dict(checkpoint["state_dict"])
-    return model

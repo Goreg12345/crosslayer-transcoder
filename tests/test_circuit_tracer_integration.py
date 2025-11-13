@@ -21,6 +21,7 @@ def test_circuit_tracer_integration(clt_module):
     )
     converter.convert_and_save(clt_module)
 
+
     transcoder = load_clt(
         clt_path=save_dir.as_posix(),
         lazy_decoder=False,
