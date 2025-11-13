@@ -115,9 +115,6 @@ class DimensionwiseOutputStandardizer(Standardizer):
         W_dec: Float[torch.Tensor, "layers d_features d_acts"],
         layer: int,
     ):
-        print("W_dec.shape:", W_dec.shape)
-        print("self.std.shape:", self.std.shape)
-
         # Decoder is going to have dim 0 == i layers
         std = self.std[layer]
 

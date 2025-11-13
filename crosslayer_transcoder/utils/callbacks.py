@@ -2,15 +2,21 @@
 Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
+from ast import List
 import logging
 from pathlib import Path
 
+from huggingface_hub import upload_folder
 import lightning as L
 from torch.profiler import (
     ProfilerActivity,
     profile,
     schedule,
     tensorboard_trace_handler,
+)
+
+from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
+    CircuitTracerConverter,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,3 +60,46 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
+
+
+class ModelConversionCallback(L.Callback):
+    """Callback to convert the model to a circuit-tracer model."""
+
+    def __init__(self, save_dir: str = "clt_module", kinds=["circuit_tracer"]):
+        super().__init__()
+        self.save_dir = Path(save_dir)
+        self.kinds = kinds
+        self.converters = {
+            "circuit_tracer": CircuitTracerConverter,
+        }
+
+    def _convert_model(self, pl_module):
+        for kind in self.kinds:
+            converter = self.converters[kind](save_dir=self.save_dir.as_posix())
+            converter.convert_and_save(pl_module)
+            logger.info(
+                f"{kind} model converted and saved to {self.save_dir.as_posix()}"
+            )
+
+    # TODO: for testing, just turn on the train batch end
+    def on_train_batch_end(self, trainer, pl_module):
+        self._convert_model(pl_module)
+
+
+class HuggingFaceCallback(L.Callback):
+    """Callback to upload the model to Hugging Face."""
+
+    def __init__(
+        self, repo_id: str, repo_type: str = "model", save_dir: str = "clt_module"
+    ):
+        super().__init__()
+        self.repo_id = repo_id
+        self.repo_type = repo_type
+        self.save_dir = Path(save_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        upload_folder(
+            folder_path=self.save_dir.as_posix(),
+            repo_id=self.repo_id,
+            repo_type=self.repo_type,
+        )
