@@ -7,8 +7,11 @@ from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
 )
 
 
-def test_circuit_tracer_integration(clt_module):
+def test_circuit_tracer_integration():
     """Verify uploaded model loads correctly."""
+    from crosslayer_transcoder.utils.module_builder import build_module_from_config, yaml_to_config
+    config = yaml_to_config("config/topk-clt-debug.yaml")
+    clt_module = build_module_from_config(config)
 
     save_dir = pathlib.Path("clt_module_test")
     feature_input_hook = "blocks.{layer}.hook_resid_pre"
