@@ -5,8 +5,8 @@ seed_everything: 42
 
 trainer:
   # max_steps is number of gradient updates. If using gradient accumulation, this is not the number of batches.
-  max_steps: 100 
-  val_check_interval: 10
+  max_steps: 100_000 
+  val_check_interval: 1_000
   limit_val_batches: 1
   enable_checkpointing: false  # We use custom end-of-training checkpoint
   num_sanity_val_steps: 0  # Can't run replacement model before standardizers are initialized
@@ -21,11 +21,9 @@ trainer:
       name: "circuit-tracer"
       save_dir: "./wandb"
   callbacks:
-    class_path: crosslayer_transcoder.utils.callbacks.ModelConversionCallback
-    init_args:
-      save_dir: "clt_module"
-      kinds:
-        - "circuit_tracer"
+    - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
@@ -87,9 +85,9 @@ model:
     
 
     # Training parameters
-    learning_rate: 1e-4
+    learning_rate: 3e-4
     compile: true  # if using torch.compile
-    lr_decay_step: 80_000  # lr is scaled by lr_decay_factor after this many steps
+    lr_decay_step: 16_000  # lr is scaled by lr_decay_factor after this many steps
     lr_decay_factor: 0.1
 
     lambda_sparsity: 0.0007  # sparsity loss weight
@@ -99,18 +97,18 @@ model:
 
     # Dead features computation settings
     compute_dead_features: true
-    compute_dead_features_every: 50
+    compute_dead_features_every: 500
 
 data:
   class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
-    buffer_size: 1_000  # number of activations to store in the buffer
+    buffer_size: 500_000 # number of activations to store in the buffer
     n_in_out: 2  # number of input and output layers
     n_layers: 12  # number of layers in the model
     activation_dim: 768  # dimension of the activations
     dtype: "float16"  # dtype of the activations
-    max_batch_size: 500  # maximum batch size for the data loader
+    max_batch_size: 8000  # maximum batch size for the data loader
     
     # Model settings for activation generation
     model_name: "openai-community/gpt2"
@@ -160,5 +158,6 @@ data:
       tags: ["data-generation"]               # Tags for the data generation run
       save_dir: "./wandb"                     # Directory for WandB files
       log_interval: 5.0                       # Logging interval in seconds
+      offline: true                           # Offline mode for WandB logging
 
 ckpt_path: null
