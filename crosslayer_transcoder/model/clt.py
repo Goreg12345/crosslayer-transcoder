@@ -309,7 +309,9 @@ class CrossLayerTranscoder(nn.Module):
         features = self.nonlinearity(pre_actvs)
         return features
 
-    def encode_folded(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]):
+    def encode_with_standardizer_folding(
+        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ):
         W_enc_folded, b_enc_folded = self.input_standardizer.fold_in_encoder(
             self.encoder.W, self.encoder.b
         )
