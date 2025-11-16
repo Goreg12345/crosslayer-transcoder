@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import einops
+from tqdm import tqdm
 import torch
 import yaml
 from safetensors.torch import save_file
@@ -42,7 +43,7 @@ class CircuitTracerConverter(ModelConverter):
         b_dec_folded = output_standardizer.fold_in_decoder_bias(decoder.b.to(dtype))
 
         # encoder
-        for source_layer in range(encoder.n_layers):
+        for source_layer in tqdm(range(encoder.n_layers), desc="Converting CLT "):
             rearranged_W_enc = einops.rearrange(
                 W_enc_folded[source_layer],
                 "d_acts d_features -> d_features d_acts",
@@ -53,9 +54,7 @@ class CircuitTracerConverter(ModelConverter):
                 f"b_dec_{source_layer}": (b_dec_folded[source_layer].cpu().to(dtype)),
             }
             # TODO: double check non-linearity compatibility
-            print(nonlinearity)
             if isinstance(nonlinearity, JumpReLU):
-                print(nonlinearity.theta.shape)
                 layer_encoder_dict[f"threshold_{source_layer}"] = (
                     nonlinearity.theta[:, source_layer, :].cpu().to(dtype)
                 )
