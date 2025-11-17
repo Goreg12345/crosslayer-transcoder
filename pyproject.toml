@@ -24,7 +24,7 @@ dependencies = [
     "numpy>=1.24.0",
     "jsonargparse[signatures]>=4.27.7",
     "modal>=1.1.4",
-    "circuit-tracer@git+https://github.com/safety-research/circuit-tracer.git@main",
+    "circuit-tracer",
     "hf-transfer>=0.1.9",
 ]
 
@@ -46,6 +46,9 @@ dev-dependencies = [
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
 ]
+
+[tool.uv.sources]
+circuit-tracer = { git = "https://github.com/safety-research/circuit-tracer.git", rev = "main" }
 
 [tool.hatch.metadata]
 allow-direct-references=true
