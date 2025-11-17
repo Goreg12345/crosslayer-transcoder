@@ -422,7 +422,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "circuit-tracer", git = "https://github.com/safety-research/circuit-tracer.git?rev=main" },
-    { name = "circuit-tracer", marker = "extra == 'dev'" },
+    { name = "circuit-tracer", marker = "extra == 'dev'", git = "https://github.com/safety-research/circuit-tracer.git?rev=main" },
     { name = "datasets", specifier = "==3.6.0" },
     { name = "einops", specifier = ">=0.8.1" },
     { name = "h5py", specifier = ">=3.13.0" },
