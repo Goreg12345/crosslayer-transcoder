@@ -56,4 +56,3 @@ def plot_actvs(actvs):
 
     # Adjust layout to prevent overlap
     plt.tight_layout()
-
