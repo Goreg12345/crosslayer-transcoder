@@ -9,13 +9,16 @@ from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
 
 def test_circuit_tracer_integration():
     """Verify uploaded model loads correctly."""
-    from crosslayer_transcoder.utils.module_builder import build_module_from_config, yaml_to_config
-    config = yaml_to_config("config/topk-clt-debug.yaml")
-    clt_module = build_module_from_config(config)
+    from crosslayer_transcoder.utils.module_builder import build_module_from_config
+    import yaml
+
+    with open("config/circuit-tracer.yaml", "r") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        clt_module = build_module_from_config(config["model"])
 
     save_dir = pathlib.Path("clt_module_test")
-    feature_input_hook = "blocks.{layer}.hook_resid_pre"
-    feature_output_hook = "blocks.{layer}.hook_mlp_out"
+    feature_input_hook = "hook_resid_mid"
+    feature_output_hook = "hook_mlp_out"
 
     converter = CircuitTracerConverter(
         save_dir=save_dir,
@@ -23,7 +26,6 @@ def test_circuit_tracer_integration():
         feature_output_hook=feature_output_hook,
     )
     converter.convert_and_save(clt_module)
-
 
     transcoder = load_clt(
         clt_path=save_dir.as_posix(),
