@@ -3,6 +3,7 @@ Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
 from ast import List
+from functools import partial
 import logging
 from pathlib import Path
 
@@ -77,10 +78,12 @@ class ModelConversionCallback(L.Callback):
 
     def _setup_hooks(self):
         for event in self.on_event:
-            setattr(self, event, lambda *args, **kwargs: self._convert_model(*args, **kwargs))
+            logger.info(f"Setting up hook for {event}...")
+            setattr(self, event, partial(self._convert_model))
 
     # Note: this should have the signature as all Lightning callbacks
     def _convert_model(self, trainer, pl_module, **kwargs):
+        logger.info(f"Converting model to {self.kinds}...")
         for kind in self.kinds:
             converter = self.converters[kind](save_dir=self.save_dir.as_posix())
             converter.convert_and_save(pl_module)
