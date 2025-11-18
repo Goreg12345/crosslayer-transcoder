@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.fixture(scope="session")
-def clt_module():
+def jumprelu_clt_module():
     from crosslayer_transcoder.metrics.dead_features import DeadFeatures
     from crosslayer_transcoder.model.clt import (
         CrosslayerDecoder,

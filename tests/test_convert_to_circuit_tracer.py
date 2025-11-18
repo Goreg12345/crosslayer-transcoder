@@ -6,15 +6,15 @@ import pathlib
 import shutil
 
 
-def test_circuit_tracer_converter(clt_module):
+def test_circuit_tracer_converter(jumprelu_clt_module):
     save_dir = pathlib.Path("clt_module")
     converter = CircuitTracerConverter(save_dir=save_dir)
-    converter.convert_and_save(clt_module)
+    converter.convert_and_save(jumprelu_clt_module)
 
     assert save_dir.exists()
     assert (
         len(list(save_dir.glob("*.safetensors")))
-        == clt_module.model.encoder.n_layers * 2
+        == jumprelu_clt_module.model.encoder.n_layers * 2
     )
 
     assert (save_dir / "config.yaml").exists()
