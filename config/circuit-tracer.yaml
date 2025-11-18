@@ -24,6 +24,11 @@ trainer:
     - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints"
+    - class_path: crosslayer_transcoder.utils.callbacks.ModelConversionCallback
+      init_args:
+        save_dir: "clt_module"
+        kinds: ["circuit_tracer"]
+        on_event: ["on_test_batch_start"]
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
