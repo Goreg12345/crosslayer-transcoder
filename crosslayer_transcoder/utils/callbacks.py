@@ -3,15 +3,19 @@ Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
 import logging
+from functools import partial
 from pathlib import Path
 
 import lightning as L
+from huggingface_hub import upload_folder
 from torch.profiler import (
     ProfilerActivity,
     profile,
     schedule,
     tensorboard_trace_handler,
 )
+
+from crosslayer_transcoder.utils.model_converters.model_converter import ModelConverter
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +58,43 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
+
+
+class ModelConversionCallback(L.Callback):
+    """Callback to convert the model to a circuit-tracer model."""
+
+    # Note: you can't type these with List
+    def __init__(self, converter: ModelConverter, on_events=["on_train_batch_end"]):
+        super().__init__()
+        self.converter = converter
+        self.on_events = on_events
+        self._setup_callbacks()
+
+    def _setup_callbacks(self):
+        for event in self.on_events:
+            setattr(self, event, partial(self._convert_model))
+
+    # Note: this should have the signature as all Lightning callbacks
+    def _convert_model(self, trainer, pl_module, **kwargs):
+        logger.info("Converting model...")
+        self.converter.convert_and_save(pl_module)
+        logger.info("Model converted and saved ")
+
+
+class HuggingFaceCallback(L.Callback):
+    """Callback to upload the model to Hugging Face."""
+
+    def __init__(
+        self, repo_id: str, repo_type: str = "model", save_dir: str = "clt_module"
+    ):
+        super().__init__()
+        self.repo_id = repo_id
+        self.repo_type = repo_type
+        self.save_dir = Path(save_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        upload_folder(
+            folder_path=self.save_dir.as_posix(),
+            repo_id=self.repo_id,
+            repo_type=self.repo_type,
+        )
