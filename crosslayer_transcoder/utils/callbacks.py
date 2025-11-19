@@ -2,13 +2,12 @@
 Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
-from ast import List
-from functools import partial
 import logging
+from functools import partial
 from pathlib import Path
 
-from huggingface_hub import upload_folder
 import lightning as L
+from huggingface_hub import upload_folder
 from torch.profiler import (
     ProfilerActivity,
     profile,
@@ -16,9 +15,7 @@ from torch.profiler import (
     tensorboard_trace_handler,
 )
 
-from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
-    CircuitTracerConverter,
-)
+from crosslayer_transcoder.utils.model_converters.model_converter import ModelConverter
 
 logger = logging.getLogger(__name__)
 
@@ -62,34 +59,26 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
 
+
 class ModelConversionCallback(L.Callback):
     """Callback to convert the model to a circuit-tracer model."""
 
     # Note: you can't type these with List
-    def __init__(self, save_dir: str = "clt_module", kinds=["circuit_tracer"], on_event=["on_train_batch_end"]):
+    def __init__(self, converter: ModelConverter, on_events=["on_train_batch_end"]):
         super().__init__()
-        self.save_dir = Path(save_dir)
-        self.kinds = kinds
-        self.on_event = on_event
-        self.converters = {
-            "circuit_tracer": CircuitTracerConverter,
-        }
-        self._setup_hooks()
+        self.converter = converter
+        self.on_events = on_events
+        self._setup_callbacks()
 
-    def _setup_hooks(self):
-        for event in self.on_event:
-            logger.info(f"Setting up hook for {event}...")
+    def _setup_callbacks(self):
+        for event in self.on_events:
             setattr(self, event, partial(self._convert_model))
 
     # Note: this should have the signature as all Lightning callbacks
     def _convert_model(self, trainer, pl_module, **kwargs):
-        logger.info(f"Converting model to {self.kinds}...")
-        for kind in self.kinds:
-            converter = self.converters[kind](save_dir=self.save_dir.as_posix())
-            converter.convert_and_save(pl_module)
-            logger.info(
-                f"{kind} model converted and saved to {self.save_dir.as_posix()}"
-            )
+        logger.info("Converting model...")
+        self.converter.convert_and_save(pl_module)
+        logger.info("Model converted and saved ")
 
 
 class HuggingFaceCallback(L.Callback):
