@@ -27,8 +27,14 @@ trainer:
     - class_path: crosslayer_transcoder.utils.callbacks.ModelConversionCallback
       init_args:
         save_dir: "clt_module"
-        kinds: ["circuit_tracer"]
-        on_event: ["on_train_start"]
+        on_events:
+        - "on_train_batch_end"
+        converter:
+          class_path: crosslayer_transcoder.utils.model_converters.circuit_tracer.CircuitTracerConverter
+          init_args:
+            save_dir: "circuit-tracer"
+            feature_input_hook: "hook_resid_mid"
+            feature_output_hook: "hook_mlp_out"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule

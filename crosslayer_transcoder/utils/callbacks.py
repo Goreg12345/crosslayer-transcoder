@@ -5,6 +5,7 @@ Simple Lightning callbacks for CrossLayer Transcoder training.
 import logging
 from functools import partial
 from pathlib import Path
+from typing import List
 
 import lightning as L
 from huggingface_hub import upload_folder
@@ -64,9 +65,10 @@ class ModelConversionCallback(L.Callback):
     """Callback to convert the model to a circuit-tracer model."""
 
     # Note: you can't type these with List
-    def __init__(self, converter: ModelConverter, on_events=["on_train_batch_end"]):
+    def __init__(
+        self, converter: ModelConverter, on_events: List[str] = ["on_train_batch_end"]
+    ):
         super().__init__()
-        self.converter = converter
         self.on_events = on_events
         self._setup_callbacks()
 
