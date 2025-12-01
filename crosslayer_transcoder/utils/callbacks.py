@@ -64,9 +64,11 @@ class EndOfTrainingCheckpointCallback(L.Callback):
 class ModelConversionCallback(L.Callback):
     """Callback to convert the model to a circuit-tracer model."""
 
-    # Note: you can't type these with List
+    # Note: you can't type these directly with List or ModelConverter
     def __init__(
-        self, converter: ModelConverter, on_events: List[str] = ["on_train_batch_end"]
+        self, 
+        converter, # type: ModelConverter 
+        on_events=["on_train_batch_end"], # type: List[str]
     ):
         super().__init__()
         self.on_events = on_events
