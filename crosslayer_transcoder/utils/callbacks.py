@@ -66,9 +66,9 @@ class ModelConversionCallback(L.Callback):
 
     # Note: you can't type these directly with List or ModelConverter
     def __init__(
-        self, 
-        converter, # type: ModelConverter 
-        on_events=["on_train_batch_end"], # type: List[str]
+        self,
+        converter: ModelConverter,
+        on_events: List[str] = ["on_train_batch_end"],  # type: List[str]
     ):
         super().__init__()
         self.on_events = on_events

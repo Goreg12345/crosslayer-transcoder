@@ -1,5 +1,7 @@
 from typing import Protocol, Union
 
+import torch
+
 from crosslayer_transcoder.model.clt_lightning import (
     CrossLayerTranscoderModule,
     JumpReLUCrossLayerTranscoderModule,
@@ -14,4 +16,7 @@ CLTModule = Union[
 
 
 class ModelConverter(Protocol):
-    def convert_and_save(self, model: CLTModule) -> None: ...
+    def convert_and_save(
+        self, model: CLTModule, dtype: torch.dtype = torch.bfloat16
+    ) -> None:
+        pass
