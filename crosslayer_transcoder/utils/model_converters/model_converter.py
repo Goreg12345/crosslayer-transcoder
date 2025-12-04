@@ -1,4 +1,4 @@
-from typing import Protocol, Union
+from typing import Any, Protocol, Union
 
 import torch
 
@@ -17,6 +17,7 @@ CLTModule = Union[
 
 class ModelConverter(Protocol):
     def convert_and_save(
-        self, model: CLTModule, dtype: torch.dtype = torch.bfloat16
+        # NOTE: we type the model arg as any to avoid an issue with jsonargparse
+        self, model: Any, dtype: torch.dtype = torch.bfloat16
     ) -> None:
         pass

@@ -71,6 +71,7 @@ class ModelConversionCallback(L.Callback):
         on_events: List[str] = ["on_train_batch_end"],  # type: List[str]
     ):
         super().__init__()
+        self.converter = converter
         self.on_events = on_events
         self._setup_callbacks()
 
