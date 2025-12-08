@@ -7,6 +7,7 @@ import yaml
 from safetensors.torch import save_file
 
 from crosslayer_transcoder.utils.model_converters.model_converter import (
+    CLTModule,
     ModelConverter,
 )
 from crosslayer_transcoder.model.jumprelu import JumpReLU
@@ -25,7 +26,9 @@ class CircuitTracerConverter(ModelConverter):
 
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-    def convert_and_save(self, model, dtype=torch.bfloat16):
+    def convert_and_save(
+        self, model: CLTModule, dtype: torch.dtype = torch.bfloat16
+    ) -> None:
         encoder = model.model.encoder
         input_standardizer = model.model.input_standardizer
         output_standardizer = model.model.output_standardizer
@@ -35,7 +38,6 @@ class CircuitTracerConverter(ModelConverter):
         d_acts = encoder.d_acts  # -> circuit-tracer.d_model
         d_features = encoder.d_features  # -> circuit-tracer.d_transcoder
 
-        # TODO: maybe pass in dtype
         W_enc_folded, b_enc_folded = input_standardizer.fold_in_encoder(
             encoder.W.to(dtype), encoder.b.to(dtype)
         )

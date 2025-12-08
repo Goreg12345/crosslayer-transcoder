@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Union
+from typing import Protocol, Union, runtime_checkable
 
 import torch
 
@@ -15,9 +15,11 @@ CLTModule = Union[
 ]
 
 
+@runtime_checkable
 class ModelConverter(Protocol):
     def convert_and_save(
-        # NOTE: we type the model arg as any to avoid an issue with jsonargparse
-        self, model: Any, dtype: torch.dtype = torch.bfloat16
+        self,
+        model: CLTModule,
+        dtype: torch.dtype = torch.bfloat16,
     ) -> None:
         pass
