@@ -174,6 +174,11 @@ class CrossLayerTranscoderModule(L.LightningModule):
             torch.count_nonzero(active_features) / (features.shape[0] * features.shape[1]),
         )
 
+        # Log per-layer L0 metrics
+        for layer in range(self.model.encoder.n_layers):
+            layer_l0 = torch.count_nonzero(active_features[:, layer, :]) / features.shape[0]
+            self.log(f"layers/L0/layer_{layer}", layer_l0)
+
         # Magnitude of feature activations - memory efficient version
         # positive_mask = features > 0
         # if positive_mask.any():

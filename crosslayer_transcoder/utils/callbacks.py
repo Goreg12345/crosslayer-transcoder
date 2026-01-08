@@ -54,3 +54,39 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
+
+
+class SaveWeightsCallback(L.Callback):
+    """Save encoder and decoder weights as separate .pt files for investigation."""
+
+    def __init__(self, output_dir: str = "weights"):
+        super().__init__()
+        self.output_dir = Path(output_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        import torch
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save encoder weights
+        encoder_weights = {
+            "W": pl_module.model.encoder.W.detach().cpu(),
+            "b": pl_module.model.encoder.b.detach().cpu(),
+        }
+        torch.save(encoder_weights, self.output_dir / "encoder.pt")
+        logger.info(f"Saved encoder weights to {self.output_dir / 'encoder.pt'}")
+
+        # Save decoder weights
+        decoder = pl_module.model.decoder
+        if hasattr(decoder, "W"):
+            # Per-layer decoder
+            decoder_weights = {"W": decoder.W.detach().cpu()}
+        else:
+            # Cross-layer decoder
+            decoder_weights = {}
+            for i in range(decoder.n_layers):
+                decoder_weights[f"W_{i}"] = decoder.get_parameter(f"W_{i}").detach().cpu()
+            decoder_weights["b"] = decoder.b.detach().cpu()
+
+        torch.save(decoder_weights, self.output_dir / "decoder.pt")
+        logger.info(f"Saved decoder weights to {self.output_dir / 'decoder.pt'}")

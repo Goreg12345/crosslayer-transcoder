@@ -1,0 +1,107 @@
+# Configuration for TopK CrossLayer Transcoder - TOY MODEL
+# Trains on pre-computed activations from a .pt file
+# Tensor shape: [16, 2, 2, 110] -> 16 samples, 2 in/out, 2 layers, 110 dim
+
+seed_everything: 42
+
+trainer:
+  max_steps: 10000
+  val_check_interval: 100
+  limit_val_batches: 1
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  precision: "32"  # Full precision for toy model
+  accelerator: "cpu"  # CPU is fine for toy model
+  devices: 1
+  accumulate_grad_batches: 1
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "clt"
+      name: "topk-toy"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.SaveWeightsCallback
+      init_args:
+        output_dir: "weights/clt-toy"
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.TopKCrossLayerTranscoderModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
+      init_args:
+        encoder:
+          class_path: crosslayer_transcoder.model.clt.Encoder
+          init_args:
+            d_acts: 110
+            d_features: 16
+            n_layers: 2
+
+        decoder:
+          class_path: crosslayer_transcoder.model.clt.CrosslayerDecoder
+          init_args:
+            d_acts: 110
+            d_features: 16
+            n_layers: 2
+        
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.topk.BatchTopK
+          init_args:
+            k: 0.5  # 0.5 features per sample per layer → L0=0.5 per layer
+            e: 0.01  # EMA decay for threshold
+        
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 2
+            activation_dim: 110
+        
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 2
+            activation_dim: 110
+
+    # No replacement model for toy experiments
+    replacement_model: null
+    
+    # Dead features tracking
+    dead_features:
+      class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
+      init_args:
+        n_features: 16
+        n_layers: 2
+        return_per_layer: true
+        return_log_freqs: true
+        return_neuron_indices: true
+    
+    # Training parameters
+    learning_rate: 1e-3
+    compile: false  # No compile for toy model
+    lr_decay_step: 8000
+    lr_decay_factor: 0.1
+
+    # TopK auxiliary loss configuration
+    topk_aux:
+      class_path: crosslayer_transcoder.model.topk.PerLayerTopK
+      init_args:
+        k: 4  # Aux loss uses more features
+    tokens_till_dead: 100
+    aux_loss_scale: 0.03125
+    
+    # Dead features computation settings
+    compute_dead_features: true
+    compute_dead_features_every: 50
+
+data:
+  class_path: crosslayer_transcoder.data.TensorDataModule
+  init_args:
+    tensor_file: "/var/metrics/g/clt-faithfulness/xor_handcraft_actvs.pt"
+    batch_size: 16
+    shuffle: true
+    num_workers: 0
+    pin_memory: false
+
+ckpt_path: null
+

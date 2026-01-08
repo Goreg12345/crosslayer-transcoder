@@ -13,6 +13,7 @@ from .data_generator import DataGeneratorProcess
 
 # Export main classes
 from .datamodule import ActivationDataModule
+from .tensor_datamodule import TensorDataModule
 from .deployment_policy import (
     BaseDeploymentPolicy,
     CPUOnlyPolicy,
@@ -33,6 +34,7 @@ from .shared_memory import SharedActivationBuffer
 
 __all__ = [
     "ActivationDataModule",
+    "TensorDataModule",
     "SharedActivationBuffer",
     "DataGeneratorProcess",
     "ActivationComputer",

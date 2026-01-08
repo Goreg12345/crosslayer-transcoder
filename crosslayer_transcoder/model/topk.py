@@ -7,7 +7,7 @@ from jaxtyping import Float
 
 
 class TopK(ABC, torch.nn.Module):
-    def __init__(self, k: int, e=None, n_layers=None, *args, **kwargs):
+    def __init__(self, k: Union[int, float], e=None, n_layers=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.k = k
         self.e = e
@@ -67,7 +67,7 @@ class BatchTopK(TopK):
         batch_size, n_layers, d_features = features.shape
         assert self.k <= d_features
 
-        batch_k = self.k * batch_size * n_layers
+        batch_k = int(self.k * batch_size * n_layers)
 
         features = features.flatten()
         topk_features = torch.zeros_like(features)
