@@ -2,8 +2,10 @@
 Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
+from functools import partial
 import logging
 from pathlib import Path
+from typing import List
 
 import lightning as L
 from torch.profiler import (
@@ -61,16 +63,26 @@ class EndOfTrainingCheckpointCallback(L.Callback):
 
 class SaveModelCallback(L.Callback):
     """Save checkpoint only at end of training."""
-
     def __init__(
-        self, checkpoint_dir: str = "checkpoints", fold_standardizers: bool = True
+        self,
+        checkpoint_dir: str = "checkpoints",
+        fold_standardizers: bool = True,
+        on_events: List[str] = ["on_train_end"],
     ):
-        # TODO: configure the events with a param
         super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
         self.fold_standardizers = fold_standardizers
+        self.on_events = on_events
+        self._setup_callbacks()
 
-    def on_train_end(self, trainer, pl_module: CrossLayerTranscoder):
+    def _setup_callbacks(self):
+        for event in self.on_events:
+            setattr(self, event, partial(self._save_model))
+
+    def _save_model(self, trainer, pl_module: CrossLayerTranscoder, **kwargs):
+        logger.info("Saving model...")
         pl_module.save_pretrained(
             self.checkpoint_dir, fold_standardizers=self.fold_standardizers
         )
+        logger.info("Model saved")
+
