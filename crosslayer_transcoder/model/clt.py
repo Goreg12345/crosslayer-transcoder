@@ -1,11 +1,16 @@
-from typing import Tuple, Union
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+import yaml
 from einops import einsum
 from jaxtyping import Float
+from safetensors.torch import load_file, save_file
 
+from crosslayer_transcoder.model.serializable_module import SerializableModule
 from crosslayer_transcoder.model.standardize import Standardizer
+from crosslayer_transcoder.utils.module_builder import build_module_from_config
 
 
 class SimpleCrossLayerTranscoder(nn.Module):
@@ -51,7 +56,11 @@ class SimpleCrossLayerTranscoder(nn.Module):
 
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         self.W_dec.data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
-        mask = self.mask.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.d_features, self.d_acts)
+        mask = (
+            self.mask.unsqueeze(-1)
+            .unsqueeze(-1)
+            .repeat(1, 1, self.d_features, self.d_acts)
+        )
         self.W_dec.data = torch.where(mask.bool(), self.W_dec.data, 0.0)
 
         if self.tied_init:
@@ -63,7 +72,9 @@ class SimpleCrossLayerTranscoder(nn.Module):
         # norm = self.W_dec.norm(p=2, dim=-1)
         # self.W_dec.data = self.W_dec.data / norm.unsqueeze(-1)
 
-    def initialize_standardizers(self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]):
+    def initialize_standardizers(
+        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
+    ):
         self.input_standardizer.initialize_from_batch(batch)
         self.output_standardizer.initialize_from_batch(batch)
 
@@ -78,7 +89,9 @@ class SimpleCrossLayerTranscoder(nn.Module):
             "from_layer to_layer -> batch_size to_layer d_acts",
         )
 
-    def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
+    def forward(
+        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],
         Float[torch.Tensor, "batch_size n_layers d_features"],
         Float[torch.Tensor, "batch_size n_layers d_acts"],
@@ -100,7 +113,7 @@ class SimpleCrossLayerTranscoder(nn.Module):
         return pre_actvs, features, recons_norm, recons
 
 
-class Encoder(nn.Module):
+class Encoder(SerializableModule):
     def __init__(self, d_acts: int, d_features: int, n_layers: int):
         super().__init__()
         self.d_acts = d_acts
@@ -132,7 +145,9 @@ class Encoder(nn.Module):
         return pre_actvs
 
     def forward(
-        self, acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"], layer: str = "all"
+        self,
+        acts_norm: Float[torch.Tensor, "batch_size n_layers d_acts"],
+        layer: str = "all",
     ) -> Float[torch.Tensor, "batch_size n_layers d_features"]:
         # for inference
         if layer != "all":
@@ -151,14 +166,34 @@ class Encoder(nn.Module):
 
         return pre_actvs
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "d_acts": self.d_acts,
+                "d_features": self.d_features,
+                "n_layers": self.n_layers,
+            },
+        }
 
-class Decoder(nn.Module):
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "Encoder":
+        return cls(
+            d_acts=config["d_acts"],
+            d_features=config["d_features"],
+            n_layers=config["n_layers"],
+        )
+
+
+class Decoder(SerializableModule):
     def __init__(self, d_acts: int, d_features: int, n_layers: int):
         super().__init__()
         self.d_acts = d_acts
         self.d_features = d_features
         self.n_layers = n_layers
-        self.register_parameter(f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts))))
+        self.register_parameter(
+            f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts)))
+        )
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -167,7 +202,9 @@ class Decoder(nn.Module):
 
     @torch.no_grad()
     def forward_layer(
-        self, features: Float[torch.Tensor, "batch_size seq from_layer d_features"], layer: int
+        self,
+        features: Float[torch.Tensor, "batch_size seq from_layer d_features"],
+        layer: int,
     ) -> Float[torch.Tensor, "batch_size seq d_acts"]:
         if features.ndim == 4:  # (batch, seq, layer, d_features)
             features = features[:, :, layer, :]
@@ -178,7 +215,9 @@ class Decoder(nn.Module):
         )
 
     def forward(
-        self, features: Float[torch.Tensor, "batch_size n_layers d_features"], layer: str = "all"
+        self,
+        features: Float[torch.Tensor, "batch_size n_layers d_features"],
+        layer: str = "all",
     ) -> Float[torch.Tensor, "batch_size n_layers d_acts"]:
         if layer != "all":
             return self.forward_layer(features, layer)
@@ -190,22 +229,44 @@ class Decoder(nn.Module):
         )
         return recons
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "d_acts": self.d_acts,
+                "d_features": self.d_features,
+                "n_layers": self.n_layers,
+            },
+        }
 
-class CrosslayerDecoder(nn.Module):
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "Decoder":
+        return cls(
+            d_acts=config["d_acts"],
+            d_features=config["d_features"],
+            n_layers=config["n_layers"],
+        )
+
+
+class CrosslayerDecoder(SerializableModule):
     def __init__(self, d_acts: int, d_features: int, n_layers: int):
         super().__init__()
         self.d_acts = d_acts
         self.d_features = d_features
         self.n_layers = n_layers
         for i in range(n_layers):
-            self.register_parameter(f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts))))
+            self.register_parameter(
+                f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts)))
+            )
         self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self.reset_parameters()
 
     def reset_parameters(self):
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         for i in range(self.n_layers):
-            self.get_parameter(f"W_{i}").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
+            self.get_parameter(f"W_{i}").data.uniform_(
+                -dec_uniform_thresh, dec_uniform_thresh
+            )
             # for l in range(i):
             #    self.get_parameter(f"W_{i}").data[l, :, :] = self.get_parameter(f"W_{l}").data[l, :, :] * 0.0
 
@@ -213,7 +274,9 @@ class CrosslayerDecoder(nn.Module):
 
     @torch.no_grad()
     def forward_layer(
-        self, features: Float[torch.Tensor, "batch_size seq from_layer d_features"], layer: int
+        self,
+        features: Float[torch.Tensor, "batch_size seq from_layer d_features"],
+        layer: int,
     ) -> Float[torch.Tensor, "batch_size seq d_acts"]:
         return (
             einsum(
@@ -225,13 +288,19 @@ class CrosslayerDecoder(nn.Module):
         )
 
     def forward(
-        self, features: Float[torch.Tensor, "batch_size n_layers d_features"], layer: str = "all"
+        self,
+        features: Float[torch.Tensor, "batch_size n_layers d_features"],
+        layer: str = "all",
     ) -> Float[torch.Tensor, "batch_size n_layers d_acts"]:
         if layer != "all":
             return self.forward_layer(features, layer)
 
         recons = torch.empty(
-            features.shape[0], self.n_layers, self.d_acts, device=features.device, dtype=features.dtype
+            features.shape[0],
+            self.n_layers,
+            self.d_acts,
+            device=features.device,
+            dtype=features.dtype,
         )
         for l in range(self.n_layers):
             W = self.get_parameter(f"W_{l}")
@@ -245,15 +314,33 @@ class CrosslayerDecoder(nn.Module):
         recons = recons + self.b.to(features.dtype)
         return recons
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "d_acts": self.d_acts,
+                "d_features": self.d_features,
+                "n_layers": self.n_layers,
+            },
+        }
 
-class CrossLayerTranscoder(nn.Module):
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "CrosslayerDecoder":
+        return cls(
+            d_acts=config["d_acts"],
+            d_features=config["d_features"],
+            n_layers=config["n_layers"],
+        )
+
+
+class CrossLayerTranscoder(SerializableModule):
     def __init__(
         self,
-        nonlinearity: nn.Module,
-        input_standardizer: Standardizer,
-        output_standardizer: Standardizer,
+        nonlinearity: SerializableModule,
         encoder: Encoder,
         decoder: Union[Decoder, CrosslayerDecoder],
+        input_standardizer: Optional[Standardizer] = None,
+        output_standardizer: Optional[Standardizer] = None,
     ):
         super().__init__()
 
@@ -265,21 +352,30 @@ class CrossLayerTranscoder(nn.Module):
 
         self.reset_parameters()
 
+    def load_from_pretrained(self, pretrained_path: str):
+        # TODO: load the model from a pretrained checkpoint
+        pass
+
     def reset_parameters(self):
         self.encoder.reset_parameters()
         self.decoder.reset_parameters()
 
-    def initialize_standardizers(self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]):
+    def initialize_standardizers(
+        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
+    ):
         self.input_standardizer.initialize_from_batch(batch)
         self.output_standardizer.initialize_from_batch(batch)
 
-    def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
+    def forward(
+        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],  # pre_actvs
         Float[torch.Tensor, "batch_size n_layers d_features"],  # features
         Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons_norm
         Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons
     ]:
-        acts = self.input_standardizer(acts)
+        if self.input_standardizer is not None:
+            acts = self.input_standardizer(acts)
 
         pre_actvs = self.encoder(acts)
 
@@ -287,6 +383,124 @@ class CrossLayerTranscoder(nn.Module):
 
         recons_norm = self.decoder(features)
 
-        recons = self.output_standardizer(recons_norm)
+        if self.output_standardizer is not None:
+            recons = self.output_standardizer(recons_norm)
+        else:
+            recons = recons_norm
 
         return pre_actvs, features, recons_norm, recons
+
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "nonlinearity": self.nonlinearity.to_config(),
+                "encoder": self.encoder.to_config(),
+                "decoder": self.decoder.to_config(),
+            },
+        }
+
+    def _fold_in_standardizers(self):
+        # TODO: move to encoder and decoder
+        if self.input_standardizer is not None:
+            self.encoder.W.data, self.encoder.b.data = (
+                self.input_standardizer.fold_in_encoder(self.encoder.W, self.encoder.b)
+            )
+        if self.output_standardizer is not None:
+            self.decoder.b.data = self.output_standardizer.fold_in_decoder_bias(
+                self.decoder.b
+            )
+
+        for layer_i in range(self.decoder.n_layers):
+            W_dec_i = self.decoder.get_parameter(f"W_{layer_i}")
+            W_dec_i_folded = self.output_standardizer.fold_in_decoder_weights_layer(
+                W_dec_i, layer_i
+            )
+            self.decoder.get_parameter(f"W_{layer_i}").data = W_dec_i_folded
+
+        self._is_folded = True
+        self.input_standardizer = None
+        self.output_standardizer = None
+
+    def save_pretrained(self, directory: Path, fold_standardizers: bool = True):
+        directory.mkdir(parents=True, exist_ok=True)
+
+        if fold_standardizers:
+            self._fold_in_standardizers()
+
+        config = self.to_config()
+        config["is_folded"] = self._is_folded
+        with open(directory / "config.yaml", "w") as f:
+            yaml.dump({"model": config}, f)
+
+        save_file(self.state_dict(), directory / "checkpoint.safetensors")
+
+
+# TODO: I think this should be moved to the model...
+def save_clt_to_pretrained(
+    model: CrossLayerTranscoder,
+    directory: Path,
+):
+    """
+    1. Take model config
+    2.  fold in standardizers
+    3. strip config to just inference data
+    4. save checkpoint with weights + config
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    config_path = directory / "config.yaml"
+    pretrained_path = directory / "checkpoint.safetensors"
+
+    input_standardizer = model.input_standardizer
+    output_standardizer = model.output_standardizer
+    encoder = model.encoder
+    decoder = model.decoder
+
+    # TODO: branch depending on type of decoder, move folding to decoder/encoder
+    # fold decoder
+    # NOTE: assuming this is called at the end of training
+
+    encoder.W.data, encoder.b.data = input_standardizer.fold_in_encoder(
+        encoder.W, encoder.b
+    )
+    decoder.b.data = output_standardizer.fold_in_decoder_bias(decoder.b)
+
+    for layer_i in range(decoder.n_layers):
+        W_dec_i = decoder.get_parameter(f"W_{layer_i}")
+        W_dec_i_folded = output_standardizer.fold_in_decoder_weights_layer(
+            W_dec_i, layer_i
+        )
+        decoder.get_parameter(f"W_{layer_i}").data = W_dec_i_folded
+
+    # TODO: reconstruct config from model
+    with open(config_path, "w") as f:
+        config = model.to_config()
+        yaml.dump({"model": config}, f)
+
+    # rm standardizer from model
+    model.input_standardizer = None
+    model.output_standardizer = None
+
+    save_file(model.state_dict(), pretrained_path)
+
+
+def load_clt_from_pretrained(directory: Path):
+    """
+    1. read in config from directory
+    2. construct model from config
+    3. load weights
+    """
+
+    config_path = directory / "config.yaml"
+    pretrained_path = directory / "checkpoint.safetensors"
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    model_config = config["model"]
+
+    model = build_module_from_config(model_config)
+
+    model.load_state_dict(load_file(pretrained_path))
+
+    return model
