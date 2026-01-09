@@ -410,10 +410,6 @@ class CrossLayerTranscoder(SerializableModule):
 
         self.reset_parameters()
 
-    def load_from_pretrained(self, pretrained_path: str):
-        # TODO: load the model from a pretrained checkpoint
-        pass
-
     def reset_parameters(self):
         self.encoder.reset_parameters()
         self.decoder.reset_parameters()
@@ -483,3 +479,4 @@ class CrossLayerTranscoder(SerializableModule):
             yaml.dump({"model": config}, f)
 
         save_file(self.state_dict(), directory / "checkpoint.safetensors")
+
