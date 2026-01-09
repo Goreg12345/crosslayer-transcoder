@@ -31,7 +31,10 @@ class SerializableModule(nn.Module, ABC):
 
         return cls(**resolved_args)
 
-    def save_pretrained(self, directory: Path) -> None:
+    def save_pretrained(
+        self,
+        directory: Path,
+    ) -> None:
         """Save config and weights to directory."""
         directory.mkdir(parents=True, exist_ok=True)
 

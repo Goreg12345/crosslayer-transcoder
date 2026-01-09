@@ -13,6 +13,9 @@ from torch.profiler import (
     tensorboard_trace_handler,
 )
 
+from crosslayer_transcoder.model import CrossLayerTranscoder
+from crosslayer_transcoder.model.serializable_module import SerializableModule
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,3 +57,20 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
+
+
+class SaveModelCallback(L.Callback):
+    """Save checkpoint only at end of training."""
+
+    def __init__(
+        self, checkpoint_dir: str = "checkpoints", fold_standardizers: bool = True
+    ):
+        # TODO: configure the events with a param
+        super().__init__()
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.fold_standardizers = fold_standardizers
+
+    def on_train_end(self, trainer, pl_module: CrossLayerTranscoder):
+        pl_module.save_pretrained(
+            self.checkpoint_dir, fold_standardizers=self.fold_standardizers
+        )
