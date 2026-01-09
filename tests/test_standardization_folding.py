@@ -2,7 +2,7 @@ import torch
 from einops import einsum
 from torch.func import functional_call
 
-from crosslayer_transcoder.model.clt import CrosslayerDecoder, Encoder
+from crosslayer_transcoder.model.clt import CrossLayerTranscoder, CrosslayerDecoder, Decoder, Encoder
 from crosslayer_transcoder.model.standardize import (
     DimensionwiseInputStandardizer,
     DimensionwiseOutputStandardizer,
@@ -80,18 +80,37 @@ def test_encoder_standarization_folding():
 
     pre_actvs = encoder(acts)
 
-    w_enc_folded, b_enc_folded = input_std.fold_in_encoder(encoder.W, encoder.b)
+    encoder.fold(input_std)
+    assert encoder._is_folded
 
-    folded_params = {
-        "W": torch.nn.Parameter(w_enc_folded.clone().detach()),
-        "b": torch.nn.Parameter(b_enc_folded.clone().detach()),
-    }
-    pre_actvs_folded = functional_call(encoder, folded_params, resid, {"layer": "all"})
+    pre_actvs_folded = encoder(resid)
 
     assert_allclose(pre_actvs, pre_actvs_folded)
 
-
 def test_decoder_standarization_folding():
+    decoder = Decoder(
+        d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS
+    ).to(DTYPE)
+    output_std = DimensionwiseOutputStandardizer(
+        n_layers=N_LAYERS, activation_dim=D_ACTS
+    ).to(DTYPE)
+
+    output_std.initialize_from_batch(batch=BATCH)
+
+    test_features = torch.randn((BATCH_SIZE, N_LAYERS, D_FEATS), dtype=DTYPE)
+
+    recons_norm = decoder(test_features)
+
+    recons = output_std(recons_norm)
+
+    decoder.fold(output_std)
+    assert decoder._is_folded
+
+    recons_folded = decoder(test_features)
+
+    assert_allclose(recons, recons_folded)
+
+def test_crosslayer_decoder_standarization_folding():
     decoder = CrosslayerDecoder(
         d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS
     ).to(DTYPE)
@@ -107,20 +126,33 @@ def test_decoder_standarization_folding():
 
     recons = output_std(recons_norm)
 
-    folded_params = {}
-    for layer in range(N_LAYERS):
-        w_dec_folded = output_std.fold_in_decoder_weights_layer(
-            decoder.get_parameter(f"W_{layer}"),
-            layer,
-        )
-        assert w_dec_folded.shape == decoder.get_parameter(f"W_{layer}").shape
-        folded_params[f"W_{layer}"] = torch.nn.Parameter(w_dec_folded.clone().detach())
+    decoder.fold(output_std)
+    assert decoder._is_folded
 
-    b_dec_folded = output_std.fold_in_decoder_bias(decoder.b)
-    folded_params["b"] = torch.nn.Parameter(b_dec_folded.clone().detach())
+    recons_folded = decoder(test_features)
+    assert_allclose(recons, recons_folded)
 
-    recons_folded = functional_call(
-        decoder, folded_params, test_features, {"layer": "all"}
-    )
+def test_crosslayer_transcoder_standarization_folding():
+    input_std = DimensionwiseInputStandardizer(
+        n_layers=N_LAYERS, activation_dim=D_ACTS
+    ).to(DTYPE)
+    output_std = DimensionwiseOutputStandardizer(
+        n_layers=N_LAYERS, activation_dim=D_ACTS
+    ).to(DTYPE)
+    transcoder = CrossLayerTranscoder(
+        nonlinearity=torch.nn.Identity(),
+        encoder=Encoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS),
+        decoder=CrosslayerDecoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS),
+        input_standardizer=input_std,
+        output_standardizer=output_std,
+    ).to(DTYPE)
+    transcoder.initialize_standardizers(batch=BATCH)
+
+    (_, _, recons_norm, recons) = transcoder(BATCH[:, 0])
+
+    transcoder.fold()
+    assert transcoder._is_folded
+
+    (_, _, recons_norm_folded, recons_folded) = transcoder(BATCH[:, 0])
 
     assert_allclose(recons, recons_folded)

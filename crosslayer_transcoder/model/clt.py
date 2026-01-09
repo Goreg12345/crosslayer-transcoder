@@ -6,11 +6,10 @@ import torch.nn as nn
 import yaml
 from einops import einsum
 from jaxtyping import Float
-from safetensors.torch import load_file, save_file
+from safetensors.torch import save_file
 
 from crosslayer_transcoder.model.serializable_module import SerializableModule
 from crosslayer_transcoder.model.standardize import Standardizer
-from crosslayer_transcoder.utils.module_builder import build_module_from_config
 
 
 class SimpleCrossLayerTranscoder(nn.Module):
@@ -121,6 +120,7 @@ class Encoder(SerializableModule):
         self.n_layers = n_layers
         self.W = nn.Parameter(torch.empty((n_layers, d_acts, d_features)))
         self.bias = True
+        self._is_folded = False
         if self.bias:
             self.b = nn.Parameter(torch.empty((n_layers, d_features)))
         self.reset_parameters()
@@ -166,6 +166,25 @@ class Encoder(SerializableModule):
 
         return pre_actvs
 
+    def fold(self, input_standardizer: Standardizer):
+        """In-place folding of the encoder weights. If the encoder is already folded, return self."""
+        if self._is_folded:
+            return self
+
+
+        self.W.data = self.W / input_standardizer.std.unsqueeze(-1)
+
+        self.b.data = self.b - (
+            einsum(
+                input_standardizer.mean,
+                self.W,
+                "n_layers d_acts, n_layers d_acts d_features -> n_layers d_features",
+            )
+        )
+
+        self._is_folded = True
+        return self
+
     def to_config(self) -> Dict[str, Any]:
         return {
             "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
@@ -194,11 +213,14 @@ class Decoder(SerializableModule):
         self.register_parameter(
             f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts)))
         )
+        self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
+        self._is_folded = False
         self.reset_parameters()
 
     def reset_parameters(self):
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         self.get_parameter(f"W").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
+        self.get_parameter(f"b").data.zero_()
 
     @torch.no_grad()
     def forward_layer(
@@ -212,7 +234,7 @@ class Decoder(SerializableModule):
             features,
             self.get_parameter(f"W")[layer],
             "batch_size seq d_features, d_features d_acts -> batch_size seq d_acts",
-        )
+        ) + self.b[layer]
 
     def forward(
         self,
@@ -226,8 +248,26 @@ class Decoder(SerializableModule):
             features,
             self.W,
             "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
-        )
+        ) + self.b
         return recons
+
+    def fold(self, output_standardizer: Standardizer):
+        """In-place folding of the decoder weights. If the decoder is already folded, return self."""
+        if self._is_folded:
+            return self
+
+
+        self.W.data = einsum(
+            self.W,
+            output_standardizer.std,
+            "n_layers d_features d_acts, n_layers d_acts -> n_layers d_features d_acts",
+        )
+
+        self.b.data = self.b * output_standardizer.std + output_standardizer.mean
+
+        self._is_folded = True
+
+        return self
 
     def to_config(self) -> Dict[str, Any]:
         return {
@@ -258,6 +298,7 @@ class CrosslayerDecoder(SerializableModule):
             self.register_parameter(
                 f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts)))
             )
+        self._is_folded = False
         self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self.reset_parameters()
 
@@ -314,6 +355,22 @@ class CrosslayerDecoder(SerializableModule):
         recons = recons + self.b.to(features.dtype)
         return recons
 
+    def fold(self, output_standardizer: Standardizer):
+        """In-place folding of the decoder weights. If the decoder is already folded, return self."""
+        if self._is_folded:
+            return self
+
+        self.b.data = self.b * output_standardizer.std + output_standardizer.mean
+        for layer in range(self.n_layers):
+            std = output_standardizer.std[layer]
+            self.get_parameter(f"W_{layer}").data = einsum(
+                self.get_parameter(f"W_{layer}"),
+                std,
+                "n_layers d_features d_acts, d_acts -> n_layers d_features d_acts",
+            )
+        self._is_folded = True
+        return self
+
     def to_config(self) -> Dict[str, Any]:
         return {
             "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
@@ -349,6 +406,7 @@ class CrossLayerTranscoder(SerializableModule):
         self.nonlinearity = nonlinearity
         self.input_standardizer = input_standardizer
         self.output_standardizer = output_standardizer
+        self._is_folded = False
 
         self.reset_parameters()
 
@@ -400,23 +458,14 @@ class CrossLayerTranscoder(SerializableModule):
             },
         }
 
-    def _fold_in_standardizers(self):
-        # TODO: move to encoder and decoder
-        if self.input_standardizer is not None:
-            self.encoder.W.data, self.encoder.b.data = (
-                self.input_standardizer.fold_in_encoder(self.encoder.W, self.encoder.b)
-            )
-        if self.output_standardizer is not None:
-            self.decoder.b.data = self.output_standardizer.fold_in_decoder_bias(
-                self.decoder.b
-            )
+    def fold(self):
+        if self._is_folded:
+            return
 
-        for layer_i in range(self.decoder.n_layers):
-            W_dec_i = self.decoder.get_parameter(f"W_{layer_i}")
-            W_dec_i_folded = self.output_standardizer.fold_in_decoder_weights_layer(
-                W_dec_i, layer_i
-            )
-            self.decoder.get_parameter(f"W_{layer_i}").data = W_dec_i_folded
+        if self.input_standardizer is not None:
+            self.encoder.fold(self.input_standardizer)
+        if self.output_standardizer is not None:
+            self.decoder.fold(self.output_standardizer)
 
         self._is_folded = True
         self.input_standardizer = None
@@ -426,7 +475,7 @@ class CrossLayerTranscoder(SerializableModule):
         directory.mkdir(parents=True, exist_ok=True)
 
         if fold_standardizers:
-            self._fold_in_standardizers()
+            self.fold()
 
         config = self.to_config()
         config["is_folded"] = self._is_folded
