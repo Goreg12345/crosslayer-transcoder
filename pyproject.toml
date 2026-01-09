@@ -32,15 +32,15 @@ dev = [
     "pytest>=8.4.1",
 ]
 
-[project.scripts]
-clt = "crosslayer_transcoder.main:main"
-
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "jupyterlab>=4.4.2",
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
 ]
+
+[project.scripts]
+clt = "crosslayer_transcoder.main:main"
 
 [tool.black]
 line-length = 110
