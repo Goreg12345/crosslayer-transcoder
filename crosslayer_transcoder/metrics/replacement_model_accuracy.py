@@ -102,7 +102,7 @@ class ReplacementModelAccuracy(Metric):
         with torch.no_grad():
             for i, (tokens, mask) in enumerate(self.loader):
                 torch.cuda.empty_cache()
-                print(f"computing replacement model", i)
+                print("computing replacement model", i)
                 tokens = self.handle_device(tokens)
                 mask = self.handle_device(mask)
                 if i >= max_batches:

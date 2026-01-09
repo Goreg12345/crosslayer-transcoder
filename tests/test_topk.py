@@ -244,6 +244,6 @@ def test_nnsight_compatibility(nnsight_model, topk_fixture, request):
         with nnsight_model.trace("test"):
             actvs = nnsight_model.transformer.h[0].mlp.output
             topk.to(actvs.device)
-            topk_result = topk(actvs)
+            topk(actvs)
     except Exception as e:
         pytest.fail(f"nnsight compatibility test failed for {topk_fixture}: {e}")

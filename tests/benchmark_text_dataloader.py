@@ -8,10 +8,9 @@ import time
 
 import nnsight
 import torch
+from data import text_dataset
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-
-from data import text_dataset
 
 
 def benchmark_textdataset(
@@ -35,7 +34,7 @@ def benchmark_textdataset(
         max_batches: Maximum batches to process
         max_duration: Maximum time to run benchmark (seconds)
     """
-    print(f"=== TextDataset Benchmark ===")
+    print("=== TextDataset Benchmark ===")
     print(f"Dataset: {dataset_name}")
     print(f"Model: {model_name}")
     print(f"Batch size: {batch_size}")
@@ -175,9 +174,7 @@ def benchmark_textdataset(
     print(f"Dataset load: {dataset_load_time:.2f}s")
     print(f"TextDataset: {textdataset_time:.2f}s")
     print(f"DataLoader init: {dataloader_time:.2f}s")
-    print(
-        f"Total setup: {model_load_time + dataset_load_time + textdataset_time + dataloader_time:.2f}s"
-    )
+    print(f"Total setup: {model_load_time + dataset_load_time + textdataset_time + dataloader_time:.2f}s")
 
 
 def compare_workers():
@@ -187,7 +184,7 @@ def compare_workers():
     worker_configs = [0, 1, 2, 4]
 
     for num_workers in worker_configs:
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"Testing with {num_workers} workers")
         print("=" * 50)
 
@@ -201,25 +198,15 @@ def compare_workers():
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Benchmark TextDataset token throughput"
-    )
-    parser.add_argument(
-        "--dataset", default="Skylion007/openwebtext", help="Dataset name"
-    )
+    parser = argparse.ArgumentParser(description="Benchmark TextDataset token throughput")
+    parser.add_argument("--dataset", default="Skylion007/openwebtext", help="Dataset name")
     parser.add_argument("--model", default="openai-community/gpt2", help="Model name")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--seq-len", type=int, default=1024, help="Sequence length")
     parser.add_argument("--workers", type=int, default=0, help="Number of workers")
-    parser.add_argument(
-        "--max-batches", type=int, default=10, help="Max batches to process"
-    )
-    parser.add_argument(
-        "--max-duration", type=float, default=60.0, help="Max duration (seconds)"
-    )
-    parser.add_argument(
-        "--compare-workers", action="store_true", help="Compare different worker counts"
-    )
+    parser.add_argument("--max-batches", type=int, default=10, help="Max batches to process")
+    parser.add_argument("--max-duration", type=float, default=60.0, help="Max duration (seconds)")
+    parser.add_argument("--compare-workers", action="store_true", help="Compare different worker counts")
 
     args = parser.parse_args()
 

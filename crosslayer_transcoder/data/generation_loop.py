@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from crosslayer_transcoder.data import text_dataset
 from crosslayer_transcoder.data.activation_sources import ActivationComputer, DiskActivationSource
 from crosslayer_transcoder.data.deployment_policy import (
-    BaseDeploymentPolicy,
     DeploymentPolicy,
     create_deployment_policy,
 )
@@ -138,7 +137,7 @@ class DataGenerationLoop:
             # Generate new activations
             gen_start = time.time()
             activations = self._generate_activations()
-            gen_time = time.time() - gen_start
+            time.time() - gen_start
 
             # Take only as many activations as we have indices
             num_indices = len(indices_to_refresh)
@@ -256,7 +255,7 @@ class DataGenerationLoop:
                 self.shared_buffer.set_activations(indices_to_fill, samples)
 
                 # Calculate refill rate for this batch
-                batch_time = time.time() - batch_start_time
+                time.time() - batch_start_time
                 batch_refilled = len(indices_to_fill)
                 total_refilled += batch_refilled
 

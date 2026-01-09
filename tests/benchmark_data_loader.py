@@ -3,10 +3,11 @@
 Comprehensive data loader benchmark for ActivationDataModule.
 Tests both shared memory and simple buffer modes.
 """
+
 import os
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 # Add project root to Python path for reliable imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,8 +81,7 @@ def benchmark_loader(loader, mode_name: str, duration: float = 30.0) -> float:
                 elapsed = time.time() - start_time
                 current_mb_s = (total_bytes / (1024 * 1024)) / elapsed
                 print(
-                    f"   Batch {batch_count}: {batch_time*1000:.1f}ms, "
-                    f"Running avg: {current_mb_s:.1f} MB/s"
+                    f"   Batch {batch_count}: {batch_time * 1000:.1f}ms, Running avg: {current_mb_s:.1f} MB/s"
                 )
 
     except Exception as e:
@@ -104,7 +104,7 @@ def benchmark_loader(loader, mode_name: str, duration: float = 30.0) -> float:
     # Show buffer stats if available
     if hasattr(loader, "get_stats"):
         stats = loader.get_stats()
-        print(f"   Final buffer status:")
+        print("   Final buffer status:")
         print(f"     Valid samples: {stats['valid_samples']:,} ({stats['valid_percentage']:.1f}%)")
         print(f"     Buffer memory: {stats['total_memory_gb']:.2f} GB")
 
@@ -252,7 +252,7 @@ def main():
     batch_size = 5000
     duration = 30.0
 
-    print(f"⚙️  Configuration:")
+    print("⚙️  Configuration:")
     print(f"   Batch size: {batch_size:,}")
     print(f"   Test duration: {duration}s per mode")
     print(f"   PyTorch version: {torch.__version__}")
@@ -270,7 +270,7 @@ def main():
         results["DataModule Simple"] = result
 
     # Final comparison
-    print(f"\n🏆 FINAL COMPARISON")
+    print("\n🏆 FINAL COMPARISON")
     print("=" * 60)
     if results:
         max_name_len = max(len(name) for name in results.keys())
@@ -295,7 +295,7 @@ def main():
     else:
         print("   ❌ No successful benchmarks completed")
 
-    print(f"\n✅ Benchmark complete!")
+    print("\n✅ Benchmark complete!")
 
 
 if __name__ == "__main__":
