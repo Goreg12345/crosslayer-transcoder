@@ -16,6 +16,7 @@ from torch.profiler import (
 )
 
 from crosslayer_transcoder.model import CrossLayerTranscoder
+from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
 from crosslayer_transcoder.model.serializable_module import SerializableModule
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ class SaveModelCallback(L.Callback):
         for event in self.on_events:
             setattr(self, event, partial(self._save_model))
 
-    def _save_model(self, trainer, pl_module, **kwargs):
+    def _save_model(self, trainer, pl_module: CrossLayerTranscoderModule, **kwargs):
         logger.info("Saving model...")
         pl_module.model.save_pretrained(
             self.checkpoint_dir, fold_standardizers=self.fold_standardizers

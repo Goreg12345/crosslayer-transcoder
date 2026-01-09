@@ -1,10 +1,13 @@
+from typing import Any, Dict
 from einops import einsum
 import torch
 import torch.nn as nn
 from jaxtyping import Float
 
+from crosslayer_transcoder.model.serializable_module import SerializableModule
 
-class Standardizer(nn.Module):
+
+class Standardizer(SerializableModule):
     def __init__(self, **kwargs):
         super().__init__()
 
@@ -53,6 +56,23 @@ class DimensionwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[layer]) / self.std[layer]
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+            },
+        }
+    
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "DimensionwiseInputStandardizer":
+        return cls(
+            n_layers=config["n_layers"],
+            activation_dim=config["activation_dim"],
+        )
+
+
 
 class DimensionwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
@@ -90,6 +110,22 @@ class DimensionwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean) / self.std
         else:
             return (mlp_out - self.mean[layer]) / self.std[layer]
+    
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+            },
+        }
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "DimensionwiseOutputStandardizer":
+        return cls(
+            n_layers=config["n_layers"],
+            activation_dim=config["activation_dim"],
+        )
 
 
 class SamplewiseInputStandardizer(Standardizer):
@@ -111,6 +147,16 @@ class SamplewiseInputStandardizer(Standardizer):
         stds = batch.std(dim=-1, keepdim=True)
         stds.clamp_(min=1e-8)
         return (batch - means) / stds
+    
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {},
+        }
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "SamplewiseInputStandardizer":
+        return cls()
 
 
 class LayerwiseInputStandardizer(Standardizer):
@@ -148,6 +194,22 @@ class LayerwiseInputStandardizer(Standardizer):
             return (batch - self.mean[None, :, None]) / self.std[None, :, None]
         else:
             return (batch - self.mean[None, layer, None]) / self.std[None, layer, None]
+
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "n_exclude": self.n_exclude,
+            },
+        }
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "LayerwiseInputStandardizer":
+        return cls(
+            n_layers=config["n_layers"],
+            n_exclude=config["n_exclude"],
+        )
 
 
 class LayerwiseOutputStandardizer(Standardizer):
@@ -196,3 +258,19 @@ class LayerwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean[None, layer, None]) / self.std[
                 None, layer, None
             ]
+    
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "n_exclude": self.n_exclude,
+            },
+        }
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "LayerwiseOutputStandardizer":
+        return cls(
+            n_layers=config["n_layers"],
+            n_exclude=config["n_exclude"],
+        )

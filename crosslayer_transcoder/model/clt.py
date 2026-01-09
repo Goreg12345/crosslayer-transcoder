@@ -451,6 +451,8 @@ class CrossLayerTranscoder(SerializableModule):
                 "nonlinearity": self.nonlinearity.to_config(),
                 "encoder": self.encoder.to_config(),
                 "decoder": self.decoder.to_config(),
+                "input_standardizer": self.input_standardizer.to_config() if self.input_standardizer is not None else None,
+                "output_standardizer": self.output_standardizer.to_config() if self.output_standardizer is not None else None,
             },
         }
 
