@@ -65,7 +65,7 @@ def convert_h5_float32_to_float16(
         new_size_gb = dataset.size * 2 / (1024**3)  # float16 = 2 bytes
         print(f"Original size: {original_size_gb:.2f} GB")
         print(f"New size: {new_size_gb:.2f} GB")
-        print(f"Size reduction: {(1 - new_size_gb/original_size_gb)*100:.1f}%")
+        print(f"Size reduction: {(1 - new_size_gb / original_size_gb) * 100:.1f}%")
 
         # Create output file
         with h5py.File(output_path, "w") as f_out:
@@ -81,7 +81,7 @@ def convert_h5_float32_to_float16(
 
             for start_idx in range(0, total_samples, chunk_size):
                 end_idx = min(start_idx + chunk_size, total_samples)
-                current_chunk_size = end_idx - start_idx
+                end_idx - start_idx
 
                 # Read chunk from input
                 chunk_data = dataset[start_idx:end_idx]
@@ -125,7 +125,7 @@ def convert_h5_float32_to_float16(
     total_time = time.time() - start_time
     final_rate = total_samples / total_time
 
-    print(f"\n✅ Conversion complete!")
+    print("\n✅ Conversion complete!")
     print(f"Total time: {total_time:.1f}s")
     print(f"Average rate: {final_rate:,.0f} samples/s")
     print(f"Output file: {output_path}")
@@ -143,13 +143,9 @@ def main():
     """Main function for command line usage."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Convert HDF5 activations from float32 to float16"
-    )
+    parser = argparse.ArgumentParser(description="Convert HDF5 activations from float32 to float16")
     parser.add_argument("input_file", help="Path to input HDF5 file (float32)")
-    parser.add_argument(
-        "-o", "--output", help="Path to output HDF5 file (default: input_fp16.h5)"
-    )
+    parser.add_argument("-o", "--output", help="Path to output HDF5 file (default: input_fp16.h5)")
     parser.add_argument(
         "-c",
         "--chunk-size",

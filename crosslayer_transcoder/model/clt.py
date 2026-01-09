@@ -78,7 +78,9 @@ class SimpleCrossLayerTranscoder(nn.Module):
             "from_layer to_layer -> batch_size to_layer d_acts",
         )
 
-    def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
+    def forward(
+        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],
         Float[torch.Tensor, "batch_size n_layers d_features"],
         Float[torch.Tensor, "batch_size n_layers d_acts"],
@@ -158,12 +160,12 @@ class Decoder(nn.Module):
         self.d_acts = d_acts
         self.d_features = d_features
         self.n_layers = n_layers
-        self.register_parameter(f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts))))
+        self.register_parameter("W", nn.Parameter(torch.empty((n_layers, d_features, d_acts))))
         self.reset_parameters()
 
     def reset_parameters(self):
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
-        self.get_parameter(f"W").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
+        self.get_parameter("W").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
 
     @torch.no_grad()
     def forward_layer(
@@ -173,7 +175,7 @@ class Decoder(nn.Module):
             features = features[:, :, layer, :]
         return einsum(
             features,
-            self.get_parameter(f"W")[layer],
+            self.get_parameter("W")[layer],
             "batch_size seq d_features, d_features d_acts -> batch_size seq d_acts",
         )
 
@@ -199,7 +201,7 @@ class CrosslayerDecoder(nn.Module):
         self.n_layers = n_layers
         for i in range(n_layers):
             self.register_parameter(f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts))))
-        self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
+        self.register_parameter("b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -273,7 +275,9 @@ class CrossLayerTranscoder(nn.Module):
         self.input_standardizer.initialize_from_batch(batch)
         self.output_standardizer.initialize_from_batch(batch)
 
-    def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
+    def forward(
+        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
+    ) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],  # pre_actvs
         Float[torch.Tensor, "batch_size n_layers d_features"],  # features
         Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons_norm

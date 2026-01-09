@@ -4,10 +4,9 @@ Pytest tests for deployment policy functionality.
 Tests that deployment policies correctly handle model instantiation and device management.
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
-import torch
 
 from crosslayer_transcoder.data import ActivationDataModule
 from crosslayer_transcoder.data.deployment_policy import (
@@ -67,13 +66,13 @@ class TestDeviceMapping:
         policy = create_deployment_policy(DeploymentPolicy.GPU_ONLY, device_map="cuda:3")
         devices, is_multi_gpu = policy._parse_device_map()
         assert devices == ["cuda:3"]
-        assert is_multi_gpu == False
+        assert not is_multi_gpu
 
         # Test multi-GPU
         policy = create_deployment_policy(DeploymentPolicy.GPU_ONLY, device_map="cuda:0,1,2,3")
         devices, is_multi_gpu = policy._parse_device_map()
         assert devices == ["cuda:0", "cuda:1", "cuda:2", "cuda:3"]
-        assert is_multi_gpu == True
+        assert is_multi_gpu
 
     def test_gpu_only_device_tracking_logic(self):
         """Test that GPU-only policy correctly calculates device tracking without loading models."""

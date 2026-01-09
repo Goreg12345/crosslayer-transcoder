@@ -8,12 +8,9 @@ import multiprocessing as mp
 import os
 from typing import Optional
 
-import nnsight
 import torch
 from datasets import load_dataset
-from torch.utils.data import DataLoader
 
-from crosslayer_transcoder.data import text_dataset
 from crosslayer_transcoder.data.activation_sources import ActivationComputer, DiskActivationSource
 from crosslayer_transcoder.data.deployment_policy import DeploymentPolicy
 
@@ -205,7 +202,7 @@ class DataGeneratorProcess(mp.Process):
             for child in children:
                 try:
                     child.terminate()
-                except:
+                except Exception:
                     pass
         except ImportError:
             pass  # psutil not available

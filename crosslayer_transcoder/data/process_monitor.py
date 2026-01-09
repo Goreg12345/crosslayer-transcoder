@@ -56,7 +56,7 @@ class ProcessMonitor:
 
         # Format uptime with more stable display
         if uptime > 60:
-            uptime_str = f"{int(uptime/60)}:{int(uptime%60):02d}"
+            uptime_str = f"{int(uptime / 60)}:{int(uptime % 60):02d}"
         else:
             uptime_str = f"{int(uptime)}s"
 

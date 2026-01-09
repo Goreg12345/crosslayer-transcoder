@@ -8,7 +8,6 @@ from crosslayer_transcoder.model.standardize import (
     DimensionwiseOutputStandardizer,
 )
 
-
 torch.manual_seed(42)
 DTYPE = torch.float64
 BATCH_SIZE, D_ACTS, D_FEATS, N_LAYERS = 100, 768, 32, 12
@@ -29,9 +28,7 @@ def assert_allclose(lhs, rhs, rtol=1e-7, atol=1e-9):
 def test_math_sanity_check():
     encoder = Encoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS).to(DTYPE)
 
-    input_std = DimensionwiseInputStandardizer(
-        n_layers=N_LAYERS, activation_dim=D_ACTS
-    ).to(DTYPE)
+    input_std = DimensionwiseInputStandardizer(n_layers=N_LAYERS, activation_dim=D_ACTS).to(DTYPE)
     input_std.initialize_from_batch(batch=BATCH)
 
     resid = BATCH[:, 0]
@@ -68,9 +65,7 @@ def test_math_sanity_check():
 
 def test_encoder_standarization_folding():
     encoder = Encoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS).to(DTYPE)
-    input_std = DimensionwiseInputStandardizer(
-        n_layers=N_LAYERS, activation_dim=D_ACTS
-    ).to(DTYPE)
+    input_std = DimensionwiseInputStandardizer(n_layers=N_LAYERS, activation_dim=D_ACTS).to(DTYPE)
 
     input_std.initialize_from_batch(batch=BATCH)
 
@@ -92,12 +87,8 @@ def test_encoder_standarization_folding():
 
 
 def test_decoder_standarization_folding():
-    decoder = CrosslayerDecoder(
-        d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS
-    ).to(DTYPE)
-    output_std = DimensionwiseOutputStandardizer(
-        n_layers=N_LAYERS, activation_dim=D_ACTS
-    ).to(DTYPE)
+    decoder = CrosslayerDecoder(d_acts=D_ACTS, d_features=D_FEATS, n_layers=N_LAYERS).to(DTYPE)
+    output_std = DimensionwiseOutputStandardizer(n_layers=N_LAYERS, activation_dim=D_ACTS).to(DTYPE)
 
     output_std.initialize_from_batch(batch=BATCH)
 
@@ -119,8 +110,6 @@ def test_decoder_standarization_folding():
     b_dec_folded = output_std.fold_in_decoder_bias(decoder.b)
     folded_params["b"] = torch.nn.Parameter(b_dec_folded.clone().detach())
 
-    recons_folded = functional_call(
-        decoder, folded_params, test_features, {"layer": "all"}
-    )
+    recons_folded = functional_call(decoder, folded_params, test_features, {"layer": "all"})
 
     assert_allclose(recons, recons_folded)

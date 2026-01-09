@@ -5,9 +5,6 @@ Shared memory data loader for streaming neural network activations
 with efficient multiprocessing data generation.
 """
 
-import torch
-import torch.multiprocessing as mp
-
 from .activation_sources import ActivationComputer, DiskActivationSource
 from .data_generator import DataGeneratorProcess
 

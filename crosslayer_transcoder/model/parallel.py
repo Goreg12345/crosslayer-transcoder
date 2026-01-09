@@ -1,43 +1,25 @@
 # mypy: allow-untyped-defs
 # Copyright (c) Meta Platforms, Inc. and affiliates
-from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from dataclasses import dataclass
-from functools import cached_property, partial
-from typing import Any, Optional, Tuple, Union, cast
+from functools import partial
+from typing import Optional, cast
 
-import lightning as L
 import torch
 import torch.nn as nn
-from einops import einsum, rearrange
-from jaxtyping import Float
-from torch.distributed._tensor.placement_types import Partial, Replicate, Shard
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.tensor import (
-    DeviceMesh,
     DTensor,
-    Replicate,
-    Shard,
     distribute_module,
     distribute_tensor,
 )
 from torch.distributed.tensor._dtensor_spec import DTensorSpec
-from torch.distributed.tensor._op_schema import OpSchema  # OpSpec,
 from torch.distributed.tensor._op_schema import (
     OpStrategy,
     PlacementStrategy,
-    RuntimeSchemaInfo,
-    StrategyType,
-    _is_inplace_op,
 )
-from torch.distributed.tensor._ops.utils import is_tensor_dim_sharded, normalize_dim, register_op_strategy
-from torch.distributed.tensor.parallel import RowwiseParallel, parallelize_module
+from torch.distributed.tensor._ops.utils import register_op_strategy
 from torch.distributed.tensor.parallel.style import ParallelStyle
 from torch.distributed.tensor.placement_types import Placement, Replicate, Shard
-from torch.nn.modules.activation import ReLU
 
-import wandb
-from crosslayer_transcoder.metrics.replacement_model_accuracy import ReplacementModelAccuracy
 from crosslayer_transcoder.model.jumprelu import JumpReLU
 
 aten = torch.ops.aten  # convenience alias
@@ -73,7 +55,7 @@ def select_int_strategy(op_schema):
 
                 if shard_dim == selected_dim:
                     raise NotImplementedError(
-                        "Selecting along a dimension that is sharded " "is not supported on PyTorch-2.7.1."
+                        "Selecting along a dimension that is sharded is not supported on PyTorch-2.7.1."
                     )
                 # shift shard index left if we dropped an earlier dimension
                 if shard_dim > selected_dim:

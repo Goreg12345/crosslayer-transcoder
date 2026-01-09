@@ -28,11 +28,9 @@ def get_webtext_dataloader(model, dataset_name="Skylion007/openwebtext", batch_s
 
 
 def plot_actvs(actvs):
-    if type(actvs) == list:
+    if isinstance(actvs, list):
         # actvs: list(n_layers), every entry tensor batch_size x seq_len x d_acts
-        actvs = torch.stack(
-            [actv[0, 50, 300:500] for actv in actvs]
-        )  # n_layers x d_acts
+        actvs = torch.stack([actv[0, 50, 300:500] for actv in actvs])  # n_layers x d_acts
     else:  # batch_size x n_layers x d_acts
         actvs = actvs[0, :, 300:500]  # n_layers x d_acts
     actvs = actvs.cpu().numpy()

@@ -1,14 +1,12 @@
 import os
 import time
 
+import activation_server.text_dataset as text_dataset
 import datasets
-import h5py
 import nnsight
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-import activation_server.text_dataset as text_dataset
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -32,9 +30,7 @@ else:
 
 def create_model(use_fp16=False):
     """Create model with optional FP16"""
-    model = nnsight.LanguageModel(
-        "openai-community/gpt2", device_map="cpu", dispatch=True
-    )
+    model = nnsight.LanguageModel("openai-community/gpt2", device_map="cpu", dispatch=True)
     model.requires_grad_(False)
 
     if use_fp16:
@@ -50,7 +46,7 @@ dataset = datasets.load_dataset("Skylion007/openwebtext", split="train")
 
 @torch.no_grad()
 def extract_activations(model, tokens):
-    with model.trace(tokens) as tracer:
+    with model.trace(tokens):
         mlp_ins = []
         mlp_outs = []
         for i in range(12):
@@ -108,7 +104,7 @@ def benchmark_config(batch_size, use_fp16=False, duration=30):
             batch[:, 0] = model.config.bos_token_id
 
             # Extract activations
-            mlp_acts = extract_activations(model, batch)
+            extract_activations(model, batch)
 
             total_tokens += batch.numel()
             total_batches += 1
@@ -121,8 +117,8 @@ def benchmark_config(batch_size, use_fp16=False, duration=30):
     tokens_per_sec = total_tokens / elapsed
 
     print(f"Tokens/sec: {tokens_per_sec:,.1f}")
-    print(f"Batches/sec: {total_batches/elapsed:.1f}")
-    print(f"Avg batch size: {total_tokens/total_batches:.1f} tokens")
+    print(f"Batches/sec: {total_batches / elapsed:.1f}")
+    print(f"Avg batch size: {total_tokens / total_batches:.1f} tokens")
 
     return tokens_per_sec
 
@@ -140,11 +136,7 @@ if __name__ == "__main__":
 
     print("\n=== RESULTS ===")
     baseline = results.get("batch_40", 2100)
-    for config, tokens_per_sec in sorted(
-        results.items(), key=lambda x: x[1], reverse=True
-    ):
+    for config, tokens_per_sec in sorted(results.items(), key=lambda x: x[1], reverse=True):
         if tokens_per_sec > 0:
             improvement = tokens_per_sec / baseline
-            print(
-                f"{config:15}: {tokens_per_sec:8,.1f} tokens/sec ({improvement:.1f}x)"
-            )
+            print(f"{config:15}: {tokens_per_sec:8,.1f} tokens/sec ({improvement:.1f}x)")

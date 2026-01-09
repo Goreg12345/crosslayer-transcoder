@@ -51,9 +51,9 @@ class TestDeadFeaturesBasic:
 
         assert metric.n_features == n_features
         assert metric.n_layers == n_layers
-        assert metric.return_per_layer == False
-        assert metric.return_neuron_indices == False
-        assert metric.return_log_freqs == False
+        assert not metric.return_per_layer
+        assert not metric.return_neuron_indices
+        assert not metric.return_log_freqs
         assert metric.n_active.shape == (n_layers, n_features)
         assert torch.all(metric.n_active == 0)
         assert metric.n_total.shape == (1,)
@@ -69,9 +69,9 @@ class TestDeadFeaturesBasic:
             return_neuron_indices=True,
         )
 
-        assert metric.return_per_layer == True
-        assert metric.return_neuron_indices == True
-        assert metric.return_log_freqs == False
+        assert metric.return_per_layer
+        assert metric.return_neuron_indices
+        assert not metric.return_log_freqs
 
 
 class TestDeadFeaturesZeroInput:

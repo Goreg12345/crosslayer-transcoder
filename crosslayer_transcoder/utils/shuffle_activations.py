@@ -9,7 +9,6 @@ import os
 
 import h5py
 import numpy as np
-from tqdm import tqdm
 
 
 def shuffle_activations(input_path, output_path, seed=42):
@@ -54,7 +53,7 @@ def shuffle_activations(input_path, output_path, seed=42):
     print("Writing shuffled data...")
     with h5py.File(output_path, "w") as f_out:
         # Create dataset and write entire tensor at once
-        shuffled_tensor = f_out.create_dataset(
+        f_out.create_dataset(
             "tensor",
             data=data,  # Write all data at once
             chunks=True,  # Enable chunking for better I/O
@@ -81,7 +80,6 @@ def verify_shuffle(original_path, shuffled_path, num_samples=100):
         h5py.File(original_path, "r") as f_orig,
         h5py.File(shuffled_path, "r") as f_shuf,
     ):
-
         orig_tensor = f_orig["tensor"]
         shuf_tensor = f_shuf["tensor"]
 
@@ -91,16 +89,14 @@ def verify_shuffle(original_path, shuffled_path, num_samples=100):
         batch_size = orig_tensor.shape[0]
 
         # Sample indices for verification
-        test_indices = np.random.choice(
-            batch_size, min(num_samples, batch_size), replace=False
-        )
+        test_indices = np.random.choice(batch_size, min(num_samples, batch_size), replace=False)
 
         # Read only the samples we need for verification - much more efficient
         orig_samples = orig_tensor[test_indices]
         shuf_samples = shuf_tensor[test_indices]
 
         differences_found = 0
-        for i, idx in enumerate(test_indices):
+        for i, _idx in enumerate(test_indices):
             if not np.array_equal(orig_samples[i], shuf_samples[i]):
                 differences_found += 1
 
@@ -112,9 +108,7 @@ def verify_shuffle(original_path, shuffled_path, num_samples=100):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Shuffle activations along batch dimension"
-    )
+    parser = argparse.ArgumentParser(description="Shuffle activations along batch dimension")
     parser.add_argument(
         "--input",
         default="/var/local/glang/activations/clt-activations-10M.h5",
@@ -125,12 +119,8 @@ if __name__ == "__main__":
         default="/var/local/glang/activations/clt-activations-10M-shuffled.h5",
         help="Output HDF5 file path",
     )
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Random seed for reproducible shuffling"
-    )
-    parser.add_argument(
-        "--verify", action="store_true", help="Verify the shuffle after completion"
-    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducible shuffling")
+    parser.add_argument("--verify", action="store_true", help="Verify the shuffle after completion")
 
     args = parser.parse_args()
 

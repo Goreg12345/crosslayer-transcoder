@@ -4,7 +4,6 @@ Allows users to control where the GPT-2 model runs during activation generation.
 """
 
 import logging
-import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple

@@ -10,7 +10,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-from crosslayer_transcoder.data.text_dataset import TextDataset, worker_init_fn
+from crosslayer_transcoder.data.text_dataset import TextDataset
 
 
 class MockDataset:
@@ -65,7 +65,7 @@ class TestTextDataset:
         assert text_dataset.to_tokens == model.tokenizer
         assert text_dataset.batch_size == 4
         assert text_dataset.seq_len == 128
-        assert text_dataset.drop_last_batch == True
+        assert text_dataset.drop_last_batch
         assert text_dataset.hf_text_accessor == "text"
         assert text_dataset.token_pointer == 0
         assert text_dataset.batch_pointer == 0
@@ -186,7 +186,10 @@ class TestTextDataset:
         """Test TextDataset with PyTorch DataLoader."""
         # Test with single worker
         dataloader = DataLoader(
-            text_dataset, batch_size=None, shuffle=False, num_workers=0  # TextDataset handles batching
+            text_dataset,
+            batch_size=None,
+            shuffle=False,
+            num_workers=0,  # TextDataset handles batching
         )
 
         batch, mask = next(iter(dataloader))
@@ -350,9 +353,9 @@ class TestTextDatasetIntegration:
 
             # The tokens should match (at least the first part)
             min_len = min(len(manual_tokens), len(batch_tokens))
-            assert torch.equal(
-                torch.tensor(manual_tokens[:min_len]), batch_tokens[:min_len]
-            ), f"Token mismatch for sentence {i}: expected {manual_tokens[:min_len]}, got {batch_tokens[:min_len].tolist()}"
+            assert torch.equal(torch.tensor(manual_tokens[:min_len]), batch_tokens[:min_len]), (
+                f"Token mismatch for sentence {i}: expected {manual_tokens[:min_len]}, got {batch_tokens[:min_len].tolist()}"
+            )
 
     def test_short_sequences_padding_and_mask(self, model):
         """Test that short sequences (< seq_len) are properly padded and masked."""
@@ -393,30 +396,30 @@ class TestTextDatasetIntegration:
 
             # Check that the actual tokens match manual tokenization
             actual_tokens = batch[i][:expected_length]
-            assert torch.equal(
-                actual_tokens, torch.tensor(manual_tokens)
-            ), f"Token mismatch for sentence {i}: expected {manual_tokens}, got {actual_tokens.tolist()}"
+            assert torch.equal(actual_tokens, torch.tensor(manual_tokens)), (
+                f"Token mismatch for sentence {i}: expected {manual_tokens}, got {actual_tokens.tolist()}"
+            )
 
             # Check mask behavior
             sentence_mask = mask[i]
 
             # First `expected_length` positions should be True
-            assert torch.all(
-                sentence_mask[:expected_length]
-            ), f"Mask should be True for first {expected_length} positions in sentence {i}"
+            assert torch.all(sentence_mask[:expected_length]), (
+                f"Mask should be True for first {expected_length} positions in sentence {i}"
+            )
 
             # Remaining positions should be False (padding)
             if expected_length < 50:
-                assert torch.all(
-                    ~sentence_mask[expected_length:]
-                ), f"Mask should be False for padding positions after {expected_length} in sentence {i}"
+                assert torch.all(~sentence_mask[expected_length:]), (
+                    f"Mask should be False for padding positions after {expected_length} in sentence {i}"
+                )
 
             # Check that padded positions contain zeros
             if expected_length < 50:
                 padding_tokens = batch[i][expected_length:]
-                assert torch.all(
-                    padding_tokens == 0
-                ), f"Padding positions should be zero for sentence {i}, got {padding_tokens[:5].tolist()}..."
+                assert torch.all(padding_tokens == 0), (
+                    f"Padding positions should be zero for sentence {i}, got {padding_tokens[:5].tolist()}..."
+                )
 
             # Verify roundtrip with only valid tokens
             valid_tokens = batch[i][mask[i]]
@@ -436,16 +439,16 @@ class TestTextDatasetIntegration:
             assert len(decoded_text) > 0
 
             # Check that no padding tokens were included in decoding
-            assert (
-                len(valid_tokens) == expected_length
-            ), f"Valid tokens length {len(valid_tokens)} should match expected {expected_length}"
+            assert len(valid_tokens) == expected_length, (
+                f"Valid tokens length {len(valid_tokens)} should match expected {expected_length}"
+            )
 
         # Additional verification: ensure no errors are raised
         # and the function handles short sequences gracefully
         try:
             # This should work without any issues
             next(text_dataset)
-            assert False, "Should have raised StopIteration since we exhausted the dataset"
+            raise AssertionError("Should have raised StopIteration since we exhausted the dataset")
         except StopIteration:
             # This is expected behavior
             pass

@@ -3,8 +3,6 @@
 Tests for process monitor functionality.
 """
 
-from unittest.mock import Mock, patch
-
 import pytest
 
 from crosslayer_transcoder.data.process_monitor import ProcessMonitor, WandBProcessMonitor
@@ -55,7 +53,7 @@ class TestWandBProcessMonitor:
 
     def test_dashboard_device_string_generation(self):
         """Test that dashboard correctly displays device strings."""
-        monitor = ProcessMonitor()
+        ProcessMonitor()
 
         # Test different device types for dashboard display
         test_cases = [

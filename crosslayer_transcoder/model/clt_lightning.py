@@ -1,18 +1,12 @@
 import gc
-import os
-import subprocess
-import time
 from typing import Optional, Tuple
 
 import lightning as L
-import psutil
 import torch
-import torch.nn as nn
-from einops import einsum
+import wandb
 from jaxtyping import Float
 from torch.distributed.tensor.parallel import parallelize_module
 
-import wandb
 from crosslayer_transcoder.metrics.dead_features import DeadFeatures
 from crosslayer_transcoder.metrics.replacement_model_accuracy import (
     ReplacementModelAccuracy,
@@ -22,8 +16,6 @@ from crosslayer_transcoder.model.clt import (
     CrossLayerTranscoder,
     Decoder,
 )
-from crosslayer_transcoder.model.jumprelu import JumpReLU
-from crosslayer_transcoder.model.topk import BatchTopK
 
 
 class CrossLayerTranscoderModule(L.LightningModule):
@@ -55,9 +47,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
     ):
         super().__init__(*args, **kwargs)
 
-        self.save_hyperparameters(
-            ignore=["model", "replacement_model", "dead_features"]
-        )
+        self.save_hyperparameters(ignore=["model", "replacement_model", "dead_features"])
         # torch.cuda.memory._record_memory_history(max_entries=100_000)
 
         # Store pre-constructed modules
@@ -143,9 +133,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         ss_err = (mlp_out_norm - recons_norm) ** 2
         ss_err = ss_err.sum(dim=0)
-        ss_total = ((mlp_out_norm - mlp_out_norm.mean(dim=0, keepdim=True)) ** 2).sum(
-            dim=0
-        )
+        ss_total = ((mlp_out_norm - mlp_out_norm.mean(dim=0, keepdim=True)) ** 2).sum(dim=0)
         fvu = (ss_err / ss_total).mean()  # (n_layers, d_model)
         self.log("metrics/fraction_of_variance_unexplained", fvu)
         fvu_per_layer = (ss_err / ss_total).mean(dim=-1)
@@ -189,8 +177,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.log("metrics/recons_standardized_std", recons_norm.std())
         self.log(
             "metrics/L0_avg_per_layer",
-            torch.count_nonzero(active_features)
-            / (features.shape[0] * features.shape[1]),
+            torch.count_nonzero(active_features) / (features.shape[0] * features.shape[1]),
         )
 
         # Magnitude of feature activations - memory efficient version
@@ -216,9 +203,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
 
         # Log L0 table per layer
         if batch_idx % 500 == 1:
-            l0_per_layer = (
-                torch.count_nonzero(active_features, dim=(0, 2)) / features.shape[0]
-            )
+            l0_per_layer = torch.count_nonzero(active_features, dim=(0, 2)) / features.shape[0]
 
             if self.logger and isinstance(self.logger.experiment, wandb.wandb_run.Run):
                 table = wandb.Table(
@@ -226,11 +211,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
                     columns=["layer", "L0"],
                 )
                 self.logger.experiment.log(
-                    {
-                        "layers/L0_per_layer": wandb.plot.bar(
-                            table, "layer", "L0", title="L0 per Layer"
-                        )
-                    },
+                    {"layers/L0_per_layer": wandb.plot.bar(table, "layer", "L0", title="L0 per Layer")},
                     step=self.global_step,
                 )
 
@@ -259,15 +240,11 @@ class CrossLayerTranscoderModule(L.LightningModule):
                 ):
                     for layer in range(dead_log_freqs.shape[0]):
                         self.logger.experiment.log(
-                            {
-                                f"layers/log_feature_density/layer_{layer}": dead_log_freqs[
-                                    layer
-                                ]
-                            },
+                            {f"layers/log_feature_density/layer_{layer}": dead_log_freqs[layer]},
                             step=self.global_step,
                         )
                     self.logger.experiment.log(
-                        {f"training/log_feature_density": dead_log_freqs.flatten()},
+                        {"training/log_feature_density": dead_log_freqs.flatten()},
                         step=self.global_step,
                     )
                 self.log("training/log_feature_density_mean", dead_log_freqs.mean())
@@ -433,9 +410,7 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
         if isinstance(self.model.decoder, CrosslayerDecoder):
             dec_norms = torch.zeros_like(features[:1])
             for l in range(self.model.decoder.n_layers):
-                W = self.model.decoder.get_parameter(
-                    f"W_{l}"
-                )  # (from_layer, d_features, d_acts)
+                W = self.model.decoder.get_parameter(f"W_{l}")  # (from_layer, d_features, d_acts)
                 dec_norms[:, : l + 1] = dec_norms[:, : l + 1] + (W**2).sum(dim=-1)
             dec_norms = dec_norms.sqrt()
 
@@ -443,17 +418,11 @@ class JumpReLUCrossLayerTranscoderModule(CrossLayerTranscoderModule):
             dec_norms = torch.sqrt((self.model.decoder.W**2).sum(dim=-1))
 
         weighted_features = features * dec_norms * self.c
-        self.log(
-            "model/weighted_features_mean", weighted_features.detach().mean().cpu()
-        )
+        self.log("model/weighted_features_mean", weighted_features.detach().mean().cpu())
 
         if self.use_tanh:
-            weighted_features = torch.tanh(
-                weighted_features
-            )  # (batch_size, n_layers, d_features)
-        sparsity = (
-            self.current_sparsity_penalty() * weighted_features.sum(dim=[1, 2]).mean()
-        )
+            weighted_features = torch.tanh(weighted_features)  # (batch_size, n_layers, d_features)
+        sparsity = self.current_sparsity_penalty() * weighted_features.sum(dim=[1, 2]).mean()
         self.log("training/sparsity_loss", sparsity)
 
         # Compute Pre-activation Loss

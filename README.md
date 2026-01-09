@@ -130,6 +130,15 @@ The `config` folder contains example configuration files for different architect
 4. **Tensor parallelism works automatically** because PyTorch Lightning handles the distributed setup and PyTorch's Distributed Tensor API shards your model across GPUs without requiring changes to your component code
 
 
+## Development
+
+Format and lint the codebase:
+
+```bash
+uv run ruff format .
+uv run ruff check --fix .
+```
+
 ## Testing
 
 Run the test suite to ensure everything is working correctly:

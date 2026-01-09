@@ -79,8 +79,7 @@ class ActivationComputer(ActivationSource):
         """
         mlp_ins = []
         mlp_outs = []
-        with model.trace(tokens) as tracer:
-
+        with model.trace(tokens):
             # Extract from all transformer layers
             for i in range(self.n_layers):
                 # MLP input (after layer norm)
@@ -147,7 +146,7 @@ class DiskActivationSource(ActivationSource):
             # self.tensor_handle = self.file_handle[self.accessor]
             self.position = 0
         except Exception as e:
-            raise RuntimeError(f"Failed to open activation file {self.file_path}: {e}")
+            raise RuntimeError(f"Failed to open activation file {self.file_path}: {e}") from e
 
     def get_next_batch(self, batch_size: Optional[int] = None) -> torch.Tensor:
         """
