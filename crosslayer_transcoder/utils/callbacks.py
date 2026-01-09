@@ -79,9 +79,9 @@ class SaveModelCallback(L.Callback):
         for event in self.on_events:
             setattr(self, event, partial(self._save_model))
 
-    def _save_model(self, trainer, pl_module: CrossLayerTranscoder, **kwargs):
+    def _save_model(self, trainer, pl_module, **kwargs):
         logger.info("Saving model...")
-        pl_module.save_pretrained(
+        pl_module.model.save_pretrained(
             self.checkpoint_dir, fold_standardizers=self.fold_standardizers
         )
         logger.info("Model saved")
