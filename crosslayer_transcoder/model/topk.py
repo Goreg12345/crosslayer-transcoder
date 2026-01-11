@@ -1,18 +1,30 @@
-from abc import ABC, abstractmethod
-from typing import Union
+from abc import abstractmethod
+from typing import Any, Dict, Union
 
 import einops
 import torch
 from jaxtyping import Float
 
+from crosslayer_transcoder.model.serializable_module import SerializableModule
 
-class TopK(ABC, torch.nn.Module):
+
+class TopK(SerializableModule):
     def __init__(self, k: int, e=None, n_layers=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.k = k
         self.e = e
         self.n_layers = n_layers
         self.relu = torch.nn.ReLU()
+
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "k": self.k,
+                "e": self.e,
+                "n_layers": self.n_layers,
+            },
+        }
 
     def forward(
         self,

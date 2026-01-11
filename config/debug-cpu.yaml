@@ -76,7 +76,7 @@ model:
 data:
   class_path: crosslayer_transcoder.data.TensorDataModule
   init_args:
-    tensor_file: "/Users/bjar/git/crosslayer-transcoder/tests/xor_handcraft_actvs.pt"
+    tensor_file: "tests/debug_actvs.pt"
     batch_size: 16
     shuffle: true
     num_workers: 0

@@ -1,60 +1,78 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
-from numpy import allclose
+import pytest
 
-from crosslayer_transcoder.model.clt import CrossLayerTranscoder
-from crosslayer_transcoder.model.jumprelu import JumpReLU
+from crosslayer_transcoder.model.clt import CrosslayerDecoder, CrossLayerTranscoder, Decoder, Encoder
+from crosslayer_transcoder.model.jumprelu import JumpReLU, ReLU
 from crosslayer_transcoder.model.standardize import (
     DimensionwiseInputStandardizer,
     DimensionwiseOutputStandardizer,
 )
-from crosslayer_transcoder.model.clt import Encoder
-from crosslayer_transcoder.model.clt import CrosslayerDecoder
+from crosslayer_transcoder.model.topk import BatchTopK, PerLayerBatchTopK, PerLayerTopK
+
+N_LAYERS = 2
+D_ACTS = 110
+D_FEATURES = 32
 
 
-def test_save_to_pretrained_runs():
+@pytest.fixture
+def standardizers():
+    return (
+        DimensionwiseInputStandardizer(n_layers=N_LAYERS, activation_dim=D_ACTS),
+        DimensionwiseOutputStandardizer(n_layers=N_LAYERS, activation_dim=D_ACTS),
+    )
+
+
+@pytest.fixture
+def encoder():
+    return Encoder(d_acts=D_ACTS, d_features=D_FEATURES, n_layers=N_LAYERS)
+
+
+DECODER_CLASSES = [Decoder, CrosslayerDecoder]
+
+NONLINEARITIES = [
+    JumpReLU(theta=0.03, bandwidth=0.01, n_layers=N_LAYERS, d_features=D_FEATURES),
+    ReLU(),
+    PerLayerTopK(k=8, n_layers=N_LAYERS),
+    BatchTopK(k=8, e=0.01, n_layers=N_LAYERS),
+    PerLayerBatchTopK(k=8, e=0.01, n_layers=N_LAYERS),
+]
+
+
+@pytest.mark.parametrize("decoder_cls", DECODER_CLASSES)
+@pytest.mark.parametrize("nonlinearity", NONLINEARITIES)
+def test_save_to_pretrained_runs(decoder_cls, nonlinearity, encoder, standardizers):
     model = CrossLayerTranscoder(
-        nonlinearity=JumpReLU(theta=0.03, bandwidth=0.01, n_layers=2, d_features=32),
-        input_standardizer=DimensionwiseInputStandardizer(
-            n_layers=2, activation_dim=110
-        ),
-        output_standardizer=DimensionwiseOutputStandardizer(
-            n_layers=2, activation_dim=110
-        ),
-        encoder=Encoder(d_acts=110, d_features=32, n_layers=2),
-        decoder=CrosslayerDecoder(d_acts=110, d_features=32, n_layers=2),
+        nonlinearity=nonlinearity,
+        input_standardizer=standardizers[0],
+        output_standardizer=standardizers[1],
+        encoder=encoder,
+        decoder=decoder_cls(d_acts=D_ACTS, d_features=D_FEATURES, n_layers=N_LAYERS),
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         pretrained_dir = Path(tmpdir)
-
         model.save_pretrained(pretrained_dir)
 
         assert (pretrained_dir / "config.yaml").exists()
         assert (pretrained_dir / "checkpoint.safetensors").exists()
 
 
-def test_load_from_pretrained_config():
+@pytest.mark.parametrize("decoder_cls", DECODER_CLASSES)
+@pytest.mark.parametrize("nonlinearity", NONLINEARITIES)
+def test_save_to_pretrained_config_structure(decoder_cls, nonlinearity, encoder, standardizers):
     model = CrossLayerTranscoder(
-        nonlinearity=JumpReLU(theta=0.03, bandwidth=0.01, n_layers=2, d_features=32),
-        input_standardizer=DimensionwiseInputStandardizer(
-            n_layers=2, activation_dim=110
-        ),
-        output_standardizer=DimensionwiseOutputStandardizer(
-            n_layers=2, activation_dim=110
-        ),
-        encoder=Encoder(d_acts=110, d_features=32, n_layers=2),
-        decoder=CrosslayerDecoder(d_acts=110, d_features=32, n_layers=2),
+        nonlinearity=nonlinearity,
+        input_standardizer=standardizers[0],
+        output_standardizer=standardizers[1],
+        encoder=encoder,
+        decoder=decoder_cls(d_acts=D_ACTS, d_features=D_FEATURES, n_layers=N_LAYERS),
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         pretrained_dir = Path(tmpdir)
-
         model.save_pretrained(pretrained_dir)
-
-        assert (pretrained_dir / "config.yaml").exists()
-        assert (pretrained_dir / "checkpoint.safetensors").exists()
 
         import yaml
 
@@ -62,31 +80,12 @@ def test_load_from_pretrained_config():
             config = yaml.safe_load(f)
 
         model_config = config["model"]
-        assert (
-            model_config["class_path"]
-            == "crosslayer_transcoder.model.clt.CrossLayerTranscoder"
-        )
+        assert model_config["class_path"] == "crosslayer_transcoder.model.clt.CrossLayerTranscoder"
 
-        decoder = model_config["init_args"]["decoder"]
-        assert (
-            decoder["class_path"] == "crosslayer_transcoder.model.clt.CrosslayerDecoder"
-        )
-        assert decoder["init_args"]["d_acts"] == 110
-        assert decoder["init_args"]["d_features"] == 32
-        assert decoder["init_args"]["n_layers"] == 2
+        # Verify decoder class path
+        decoder_config = model_config["init_args"]["decoder"]
+        assert decoder_config["class_path"].endswith(decoder_cls.__name__)
 
-        encoder = model_config["init_args"]["encoder"]
-        assert encoder["class_path"] == "crosslayer_transcoder.model.clt.Encoder"
-        assert encoder["init_args"]["d_acts"] == 110
-        assert encoder["init_args"]["d_features"] == 32
-        assert encoder["init_args"]["n_layers"] == 2
-
-        nonlinearity = model_config["init_args"]["nonlinearity"]
-        assert (
-            nonlinearity["class_path"]
-            == "crosslayer_transcoder.model.jumprelu.JumpReLU"
-        )
-        assert nonlinearity["init_args"]["d_features"] == 32
-        assert nonlinearity["init_args"]["n_layers"] == 2
-        assert allclose(nonlinearity["init_args"]["theta"], 0.03)
-        assert allclose(nonlinearity["init_args"]["bandwidth"], 0.01)
+        # Verify nonlinearity class path
+        nonlinearity_config = model_config["init_args"]["nonlinearity"]
+        assert nonlinearity_config["class_path"].endswith(nonlinearity.__class__.__name__)

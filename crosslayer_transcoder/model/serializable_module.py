@@ -1,14 +1,11 @@
-from abc import ABC, abstractmethod
 import importlib
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Self
+from typing import Any, Dict, Self, TypedDict, Union
 
 import yaml
 from safetensors.torch import load_file, save_file
 from torch import nn
-
-
-from typing import TypedDict
 
 
 class ConfigDict(TypedDict):
@@ -33,12 +30,8 @@ class SerializableModule(nn.Module, ABC):
 
         for key, value in init_args.items():
             if isinstance(value, dict) and "class_path" in value:
-                target_module_name, target_class_name = value["class_path"].rsplit(
-                    ".", 1
-                )
-                target_cls = getattr(
-                    importlib.import_module(target_module_name), target_class_name
-                )
+                target_module_name, target_class_name = value["class_path"].rsplit(".", 1)
+                target_cls = getattr(importlib.import_module(target_module_name), target_class_name)
                 resolved_args[key] = target_cls.from_config(value)
             else:
                 resolved_args[key] = value
@@ -58,8 +51,9 @@ class SerializableModule(nn.Module, ABC):
         save_file(self.state_dict(), directory / "checkpoint.safetensors")
 
     @classmethod
-    def from_pretrained(cls, directory: Path) -> Self:
+    def from_pretrained(cls, directory: Union[Path, str]) -> Self:
         """Load model from directory."""
+        directory = Path(directory)
         with open(directory / "config.yaml") as f:
             full_config = yaml.safe_load(f)
 
