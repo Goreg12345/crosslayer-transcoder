@@ -2,18 +2,13 @@
 Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
-from functools import partial
 import logging
+from functools import partial
 from pathlib import Path
 from typing import List
 
 import lightning as L
-from torch.profiler import (
-    ProfilerActivity,
-    profile,
-    schedule,
-    tensorboard_trace_handler,
-)
+from torch.profiler import ProfilerActivity, profile, schedule, tensorboard_trace_handler
 
 from crosslayer_transcoder.model import CrossLayerTranscoder
 from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
@@ -64,6 +59,7 @@ class EndOfTrainingCheckpointCallback(L.Callback):
 
 class SaveModelCallback(L.Callback):
     """Save checkpoint only at end of training."""
+
     def __init__(
         self,
         checkpoint_dir: str = "checkpoints",
@@ -82,8 +78,17 @@ class SaveModelCallback(L.Callback):
 
     def _save_model(self, trainer, pl_module: CrossLayerTranscoderModule, **kwargs):
         logger.info("Saving model...")
-        pl_module.model.save_pretrained(
-            self.checkpoint_dir, fold_standardizers=self.fold_standardizers
-        )
+        pl_module.model.save_pretrained(self.checkpoint_dir, fold_standardizers=self.fold_standardizers)
         logger.info("Model saved")
 
+
+class FoldAndSaveModelCallback(L.Callback):
+    """Fold and save model at end of training."""
+
+    def __init__(self, checkpoint_dir: str = "checkpoints"):
+        super().__init__()
+        self.checkpoint_dir = Path(checkpoint_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        pl_module.model.fold()
+        pl_module.model.save_pretrained(self.checkpoint_dir)

@@ -16,6 +16,9 @@ trainer:
     - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints"
+    - class_path: crosslayer_transcoder.utils.callbacks.FoldAndSaveModelCallback
+      init_args:
+        checkpoint_dir: "weights"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
