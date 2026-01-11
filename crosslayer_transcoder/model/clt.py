@@ -171,7 +171,6 @@ class Encoder(SerializableModule):
         if self._is_folded:
             return self
 
-
         self.W.data = self.W / input_standardizer.std.unsqueeze(-1)
 
         self.b.data = self.b - (
@@ -194,14 +193,6 @@ class Encoder(SerializableModule):
                 "n_layers": self.n_layers,
             },
         }
-
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "Encoder":
-        return cls(
-            d_acts=config["d_acts"],
-            d_features=config["d_features"],
-            n_layers=config["n_layers"],
-        )
 
 
 class Decoder(SerializableModule):
@@ -230,11 +221,14 @@ class Decoder(SerializableModule):
     ) -> Float[torch.Tensor, "batch_size seq d_acts"]:
         if features.ndim == 4:  # (batch, seq, layer, d_features)
             features = features[:, :, layer, :]
-        return einsum(
-            features,
-            self.get_parameter(f"W")[layer],
-            "batch_size seq d_features, d_features d_acts -> batch_size seq d_acts",
-        ) + self.b[layer]
+        return (
+            einsum(
+                features,
+                self.get_parameter(f"W")[layer],
+                "batch_size seq d_features, d_features d_acts -> batch_size seq d_acts",
+            )
+            + self.b[layer]
+        )
 
     def forward(
         self,
@@ -244,18 +238,20 @@ class Decoder(SerializableModule):
         if layer != "all":
             return self.forward_layer(features, layer)
 
-        recons = einsum(
-            features,
-            self.W,
-            "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
-        ) + self.b
+        recons = (
+            einsum(
+                features,
+                self.W,
+                "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size n_layers d_acts",
+            )
+            + self.b
+        )
         return recons
 
     def fold(self, output_standardizer: Standardizer):
         """In-place folding of the decoder weights. If the decoder is already folded, return self."""
         if self._is_folded:
             return self
-
 
         self.W.data = einsum(
             self.W,
@@ -278,14 +274,6 @@ class Decoder(SerializableModule):
                 "n_layers": self.n_layers,
             },
         }
-
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "Decoder":
-        return cls(
-            d_acts=config["d_acts"],
-            d_features=config["d_features"],
-            n_layers=config["n_layers"],
-        )
 
 
 class CrosslayerDecoder(SerializableModule):
@@ -381,14 +369,6 @@ class CrosslayerDecoder(SerializableModule):
             },
         }
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "CrosslayerDecoder":
-        return cls(
-            d_acts=config["d_acts"],
-            d_features=config["d_features"],
-            n_layers=config["n_layers"],
-        )
-
 
 class CrossLayerTranscoder(SerializableModule):
     def __init__(
@@ -451,8 +431,12 @@ class CrossLayerTranscoder(SerializableModule):
                 "nonlinearity": self.nonlinearity.to_config(),
                 "encoder": self.encoder.to_config(),
                 "decoder": self.decoder.to_config(),
-                "input_standardizer": self.input_standardizer.to_config() if self.input_standardizer is not None else None,
-                "output_standardizer": self.output_standardizer.to_config() if self.output_standardizer is not None else None,
+                "input_standardizer": self.input_standardizer.to_config()
+                if self.input_standardizer is not None
+                else None,
+                "output_standardizer": self.output_standardizer.to_config()
+                if self.output_standardizer is not None
+                else None,
             },
         }
 
@@ -481,4 +465,3 @@ class CrossLayerTranscoder(SerializableModule):
             yaml.dump({"model": config}, f)
 
         save_file(self.state_dict(), directory / "checkpoint.safetensors")
-

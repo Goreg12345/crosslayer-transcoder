@@ -30,6 +30,8 @@ class Standardizer(SerializableModule):
 class DimensionwiseInputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
         super().__init__()
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
         self.register_buffer("mean", torch.empty(n_layers, activation_dim))
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
@@ -64,19 +66,13 @@ class DimensionwiseInputStandardizer(Standardizer):
                 "activation_dim": self.activation_dim,
             },
         }
-    
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "DimensionwiseInputStandardizer":
-        return cls(
-            n_layers=config["n_layers"],
-            activation_dim=config["activation_dim"],
-        )
-
 
 
 class DimensionwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
         super().__init__()
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
         self.register_buffer("mean", torch.empty(n_layers, activation_dim))
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
@@ -120,13 +116,6 @@ class DimensionwiseOutputStandardizer(Standardizer):
             },
         }
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "DimensionwiseOutputStandardizer":
-        return cls(
-            n_layers=config["n_layers"],
-            activation_dim=config["activation_dim"],
-        )
-
 
 class SamplewiseInputStandardizer(Standardizer):
     def __init__(self):
@@ -154,17 +143,14 @@ class SamplewiseInputStandardizer(Standardizer):
             "init_args": {},
         }
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "SamplewiseInputStandardizer":
-        return cls()
-
 
 class LayerwiseInputStandardizer(Standardizer):
     def __init__(self, n_layers, n_exclude: int = 0):
         super().__init__()
+        self.n_layers = n_layers
+        self.n_exclude = n_exclude
         self.register_buffer("mean", torch.empty(n_layers))
         self.register_buffer("std", torch.empty(n_layers))
-        self.n_exclude = n_exclude
         self.is_initialized = False
 
     @torch.no_grad()
@@ -204,20 +190,14 @@ class LayerwiseInputStandardizer(Standardizer):
             },
         }
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "LayerwiseInputStandardizer":
-        return cls(
-            n_layers=config["n_layers"],
-            n_exclude=config["n_exclude"],
-        )
-
 
 class LayerwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, n_exclude: int = 0):
         super().__init__()
+        self.n_layers = n_layers
+        self.n_exclude = n_exclude
         self.register_buffer("mean", torch.empty(n_layers))
         self.register_buffer("std", torch.empty(n_layers))
-        self.n_exclude = n_exclude
         self.is_initialized = False
 
     def initialize_from_batch(
@@ -267,10 +247,3 @@ class LayerwiseOutputStandardizer(Standardizer):
                 "n_exclude": self.n_exclude,
             },
         }
-
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "LayerwiseOutputStandardizer":
-        return cls(
-            n_layers=config["n_layers"],
-            n_exclude=config["n_exclude"],
-        )

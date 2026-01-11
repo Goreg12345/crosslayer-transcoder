@@ -59,15 +59,6 @@ class JumpReLU(SerializableModule):
             },
         }
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "JumpReLU":
-        return cls(
-            theta=config["theta"],
-            bandwidth=config["bandwidth"],
-            n_layers=config["n_layers"],
-            d_features=config["d_features"],
-        )
-
 
 class HeavysideStep(torch.autograd.Function):
     @staticmethod

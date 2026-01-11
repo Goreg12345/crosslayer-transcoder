@@ -10,9 +10,11 @@ from torch import nn
 
 from typing import TypedDict
 
+
 class ConfigDict(TypedDict):
     class_path: str
     init_args: Dict[str, Any]
+
 
 class SerializableModule(nn.Module, ABC):
     """Base class for modules that can serialize to/from config and save/load to disk."""
@@ -31,8 +33,12 @@ class SerializableModule(nn.Module, ABC):
 
         for key, value in init_args.items():
             if isinstance(value, dict) and "class_path" in value:
-                target_module_name, target_class_name = value["class_path"].rsplit(".", 1)
-                target_cls = getattr(importlib.import_module(target_module_name), target_class_name)
+                target_module_name, target_class_name = value["class_path"].rsplit(
+                    ".", 1
+                )
+                target_cls = getattr(
+                    importlib.import_module(target_module_name), target_class_name
+                )
                 resolved_args[key] = target_cls.from_config(value)
             else:
                 resolved_args[key] = value
