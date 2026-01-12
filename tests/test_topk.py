@@ -180,10 +180,13 @@ def test_k_boundary_plus_one_error(features):
         topk(features)
 
 
-def test_no_negative_values_in_output(per_layer_topk, per_layer_batch_topk, batch_topk):
+def test_no_negative_values_in_output(
+    per_layer_topk, per_layer_batch_topk, batch_topk, features
+):
     """Test that all topk implementations never output negative values, even with negative inputs"""
     # Create test tensor with negative values
-    negative_features = torch.randn(2, 3, 4) - 1.0  # Ensures mostly negative values
+
+    negative_features = torch.randn_like(features) - 1.0
 
     # Test PerLayerTopK
     result = per_layer_topk(negative_features)
@@ -199,18 +202,14 @@ def test_no_negative_values_in_output(per_layer_topk, per_layer_batch_topk, batc
 
 
 def test_mixed_positive_negative_values(
-    per_layer_topk, per_layer_batch_topk, batch_topk
+    per_layer_topk,
+    per_layer_batch_topk,
+    batch_topk,
+    features,
 ):
     """Test that topk implementations handle mixed positive/negative values correctly"""
     # Create test tensor with mix of positive and negative values
-    mixed_features = torch.tensor(
-        [
-            [
-                [1.0, -2.0, 3.0, -4.0, 5.0],  # Layer 0: mix of pos/neg
-                [-1.0, 2.0, -3.0, 4.0, -5.0],  # Layer 1: mix of pos/neg
-            ]
-        ]
-    )
+    mixed_features = torch.randn_like(features) - 0.5
 
     # Test PerLayerTopK - should keep top 3 positive values per layer
     result = per_layer_topk(mixed_features)
