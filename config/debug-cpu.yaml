@@ -1,0 +1,88 @@
+# Debug config - no saving, no logging, fast CPU runs
+seed_everything: 42
+
+trainer:
+  max_steps: 100  # Very few steps for quick debugging
+  val_check_interval: 50
+  limit_val_batches: 1
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  precision: "32"
+  accelerator: "cpu"
+  devices: 1
+  accumulate_grad_batches: 1
+  logger: false  # Disable all logging
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints"
+    - class_path: crosslayer_transcoder.utils.callbacks.FoldAndSaveModelCallback
+      init_args:
+        checkpoint_dir: "weights"
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
+      init_args:
+        encoder:
+          class_path: crosslayer_transcoder.model.clt.Encoder
+          init_args:
+            d_acts: 110
+            d_features: 32
+            n_layers: 2
+
+        decoder:
+          class_path: crosslayer_transcoder.model.clt.CrosslayerDecoder
+          init_args:
+            d_acts: 110
+            d_features: 32
+            n_layers: 2
+        
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 0.01
+            n_layers: 2
+            d_features: 32
+        
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 2
+            activation_dim: 110
+        
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 2
+            activation_dim: 110
+
+    replacement_model: null
+    dead_features: null  # Disable dead features tracking for speed
+    
+    learning_rate: 1e-3
+    compile: false
+    lr_decay_step: 800
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.05
+    c_sparsity: 1
+    use_tanh: true
+    pre_actv_loss: 1e-6
+
+    compute_dead_features: false  # Disable for speed
+    compute_dead_features_every: 50
+
+data:
+  class_path: crosslayer_transcoder.data.TensorDataModule
+  init_args:
+    tensor_file: "tests/debug_actvs.pt"
+    batch_size: 16
+    shuffle: true
+    num_workers: 0
+    pin_memory: false
+
+ckpt_path: null

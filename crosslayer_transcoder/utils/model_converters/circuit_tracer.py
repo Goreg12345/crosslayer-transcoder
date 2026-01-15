@@ -6,11 +6,16 @@ import torch
 import yaml
 from safetensors.torch import save_file
 
+from crosslayer_transcoder.model import BatchTopK, PerLayerBatchTopK, PerLayerTopK
 from crosslayer_transcoder.utils.model_converters.model_converter import (
     CLTModule,
     ModelConverter,
 )
 from crosslayer_transcoder.model.jumprelu import JumpReLU
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CircuitTracerConverter(ModelConverter):
@@ -29,37 +34,46 @@ class CircuitTracerConverter(ModelConverter):
     def convert_and_save(
         self, model: CLTModule, dtype: torch.dtype = torch.bfloat16
     ) -> None:
+        if isinstance(
+            model.model.nonlinearity, (PerLayerTopK, BatchTopK, PerLayerBatchTopK)
+        ):
+            logger.warning(
+                "TopK nonlinearity is not supported by circuit-tracer. Skipping conversion."
+            )
+            raise ValueError("TopK nonlinearity is not supported by circuit-tracer.")
+
+        # NOTE: this mutates the model in-place. Potentially bad, but a tradeoff for copying a huge model.
+        model.model.fold()
+
         encoder = model.model.encoder
-        input_standardizer = model.model.input_standardizer
-        output_standardizer = model.model.output_standardizer
         decoder = model.model.decoder
         nonlinearity = model.model.nonlinearity
         n_layers = encoder.n_layers
         d_acts = encoder.d_acts  # -> circuit-tracer.d_model
         d_features = encoder.d_features  # -> circuit-tracer.d_transcoder
 
-        W_enc_folded, b_enc_folded = input_standardizer.fold_in_encoder(
-            encoder.W.to(dtype), encoder.b.to(dtype)
-        )
+        rearranged_W_enc = einops.rearrange(
+            encoder.get_parameter("W").to(dtype),
+            "n_layers d_acts d_features -> n_layers d_features d_acts",
+        ).contiguous()
 
-        b_dec_folded = output_standardizer.fold_in_decoder_bias(decoder.b.to(dtype))
-
-        # encoder
-        for source_layer in tqdm(range(encoder.n_layers), desc="Converting CLT "):
-            rearranged_W_enc = einops.rearrange(
-                W_enc_folded[source_layer],
-                "d_acts d_features -> d_features d_acts",
-            ).contiguous()
+        for source_layer in tqdm(
+            range(encoder.n_layers), desc="Converting CLT encoder"
+        ):
             layer_encoder_dict = {
-                f"W_enc_{source_layer}": rearranged_W_enc.cpu().to(dtype),
-                f"b_enc_{source_layer}": (b_enc_folded[source_layer].cpu().to(dtype)),
-                f"b_dec_{source_layer}": (b_dec_folded[source_layer].cpu().to(dtype)),
+                f"W_enc_{source_layer}": rearranged_W_enc[source_layer].cpu().to(dtype),
+                f"b_enc_{source_layer}": encoder.get_parameter("b")[source_layer]
+                .cpu()
+                .to(dtype),
+                f"b_dec_{source_layer}": decoder.get_parameter("b")[source_layer]
+                .cpu()
+                .to(dtype),
             }
-            # TODO: double check non-linearity compatibility
             if isinstance(nonlinearity, JumpReLU):
                 layer_encoder_dict[f"threshold_{source_layer}"] = (
                     nonlinearity.theta[:, source_layer, :].cpu().to(dtype)
                 )
+
             save_file(
                 layer_encoder_dict, f"{self.save_dir}/W_enc_{source_layer}.safetensors"
             )
@@ -70,11 +84,7 @@ class CircuitTracerConverter(ModelConverter):
                 # get decoder mat for layer i --> k
                 decoder_w_k = decoder.get_parameter(f"W_{k}")
 
-                # fold in output standardization for decoder weights using standardizer method
-                decoder_w_k_folded = output_standardizer.fold_in_decoder_weights_layer(
-                    decoder_w_k.to(dtype), k
-                )
-                dec_i_k = decoder_w_k_folded[source_layer, ...]
+                dec_i_k = decoder_w_k.to(dtype)[source_layer, ...]
                 assert dec_i_k.shape == (
                     d_features,
                     d_acts,

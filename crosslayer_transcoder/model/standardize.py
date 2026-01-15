@@ -1,10 +1,11 @@
-from einops import einsum
+from typing import Any, Dict
 import torch
-import torch.nn as nn
 from jaxtyping import Float
 
+from crosslayer_transcoder.model.serializable_module import SerializableModule
 
-class Standardizer(nn.Module):
+
+class Standardizer(SerializableModule):
     def __init__(self, **kwargs):
         super().__init__()
 
@@ -27,6 +28,8 @@ class Standardizer(nn.Module):
 class DimensionwiseInputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
         super().__init__()
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
         self.register_buffer("mean", torch.empty(n_layers, activation_dim))
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
@@ -53,29 +56,21 @@ class DimensionwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[layer]) / self.std[layer]
 
-    def fold_in_encoder(
-        self,
-        W_enc: Float[torch.Tensor, "n_layers actv_dim d_features"],
-        b_enc: Float[torch.Tensor, "n_layers d_features"],
-    ):
-        assert self.std.shape == (W_enc.shape[0], W_enc.shape[1])
-
-        W_enc_folded = W_enc / self.std.unsqueeze(-1)
-
-        b_enc_folded = b_enc - (
-            einsum(
-                self.mean,
-                W_enc_folded,
-                "n_layers actv_dim, n_layers actv_dim d_features -> n_layers d_features",
-            )
-        )
-
-        return W_enc_folded, b_enc_folded
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+            },
+        }
 
 
 class DimensionwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
         super().__init__()
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
         self.register_buffer("mean", torch.empty(n_layers, activation_dim))
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
@@ -110,23 +105,14 @@ class DimensionwiseOutputStandardizer(Standardizer):
         else:
             return (mlp_out - self.mean[layer]) / self.std[layer]
 
-    def fold_in_decoder_weights_layer(
-        self,
-        W_dec: Float[torch.Tensor, "layers d_features d_acts"],
-        layer: int,
-    ):
-        # Decoder is going to have dim 0 == i layers
-        std = self.std[layer]
-
-        W_dec_folded = W_dec * std.unsqueeze(0).unsqueeze(0)
-
-        return W_dec_folded
-
-    def fold_in_decoder_bias(
-        self,
-        b_dec: Float[torch.Tensor, "n_layers d_acts"],
-    ):
-        return b_dec * self.std + self.mean
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+            },
+        }
 
 
 class SamplewiseInputStandardizer(Standardizer):
@@ -149,13 +135,20 @@ class SamplewiseInputStandardizer(Standardizer):
         stds.clamp_(min=1e-8)
         return (batch - means) / stds
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {},
+        }
+
 
 class LayerwiseInputStandardizer(Standardizer):
     def __init__(self, n_layers, n_exclude: int = 0):
         super().__init__()
+        self.n_layers = n_layers
+        self.n_exclude = n_exclude
         self.register_buffer("mean", torch.empty(n_layers))
         self.register_buffer("std", torch.empty(n_layers))
-        self.n_exclude = n_exclude
         self.is_initialized = False
 
     @torch.no_grad()
@@ -186,13 +179,23 @@ class LayerwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[None, layer, None]) / self.std[None, layer, None]
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "n_exclude": self.n_exclude,
+            },
+        }
+
 
 class LayerwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, n_exclude: int = 0):
         super().__init__()
+        self.n_layers = n_layers
+        self.n_exclude = n_exclude
         self.register_buffer("mean", torch.empty(n_layers))
         self.register_buffer("std", torch.empty(n_layers))
-        self.n_exclude = n_exclude
         self.is_initialized = False
 
     def initialize_from_batch(
@@ -233,3 +236,12 @@ class LayerwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean[None, layer, None]) / self.std[
                 None, layer, None
             ]
+
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "n_exclude": self.n_exclude,
+            },
+        }
