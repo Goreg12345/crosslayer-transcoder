@@ -4,6 +4,7 @@ Lightning CLI for CrossLayer Transcoder training.
 """
 
 import os
+from dotenv import load_dotenv
 
 import lightning as L
 from lightning.pytorch.cli import LightningCLI
@@ -29,6 +30,7 @@ class CrossLayerTranscoderCLI(LightningCLI):
 
 def main():
     """Main entry point for training."""
+    load_dotenv()
     # Set up wandb directories
     os.environ.setdefault("WANDB_DIR", f"{os.getcwd()}/wandb")
     os.environ.setdefault("WANDB_CACHE_DIR", f"{os.getcwd()}/wandb_cache")
