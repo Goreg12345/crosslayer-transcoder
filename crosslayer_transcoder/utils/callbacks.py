@@ -8,11 +8,16 @@ from pathlib import Path
 from typing import List
 
 import lightning as L
-from torch.profiler import ProfilerActivity, profile, schedule, tensorboard_trace_handler
+from huggingface_hub import upload_folder
+from torch.profiler import (
+    ProfilerActivity,
+    profile,
+    schedule,
+    tensorboard_trace_handler,
+)
 
-from crosslayer_transcoder.model import CrossLayerTranscoder
 from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
-from crosslayer_transcoder.model.serializable_module import SerializableModule
+from crosslayer_transcoder.utils.model_converters.model_converter import ModelConverter
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +62,31 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         trainer.save_checkpoint(checkpoint_path)
 
 
+class ModelConversionCallback(L.Callback):
+    """Callback to convert the model to a circuit-tracer model."""
+
+    # Note: you can't type these directly with List or ModelConverter
+    def __init__(
+        self,
+        converter: ModelConverter,
+        on_events: List[str] = ["on_train_batch_end"],  # type: List[str]
+    ):
+        super().__init__()
+        self.converter = converter
+        self.on_events = on_events
+        self._setup_callbacks()
+
+    def _setup_callbacks(self):
+        for event in self.on_events:
+            setattr(self, event, partial(self._convert_model))
+
+    # Note: this should have the signature as all Lightning callbacks
+    def _convert_model(self, trainer, pl_module, **kwargs):
+        logger.info("Converting model...")
+        self.converter.convert_and_save(pl_module)
+        logger.info("Model converted and saved ")
+
+
 class SaveModelCallback(L.Callback):
     """Save checkpoint only at end of training."""
 
@@ -78,8 +108,29 @@ class SaveModelCallback(L.Callback):
 
     def _save_model(self, trainer, pl_module: CrossLayerTranscoderModule, **kwargs):
         logger.info("Saving model...")
-        pl_module.model.save_pretrained(self.checkpoint_dir, fold_standardizers=self.fold_standardizers)
+        pl_module.model.save_pretrained(
+            self.checkpoint_dir, fold_standardizers=self.fold_standardizers
+        )
         logger.info("Model saved")
+
+
+class HuggingFaceCallback(L.Callback):
+    """Callback to upload the model to Hugging Face."""
+
+    def __init__(
+        self, repo_id: str, repo_type: str = "model", save_dir: str = "clt_module"
+    ):
+        super().__init__()
+        self.repo_id = repo_id
+        self.repo_type = repo_type
+        self.save_dir = Path(save_dir)
+
+    def on_train_end(self, trainer, pl_module):
+        upload_folder(
+            folder_path=self.save_dir.as_posix(),
+            repo_id=self.repo_id,
+            repo_type=self.repo_type,
+        )
 
 
 class FoldAndSaveModelCallback(L.Callback):
