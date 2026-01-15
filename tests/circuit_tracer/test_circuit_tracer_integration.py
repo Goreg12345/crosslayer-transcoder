@@ -1,7 +1,10 @@
 import pathlib
 import shutil
+from unittest.mock import MagicMock
+import yaml
 from circuit_tracer.transcoder.cross_layer_transcoder import load_clt
 
+from crosslayer_transcoder.model.clt import CrossLayerTranscoder
 from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
     CircuitTracerConverter,
 )
@@ -9,12 +12,13 @@ from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
 
 def test_circuit_tracer_integration():
     """Verify uploaded model loads correctly."""
-    from crosslayer_transcoder.utils.module_builder import build_module_from_config
-    import yaml
-
     with open("config/circuit-tracer.yaml", "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-        clt_module = build_module_from_config(config["model"])
+        config = yaml.safe_load(f)
+        model_config = config["model"]["init_args"]["model"]
+        clt_model = CrossLayerTranscoder.from_config(model_config)
+
+    clt_module = MagicMock()
+    clt_module.model = clt_model
 
     save_dir = pathlib.Path("clt_module_test")
     feature_input_hook = "hook_resid_mid"
