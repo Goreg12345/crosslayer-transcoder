@@ -18,10 +18,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v7
 
-      - name: Install dependencies
-        run: uv sync --no-dev
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
 
-      - name: Run pytest
+      - name: Run tests
         run: uv run pytest
