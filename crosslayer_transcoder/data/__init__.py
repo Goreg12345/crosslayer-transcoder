@@ -25,6 +25,7 @@ from .deployment_policy import (
 from .generation_loop import DataGenerationLoop
 from .process_monitor import ProcessMonitor
 from .shared_memory import SharedActivationBuffer
+from .tensor_datamodule import TensorDataModule
 
 # Note: Multiprocessing start method is set conditionally:
 # - 'spawn' for shared memory mode (needed for PyTorch tensor sharing)
@@ -47,4 +48,5 @@ __all__ = [
     "GPUOnlyPolicy",
     "DynamicPolicy",
     "create_deployment_policy",
+    "TensorDataModule",
 ]

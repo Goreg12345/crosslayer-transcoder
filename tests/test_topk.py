@@ -84,7 +84,10 @@ def test_per_layer_topk_has_correct_values(per_layer_topk):
 def test_per_layer_batch_topk_has_correct_values():
     per_layer_batch_topk = PerLayerBatchTopK(k=3, e=0.1, n_layers=2)
     features = torch.tensor(
-        [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]]
+        [
+            [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
+            [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]],
+        ]
     )
     topk_features = per_layer_batch_topk(features)
     # Layer 0: top 6 values from [1,2,3,4,5,11,12,13,14,15] -> keep [11,12,13,14,15,5]
@@ -177,10 +180,13 @@ def test_k_boundary_plus_one_error(features):
         topk(features)
 
 
-def test_no_negative_values_in_output(per_layer_topk, per_layer_batch_topk, batch_topk):
+def test_no_negative_values_in_output(
+    per_layer_topk, per_layer_batch_topk, batch_topk, features
+):
     """Test that all topk implementations never output negative values, even with negative inputs"""
     # Create test tensor with negative values
-    negative_features = torch.randn(2, 3, 4) - 1.0  # Ensures mostly negative values
+
+    negative_features = torch.randn_like(features) - 1.0
 
     # Test PerLayerTopK
     result = per_layer_topk(negative_features)
@@ -195,17 +201,15 @@ def test_no_negative_values_in_output(per_layer_topk, per_layer_batch_topk, batc
     assert torch.all(result >= 0), "BatchTopK output contains negative values"
 
 
-def test_mixed_positive_negative_values(per_layer_topk, per_layer_batch_topk, batch_topk):
+def test_mixed_positive_negative_values(
+    per_layer_topk,
+    per_layer_batch_topk,
+    batch_topk,
+    features,
+):
     """Test that topk implementations handle mixed positive/negative values correctly"""
     # Create test tensor with mix of positive and negative values
-    mixed_features = torch.tensor(
-        [
-            [
-                [1.0, -2.0, 3.0, -4.0, 5.0],  # Layer 0: mix of pos/neg
-                [-1.0, 2.0, -3.0, 4.0, -5.0],  # Layer 1: mix of pos/neg
-            ]
-        ]
-    )
+    mixed_features = torch.randn_like(features) - 0.5
 
     # Test PerLayerTopK - should keep top 3 positive values per layer
     result = per_layer_topk(mixed_features)
@@ -224,7 +228,11 @@ def test_mixed_positive_negative_values(per_layer_topk, per_layer_batch_topk, ba
 def nnsight_model():
     import nnsight
 
-    gpt2 = nnsight.LanguageModel("openai-community/gpt2", device_map="auto", dispatch=True)
+    gpt2 = nnsight.LanguageModel(
+        "openai-community/gpt2",
+        device_map="auto",
+        dispatch=True,
+    )
 
     gpt2.requires_grad_(False)
     return gpt2
@@ -234,7 +242,7 @@ def nnsight_model():
     "topk_fixture",
     ["per_layer_topk", "per_layer_batch_topk", "batch_topk"],
 )
-def test_nnsight_compatibility(nnsight_model, topk_fixture, request):
+def test_nnsight_compatibility(nnsight_model, topk_fixture, features, request):
     """Test that all topk implementations work correctly with nnsight tracing"""
     topk = request.getfixturevalue(topk_fixture)
     topk.to(nnsight_model.device)

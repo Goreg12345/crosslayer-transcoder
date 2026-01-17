@@ -87,7 +87,9 @@ class TensorDataModule(L.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=self.pin_memory,
             )
-            logger.info(f"Created infinite DataLoader with batch_size={self.batch_size}")
+            logger.info(
+                f"Created infinite DataLoader with batch_size={self.batch_size}"
+            )
 
     def train_dataloader(self):
         """Return training data loader."""

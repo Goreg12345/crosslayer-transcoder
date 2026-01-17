@@ -1,9 +1,13 @@
+from typing import Any, Dict
+from einops import einsum
 import torch
 import torch.nn as nn
 from jaxtyping import Float
 
+from crosslayer_transcoder.model.serializable_module import SerializableModule
 
-class Standardizer(nn.Module):
+
+class Standardizer(SerializableModule):
     def __init__(self, **kwargs):
         super().__init__()
 
@@ -26,6 +30,8 @@ class Standardizer(nn.Module):
 class DimensionwiseInputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
         super().__init__()
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
         self.register_buffer("mean", torch.empty(n_layers, activation_dim))
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
@@ -52,10 +58,21 @@ class DimensionwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[layer]) / self.std[layer]
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+            },
+        }
+
 
 class DimensionwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, activation_dim):
         super().__init__()
+        self.n_layers = n_layers
+        self.activation_dim = activation_dim
         self.register_buffer("mean", torch.empty(n_layers, activation_dim))
         self.register_buffer("std", torch.empty(n_layers, activation_dim))
         self.is_initialized = False
@@ -89,6 +106,15 @@ class DimensionwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean) / self.std
         else:
             return (mlp_out - self.mean[layer]) / self.std[layer]
+    
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "activation_dim": self.activation_dim,
+            },
+        }
 
 
 class SamplewiseInputStandardizer(Standardizer):
@@ -110,14 +136,21 @@ class SamplewiseInputStandardizer(Standardizer):
         stds = batch.std(dim=-1, keepdim=True)
         stds.clamp_(min=1e-8)
         return (batch - means) / stds
+    
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {},
+        }
 
 
 class LayerwiseInputStandardizer(Standardizer):
     def __init__(self, n_layers, n_exclude: int = 0):
         super().__init__()
+        self.n_layers = n_layers
+        self.n_exclude = n_exclude
         self.register_buffer("mean", torch.empty(n_layers))
         self.register_buffer("std", torch.empty(n_layers))
-        self.n_exclude = n_exclude
         self.is_initialized = False
 
     @torch.no_grad()
@@ -148,13 +181,23 @@ class LayerwiseInputStandardizer(Standardizer):
         else:
             return (batch - self.mean[None, layer, None]) / self.std[None, layer, None]
 
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "n_exclude": self.n_exclude,
+            },
+        }
+
 
 class LayerwiseOutputStandardizer(Standardizer):
     def __init__(self, n_layers, n_exclude: int = 0):
         super().__init__()
+        self.n_layers = n_layers
+        self.n_exclude = n_exclude
         self.register_buffer("mean", torch.empty(n_layers))
         self.register_buffer("std", torch.empty(n_layers))
-        self.n_exclude = n_exclude
         self.is_initialized = False
 
     def initialize_from_batch(
@@ -195,3 +238,12 @@ class LayerwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean[None, layer, None]) / self.std[
                 None, layer, None
             ]
+    
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
+            "init_args": {
+                "n_layers": self.n_layers,
+                "n_exclude": self.n_exclude,
+            },
+        }
