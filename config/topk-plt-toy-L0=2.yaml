@@ -19,12 +19,12 @@ trainer:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "clt"
-      name: "topk-plt-toy"
+      name: "topk-plt-toy-L0=2"
       save_dir: "./wandb"
   callbacks:
-    - class_path: crosslayer_transcoder.utils.callbacks.SaveWeightsCallback
+    - class_path: crosslayer_transcoder.utils.callbacks.FoldAndSaveModelCallback
       init_args:
-        output_dir: "weights/plt-toy"
+        checkpoint_dir: "weights/topk-plt-toy-L0=2"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.TopKCrossLayerTranscoderModule
@@ -36,21 +36,20 @@ model:
           class_path: crosslayer_transcoder.model.clt.Encoder
           init_args:
             d_acts: 110
-            d_features: 16
+            d_features: 20
             n_layers: 2
 
         decoder:
           class_path: crosslayer_transcoder.model.clt.Decoder
           init_args:
             d_acts: 110
-            d_features: 16
+            d_features: 20
             n_layers: 2
         
         nonlinearity:
-          class_path: crosslayer_transcoder.model.topk.BatchTopK
+          class_path: crosslayer_transcoder.model.topk.LayerTopK
           init_args:
             k: 1  # 0.5 features per sample per layer → L0=0.5 per layer
-            e: 0.01  # EMA decay for threshold
         
         input_standardizer:
           class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
@@ -71,7 +70,7 @@ model:
     dead_features:
       class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 16
+        n_features: 20
         n_layers: 2
         return_per_layer: true
         return_log_freqs: true
@@ -85,7 +84,7 @@ model:
 
     # TopK auxiliary loss configuration
     topk_aux:
-      class_path: crosslayer_transcoder.model.topk.PerLayerTopK
+      class_path: crosslayer_transcoder.model.topk.LayerTopK
       init_args:
         k: 4  # Aux loss uses more features
     tokens_till_dead: 100

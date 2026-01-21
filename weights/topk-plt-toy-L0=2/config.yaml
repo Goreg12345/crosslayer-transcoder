@@ -1,0 +1,24 @@
+model:
+  class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
+  init_args:
+    decoder:
+      class_path: crosslayer_transcoder.model.clt.Decoder
+      init_args:
+        d_acts: 110
+        d_features: 20
+        n_layers: 2
+    encoder:
+      class_path: crosslayer_transcoder.model.clt.Encoder
+      init_args:
+        d_acts: 110
+        d_features: 20
+        n_layers: 2
+    input_standardizer: null
+    nonlinearity:
+      class_path: crosslayer_transcoder.model.topk.LayerTopK
+      init_args:
+        e: null
+        k: 1
+        n_layers: null
+    output_standardizer: null
+  is_folded: true

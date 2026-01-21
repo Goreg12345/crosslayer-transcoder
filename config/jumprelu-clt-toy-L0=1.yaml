@@ -21,9 +21,9 @@ trainer:
       name: "jumprelu-clt-toy"
       save_dir: "./wandb"
   callbacks:
-    - class_path: crosslayer_transcoder.utils.callbacks.SaveWeightsCallback
+    - class_path: crosslayer_transcoder.utils.callbacks.FoldAndSaveModelCallback
       init_args:
-        output_dir: "weights/jumprelu-clt-toy"
+        checkpoint_dir: "weights/jumprelu-clt-toy"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
@@ -85,7 +85,7 @@ model:
     lr_decay_factor: 0.1
 
     # JumpReLU-specific parameters
-    lambda_sparsity: 0.05  # sparsity loss weight
+    lambda_sparsity: 0.051  # sparsity loss weight
     c_sparsity: 1  # sparsity loss coefficient
     use_tanh: true  # use tanh nonlinearity
     pre_actv_loss: 1e-6  # pre-activation loss weight

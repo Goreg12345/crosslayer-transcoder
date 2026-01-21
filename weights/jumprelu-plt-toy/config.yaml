@@ -1,0 +1,25 @@
+model:
+  class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
+  init_args:
+    decoder:
+      class_path: crosslayer_transcoder.model.clt.Decoder
+      init_args:
+        d_acts: 110
+        d_features: 32
+        n_layers: 2
+    encoder:
+      class_path: crosslayer_transcoder.model.clt.Encoder
+      init_args:
+        d_acts: 110
+        d_features: 32
+        n_layers: 2
+    input_standardizer: null
+    nonlinearity:
+      class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+      init_args:
+        bandwidth: 0.009999999776482582
+        d_features: 32
+        n_layers: 2
+        theta: 0.03
+    output_standardizer: null
+  is_folded: true

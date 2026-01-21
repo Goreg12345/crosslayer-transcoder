@@ -63,6 +63,33 @@ class PerLayerTopK(TopK):
         return topk_features
 
 
+class LayerTopK(TopK):
+    @torch.no_grad()
+    def _inference_forward(self, features: torch.Tensor, layer: int) -> torch.Tensor:
+        return self._training_forward(features)
+
+    def _training_forward(self, features: torch.Tensor) -> torch.Tensor:
+        batch_size, n_layers, d_features = features.shape
+        total_features = n_layers * d_features
+
+        # Keep semantics consistent with other TopK variants:
+        # k is "per-layer per-sample", so total per sample is k * n_layers.
+        if isinstance(self.k, float):
+            k = int(self.k * n_layers)
+        else:
+            k = int(self.k) * n_layers
+        assert k <= total_features
+
+        flat_features = features.reshape(batch_size, total_features)
+        topk_features = torch.zeros_like(flat_features)
+        if k == 0:
+            return topk_features.reshape(batch_size, n_layers, d_features)
+        topk_vals, topk_idxs = torch.topk(flat_features, k, dim=-1, sorted=False)
+        topk_vals = self.relu(topk_vals)  # make sure that features are always positive
+        topk_features.scatter_(dim=-1, index=topk_idxs, src=topk_vals)
+        return topk_features.reshape(batch_size, n_layers, d_features)
+
+
 class BatchTopK(TopK):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

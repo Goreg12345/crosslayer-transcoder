@@ -1,4 +1,4 @@
-# Configuration for TopK CrossLayer Transcoder - TOY MODEL
+# Configuration for JumpReLU CrossLayer Transcoder - TOY MODEL
 # Trains on pre-computed activations from a .pt file
 # Tensor shape: [16, 2, 2, 110] -> 16 samples, 2 in/out, 2 layers, 110 dim
 
@@ -18,15 +18,15 @@ trainer:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       project: "clt"
-      name: "topk-clt-toy-k=1"
+      name: "jumprelu-plt-toy-L0=2"
       save_dir: "./wandb"
   callbacks:
     - class_path: crosslayer_transcoder.utils.callbacks.FoldAndSaveModelCallback
       init_args:
-        checkpoint_dir: "weights/topk-clt-toy-k=1"
+        checkpoint_dir: "weights/jumprelu-plt-toy-L0=2"
 
 model:
-  class_path: crosslayer_transcoder.model.clt_lightning.TopKCrossLayerTranscoderModule
+  class_path: crosslayer_transcoder.model.clt_lightning.JumpReLUCrossLayerTranscoderModule
   init_args:
     model:
       class_path: crosslayer_transcoder.model.clt.CrossLayerTranscoder
@@ -35,20 +35,23 @@ model:
           class_path: crosslayer_transcoder.model.clt.Encoder
           init_args:
             d_acts: 110
-            d_features: 20
+            d_features: 32
             n_layers: 2
 
         decoder:
-          class_path: crosslayer_transcoder.model.clt.CrosslayerDecoder
+          class_path: crosslayer_transcoder.model.clt.Decoder
           init_args:
             d_acts: 110
-            d_features: 20
+            d_features: 32
             n_layers: 2
         
         nonlinearity:
-          class_path: crosslayer_transcoder.model.topk.LayerTopK
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
           init_args:
-            k: 0.5  # 0.5 features per sample per layer → L0=0.5 per layer
+            theta: 0.03
+            bandwidth: 0.01
+            n_layers: 2
+            d_features: 32
         
         input_standardizer:
           class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
@@ -69,7 +72,7 @@ model:
     dead_features:
       class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
       init_args:
-        n_features: 20
+        n_features: 32
         n_layers: 2
         return_per_layer: true
         return_log_freqs: true
@@ -78,17 +81,15 @@ model:
     # Training parameters
     learning_rate: 1e-3
     compile: false  # No compile for toy model
-    lr_decay_step: 8000
+    lr_decay_step: 800
     lr_decay_factor: 0.1
 
-    # TopK auxiliary loss configuration
-    topk_aux:
-      class_path: crosslayer_transcoder.model.topk.LayerTopK
-      init_args:
-        k: 4  # Aux loss uses more features
-    tokens_till_dead: 100
-    aux_loss_scale: 0.03125
-    
+    # JumpReLU-specific parameters
+    lambda_sparsity: 0.018  # sparsity loss weight
+    c_sparsity: 1  # sparsity loss coefficient
+    use_tanh: true  # use tanh nonlinearity
+    pre_actv_loss: 1e-6  # pre-activation loss weight
+
     # Dead features computation settings
     compute_dead_features: true
     compute_dead_features_every: 50
