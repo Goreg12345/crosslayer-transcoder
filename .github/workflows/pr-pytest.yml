@@ -1,0 +1,27 @@
+name: Run Pytest
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  pytest:
+    name: Run pytest via uv
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv install
+
+      - name: Run pytest
+        run: uv run pytest
