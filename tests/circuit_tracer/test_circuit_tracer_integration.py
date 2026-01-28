@@ -1,7 +1,6 @@
 import pathlib
 import shutil
 from unittest.mock import MagicMock
-import torch
 import yaml
 from circuit_tracer.transcoder.cross_layer_transcoder import load_clt
 import pytest
