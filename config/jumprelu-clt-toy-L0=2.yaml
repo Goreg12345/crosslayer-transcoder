@@ -85,7 +85,7 @@ model:
     lr_decay_factor: 0.1
 
     # JumpReLU-specific parameters
-    lambda_sparsity: 0.017  # sparsity loss weight
+    lambda_sparsity: 0.018  # sparsity loss weight
     c_sparsity: 1  # sparsity loss coefficient
     use_tanh: true  # use tanh nonlinearity
     pre_actv_loss: 1e-6  # pre-activation loss weight
