@@ -81,10 +81,6 @@ class SerializableModule(nn.Module, ABC):
             target_cls = getattr(
                 importlib.import_module(target_module_name), target_class_name
             )
-            if target_cls is not cls:
-                raise ValueError(
-                    f"Model class mismatch: {target_cls} != {cls}. You are trying to load a {target_cls} model, but the current class is {cls}."
-                )
         else:
             target_cls = cls
 

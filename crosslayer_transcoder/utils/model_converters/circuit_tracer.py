@@ -6,9 +6,13 @@ import torch
 import yaml
 from safetensors.torch import save_file
 
-from crosslayer_transcoder.model import BatchTopK, PerLayerBatchTopK, PerLayerTopK
+from crosslayer_transcoder.model import (
+    BatchTopK,
+    CrossLayerTranscoder,
+    PerLayerBatchTopK,
+    PerLayerTopK,
+)
 from crosslayer_transcoder.utils.model_converters.model_converter import (
-    CLTModule,
     ModelConverter,
 )
 from crosslayer_transcoder.model.jumprelu import JumpReLU
@@ -32,22 +36,20 @@ class CircuitTracerConverter(ModelConverter):
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
     def convert_and_save(
-        self, model: CLTModule, dtype: torch.dtype = torch.bfloat16
+        self, model: CrossLayerTranscoder, dtype: torch.dtype = torch.bfloat16
     ) -> None:
-        if isinstance(
-            model.model.nonlinearity, (PerLayerTopK, BatchTopK, PerLayerBatchTopK)
-        ):
+        if isinstance(model.nonlinearity, (PerLayerTopK, BatchTopK, PerLayerBatchTopK)):
             logger.warning(
                 "TopK nonlinearity is not supported by circuit-tracer. Skipping conversion."
             )
             raise ValueError("TopK nonlinearity is not supported by circuit-tracer.")
 
         # NOTE: this mutates the model in-place. Potentially bad, but a tradeoff for copying a huge model.
-        model.model.fold()
+        model.fold()
 
-        encoder = model.model.encoder
-        decoder = model.model.decoder
-        nonlinearity = model.model.nonlinearity
+        encoder = model.encoder
+        decoder = model.decoder
+        nonlinearity = model.nonlinearity
         n_layers = encoder.n_layers
         d_acts = encoder.d_acts  # -> circuit-tracer.d_model
         d_features = encoder.d_features  # -> circuit-tracer.d_transcoder
