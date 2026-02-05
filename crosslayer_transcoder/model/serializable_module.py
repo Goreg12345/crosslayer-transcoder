@@ -24,14 +24,26 @@ class SerializableModule(nn.Module, ABC):
     @classmethod
     def from_config(cls, config: ConfigDict) -> Self:
         """Construct module from a config dict. Weights are not loaded."""
+
+        module_name, class_name = config["class_path"].rsplit(".", 1)
+        resolved_cls = getattr(importlib.import_module(module_name), class_name)
+        if cls != resolved_cls:
+            raise ValueError(
+                f"Incorrect class_path specified for building {cls}. Classpath specified: {config['class_path']}"
+            )
+
         init_args = config.get("init_args", {})
 
         resolved_args = {}
 
         for key, value in init_args.items():
             if isinstance(value, dict) and "class_path" in value:
-                target_module_name, target_class_name = value["class_path"].rsplit(".", 1)
-                target_cls = getattr(importlib.import_module(target_module_name), target_class_name)
+                target_module_name, target_class_name = value["class_path"].rsplit(
+                    ".", 1
+                )
+                target_cls = getattr(
+                    importlib.import_module(target_module_name), target_class_name
+                )
                 resolved_args[key] = target_cls.from_config(value)
             else:
                 resolved_args[key] = value
@@ -54,16 +66,26 @@ class SerializableModule(nn.Module, ABC):
     def from_pretrained(cls, directory: Union[Path, str]) -> Self:
         """Load model from directory."""
         directory = Path(directory)
-        with open(directory / "config.yaml") as f:
-            full_config = yaml.safe_load(f)
+        checkpoint = directory / "checkpoint.safetensors"
+        config = directory / "config.yaml"
+        return cls.from_config_and_checkpoint(config, checkpoint)
+
+    @classmethod
+    def from_config_and_checkpoint(cls, config: Path, checkpoint: Path) -> Self:
+        if not checkpoint.exists():
+            raise FileNotFoundError(f"Checkpoint file not found: {checkpoint}")
+        if not config.exists():
+            raise FileNotFoundError(f"Config file not found: {config}")
+
+        with open(config, "r") as f:
+            full_config = yaml.load(f, Loader=yaml.FullLoader)
 
         model_config = full_config.get("model")
         if model_config is None:
             raise ValueError("Model config not found in config.yaml", full_config)
 
         model = cls.from_config(model_config)
-        model.load_state_dict(load_file(directory / "checkpoint.safetensors"))
+        model.load_state_dict(load_file(checkpoint))
 
         model._is_folded = model_config.get("is_folded", False)
-
         return model
