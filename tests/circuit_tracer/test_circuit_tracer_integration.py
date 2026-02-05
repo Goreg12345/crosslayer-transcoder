@@ -1,9 +1,8 @@
 import pathlib
 import shutil
-from unittest.mock import MagicMock
+
 import yaml
 from circuit_tracer.transcoder.cross_layer_transcoder import load_clt
-import pytest
 
 from crosslayer_transcoder.model.clt import CrossLayerTranscoder
 from crosslayer_transcoder.utils.model_converters.circuit_tracer import (
