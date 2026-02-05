@@ -26,6 +26,7 @@ dependencies = [
     "modal>=1.1.4",
     "circuit-tracer",
     "hf-transfer>=0.1.9",
+    "huggingface_hub>=0.20.0",
 ]
 
 [project.optional-dependencies]

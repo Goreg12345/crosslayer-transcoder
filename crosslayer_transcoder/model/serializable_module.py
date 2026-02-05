@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Self, TypedDict, Union
 
 import yaml
+from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
 from torch import nn
 
@@ -30,8 +31,12 @@ class SerializableModule(nn.Module, ABC):
 
         for key, value in init_args.items():
             if isinstance(value, dict) and "class_path" in value:
-                target_module_name, target_class_name = value["class_path"].rsplit(".", 1)
-                target_cls = getattr(importlib.import_module(target_module_name), target_class_name)
+                target_module_name, target_class_name = value["class_path"].rsplit(
+                    ".", 1
+                )
+                target_cls = getattr(
+                    importlib.import_module(target_module_name), target_class_name
+                )
                 resolved_args[key] = target_cls.from_config(value)
             else:
                 resolved_args[key] = value
@@ -52,17 +57,39 @@ class SerializableModule(nn.Module, ABC):
 
     @classmethod
     def from_pretrained(cls, directory: Union[Path, str]) -> Self:
-        """Load model from directory."""
-        directory = Path(directory)
-        with open(directory / "config.yaml") as f:
+        """Load model from local directory or HuggingFace Hub repository."""
+        path = Path(directory)
+
+        if not path.exists():
+            local_path = snapshot_download(
+                repo_id=str(directory),
+                allow_patterns=["config.yaml", "checkpoint.safetensors"],
+            )
+            path = Path(local_path)
+
+        with open(path / "config.yaml") as f:
             full_config = yaml.safe_load(f)
 
         model_config = full_config.get("model")
         if model_config is None:
             raise ValueError("Model config not found in config.yaml", full_config)
 
-        model = cls.from_config(model_config)
-        model.load_state_dict(load_file(directory / "checkpoint.safetensors"))
+        if "class_path" in model_config:
+            target_module_name, target_class_name = model_config["class_path"].rsplit(
+                ".", 1
+            )
+            target_cls = getattr(
+                importlib.import_module(target_module_name), target_class_name
+            )
+            if target_cls is not cls:
+                raise ValueError(
+                    f"Model class mismatch: {target_cls} != {cls}. You are trying to load a {target_cls} model, but the current class is {cls}."
+                )
+        else:
+            target_cls = cls
+
+        model = target_cls.from_config(model_config)
+        model.load_state_dict(load_file(path / "checkpoint.safetensors"))
 
         model._is_folded = model_config.get("is_folded", False)
 
