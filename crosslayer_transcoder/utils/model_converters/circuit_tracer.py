@@ -12,6 +12,7 @@ from crosslayer_transcoder.model import (
     PerLayerBatchTopK,
     PerLayerTopK,
 )
+from crosslayer_transcoder.model.topk import TopK
 from crosslayer_transcoder.utils.model_converters.model_converter import (
     ModelConverter,
 )
@@ -38,7 +39,7 @@ class CircuitTracerConverter(ModelConverter):
     def convert_and_save(
         self, model: CrossLayerTranscoder, dtype: torch.dtype = torch.bfloat16
     ) -> None:
-        if isinstance(model.nonlinearity, (PerLayerTopK, BatchTopK, PerLayerBatchTopK)):
+        if isinstance(model.nonlinearity, (BatchTopK, PerLayerBatchTopK)):
             logger.warning(
                 "TopK nonlinearity is not supported by circuit-tracer. Skipping conversion."
             )
@@ -74,6 +75,10 @@ class CircuitTracerConverter(ModelConverter):
             if isinstance(nonlinearity, JumpReLU):
                 layer_encoder_dict[f"threshold_{source_layer}"] = (
                     nonlinearity.theta[:, source_layer, :].cpu().to(dtype)
+                )
+            if isinstance(nonlinearity, PerLayerTopK):
+                layer_encoder_dict[f"k_{source_layer}"] = torch.tensor(
+                    [nonlinearity.k], dtype=torch.int
                 )
 
             save_file(
