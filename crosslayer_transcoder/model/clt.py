@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+import einops
 import torch
 import torch.nn as nn
 import yaml
@@ -194,6 +195,17 @@ class Encoder(SerializableModule):
             },
         }
 
+    def to_circuit_tracer(self):
+        W = einops.rearrange(
+            self.get_parameter("W"),
+            "n_layers d_acts d_features -> n_layers d_features d_acts",
+        ).contiguous()
+        b = self.get_parameter("b")
+        return {
+            "W": W,
+            "b": b,
+        }
+
 
 class Decoder(SerializableModule):
     def __init__(self, d_acts: int, d_features: int, n_layers: int):
@@ -273,6 +285,12 @@ class Decoder(SerializableModule):
                 "d_features": self.d_features,
                 "n_layers": self.n_layers,
             },
+        }
+
+    def to_circuit_tracer(self):
+        return {
+            "W": self.W,
+            "b": self.b,
         }
 
 
@@ -367,6 +385,32 @@ class CrosslayerDecoder(SerializableModule):
                 "d_features": self.d_features,
                 "n_layers": self.n_layers,
             },
+        }
+
+    def to_circuit_tracer(self):
+        output_decs = []
+        for source_layer in range(self.n_layers):
+            output_dec_i = torch.zeros(
+                [self.d_features, self.n_layers - source_layer, self.d_acts],
+            )
+
+            for k in range(source_layer, self.n_layers):
+                # get decoder mat for layer i --> k
+                decoder_w_k = self.get_parameter(f"W_{k}")
+
+                dec_i_k = decoder_w_k[source_layer, ...]
+                assert dec_i_k.shape == (
+                    self.d_features,
+                    self.d_acts,
+                )
+
+                output_dec_i[:, k - source_layer, ...] = dec_i_k
+
+            output_decs.append(output_dec_i)
+
+        return {
+            "W": output_decs,
+            "b": self.b,
         }
 
 
@@ -465,3 +509,20 @@ class CrossLayerTranscoder(SerializableModule):
             yaml.dump({"model": config}, f)
 
         save_file(self.state_dict(), directory / "checkpoint.safetensors")
+
+    def to_circuit_tracer(self):
+        # NOTE: this mutates the model in-place. Potentially bad, but a tradeoff for copying a huge model.
+        self.fold()
+
+        encoder = self.encoder.to_circuit_tracer()
+        decoder = self.decoder.to_circuit_tracer()
+
+        is_per_layer_decoder = isinstance(self.decoder, Decoder)
+
+        config = {
+            "is_per_layer_decoder": is_per_layer_decoder,
+            "encoder": encoder,
+            "decoder": decoder,
+        }
+
+        return config

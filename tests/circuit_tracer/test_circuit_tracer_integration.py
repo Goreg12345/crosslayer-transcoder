@@ -25,7 +25,7 @@ def test_circuit_tracer_integration():
         feature_input_hook=feature_input_hook,
         feature_output_hook=feature_output_hook,
     )
-    converter.convert_and_save(clt)
+    converter.export(clt)
 
     transcoder = load_clt(
         clt_path=save_dir.as_posix(),

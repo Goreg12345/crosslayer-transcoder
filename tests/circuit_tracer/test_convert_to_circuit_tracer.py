@@ -9,7 +9,7 @@ import shutil
 def test_circuit_tracer_converter(jumprelu_clt):
     save_dir = pathlib.Path("clt_module")
     converter = CircuitTracerConverter(save_dir=save_dir)
-    converter.convert_and_save(jumprelu_clt)
+    converter.export(jumprelu_clt)
 
     assert save_dir.exists()
     assert (
