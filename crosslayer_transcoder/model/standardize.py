@@ -1,7 +1,5 @@
 from typing import Any, Dict
-from einops import einsum
 import torch
-import torch.nn as nn
 from jaxtyping import Float
 
 from crosslayer_transcoder.model.serializable_module import SerializableModule
@@ -106,7 +104,7 @@ class DimensionwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean) / self.std
         else:
             return (mlp_out - self.mean[layer]) / self.std[layer]
-    
+
     def to_config(self) -> Dict[str, Any]:
         return {
             "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
@@ -136,7 +134,7 @@ class SamplewiseInputStandardizer(Standardizer):
         stds = batch.std(dim=-1, keepdim=True)
         stds.clamp_(min=1e-8)
         return (batch - means) / stds
-    
+
     def to_config(self) -> Dict[str, Any]:
         return {
             "class_path": self.__class__.__module__ + "." + self.__class__.__name__,
@@ -238,7 +236,7 @@ class LayerwiseOutputStandardizer(Standardizer):
             return (mlp_out - self.mean[None, layer, None]) / self.std[
                 None, layer, None
             ]
-    
+
     def to_config(self) -> Dict[str, Any]:
         return {
             "class_path": self.__class__.__module__ + "." + self.__class__.__name__,

@@ -14,7 +14,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch>=2.8.0",
     "nnsight==0.5.0.dev7",
-    "datasets>=3.6.0",
+    "datasets==3.6.0",
     "h5py>=3.13.0",
     "einops>=0.8.1",
     "jaxtyping>=0.3.2",
@@ -23,6 +23,10 @@ dependencies = [
     "transformers>=4.46.0",
     "numpy>=1.24.0",
     "jsonargparse[signatures]>=4.27.7",
+    "modal>=1.1.4",
+    "circuit-tracer",
+    "hf-transfer>=0.1.9",
+    "huggingface_hub>=0.20.0",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +34,10 @@ dev = [
     "jupyterlab>=4.4.2",
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
+    "circuit-tracer"
 ]
+[project.scripts]
+clt = "crosslayer_transcoder.main:main"
 
 [dependency-groups]
 dev = [
@@ -39,8 +46,14 @@ dev = [
     "pytest>=8.4.1",
 ]
 
-[project.scripts]
-clt = "crosslayer_transcoder.main:main"
+[tool.uv.sources]
+circuit-tracer = { git = "https://github.com/safety-research/circuit-tracer.git", rev = "main" }
+
+[tool.hatch.metadata]
+allow-direct-references=true
 
 [tool.black]
 line-length = 110
+
+[tool.ruff.lint]
+ignore = ["F722"]

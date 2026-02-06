@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+import einops
 import torch
 import torch.nn as nn
 import yaml
@@ -194,6 +195,17 @@ class Encoder(SerializableModule):
             },
         }
 
+    def to_circuit_tracer(self):
+        W = einops.rearrange(
+            self.get_parameter("W"),
+            "n_layers d_acts d_features -> n_layers d_features d_acts",
+        ).contiguous()
+        b = self.get_parameter("b")
+        return {
+            "W": W,
+            "b": b,
+        }
+
 
 class Decoder(SerializableModule):
     def __init__(self, d_acts: int, d_features: int, n_layers: int):
@@ -202,16 +214,16 @@ class Decoder(SerializableModule):
         self.d_features = d_features
         self.n_layers = n_layers
         self.register_parameter(
-            f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts)))
+            "W", nn.Parameter(torch.empty((n_layers, d_features, d_acts)))
         )
-        self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
+        self.register_parameter("b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self._is_folded = False
         self.reset_parameters()
 
     def reset_parameters(self):
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
-        self.get_parameter(f"W").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
-        self.get_parameter(f"b").data.zero_()
+        self.get_parameter("W").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
+        self.get_parameter("b").data.zero_()
 
     @torch.no_grad()
     def forward_layer(
@@ -224,7 +236,7 @@ class Decoder(SerializableModule):
         return (
             einsum(
                 features,
-                self.get_parameter(f"W")[layer],
+                self.get_parameter("W")[layer],
                 "batch_size seq d_features, d_features d_acts -> batch_size seq d_acts",
             )
             + self.b[layer]
@@ -275,6 +287,12 @@ class Decoder(SerializableModule):
             },
         }
 
+    def to_circuit_tracer(self):
+        return {
+            "W": self.W,
+            "b": self.b,
+        }
+
 
 class CrosslayerDecoder(SerializableModule):
     def __init__(self, d_acts: int, d_features: int, n_layers: int):
@@ -287,7 +305,7 @@ class CrosslayerDecoder(SerializableModule):
                 f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts)))
             )
         self._is_folded = False
-        self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
+        self.register_parameter("b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -331,15 +349,15 @@ class CrosslayerDecoder(SerializableModule):
             device=features.device,
             dtype=features.dtype,
         )
-        for l in range(self.n_layers):
-            W = self.get_parameter(f"W_{l}")
-            selected_features = features[:, : l + 1]
+        for layer_idx in range(self.n_layers):
+            W = self.get_parameter(f"W_{layer_idx}")
+            selected_features = features[:, : layer_idx + 1]
             l_recons = einsum(
                 selected_features,
                 W,
                 "batch_size n_layers d_features, n_layers d_features d_acts -> batch_size d_acts",
             )
-            recons[:, l, :] = l_recons
+            recons[:, layer_idx, :] = l_recons
         recons = recons + self.b.to(features.dtype)
         return recons
 
@@ -367,6 +385,32 @@ class CrosslayerDecoder(SerializableModule):
                 "d_features": self.d_features,
                 "n_layers": self.n_layers,
             },
+        }
+
+    def to_circuit_tracer(self):
+        output_decs = []
+        for source_layer in range(self.n_layers):
+            output_dec_i = torch.zeros(
+                [self.d_features, self.n_layers - source_layer, self.d_acts],
+            )
+
+            for k in range(source_layer, self.n_layers):
+                # get decoder mat for layer i --> k
+                decoder_w_k = self.get_parameter(f"W_{k}")
+
+                dec_i_k = decoder_w_k[source_layer, ...]
+                assert dec_i_k.shape == (
+                    self.d_features,
+                    self.d_acts,
+                )
+
+                output_dec_i[:, k - source_layer, ...] = dec_i_k
+
+            output_decs.append(output_dec_i)
+
+        return {
+            "W": output_decs,
+            "b": self.b,
         }
 
 
@@ -465,3 +509,20 @@ class CrossLayerTranscoder(SerializableModule):
             yaml.dump({"model": config}, f)
 
         save_file(self.state_dict(), directory / "checkpoint.safetensors")
+
+    def to_circuit_tracer(self):
+        # NOTE: this mutates the model in-place. Potentially bad, but a tradeoff for copying a huge model.
+        self.fold()
+
+        encoder = self.encoder.to_circuit_tracer()
+        decoder = self.decoder.to_circuit_tracer()
+
+        is_per_layer_decoder = isinstance(self.decoder, Decoder)
+
+        config = {
+            "is_per_layer_decoder": is_per_layer_decoder,
+            "encoder": encoder,
+            "decoder": decoder,
+        }
+
+        return config
