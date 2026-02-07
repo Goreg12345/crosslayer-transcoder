@@ -10,9 +10,7 @@ from typing import List
 import lightning as L
 from torch.profiler import ProfilerActivity, profile, schedule, tensorboard_trace_handler
 
-from crosslayer_transcoder.model import CrossLayerTranscoder
 from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
-from crosslayer_transcoder.model.serializable_module import SerializableModule
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +82,7 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         checkpoint_path = self.checkpoint_dir / checkpoint_name
         trainer.save_checkpoint(checkpoint_path)
         logger.info(f"Saved final checkpoint: {checkpoint_path}")
+
 
 
 class SaveModelCallback(L.Callback):
