@@ -56,9 +56,9 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         """Get run name from WandB logger."""
         # Get run name from WandB logger if available
         if trainer.loggers:
-            for logger in trainer.loggers:
-                if hasattr(logger, "name") and logger.name:
-                    self.run_name = logger.name
+            for trainer_logger in trainer.loggers:
+                if hasattr(trainer_logger, "name") and trainer_logger.name:
+                    self.run_name = trainer_logger.name
                     break
 
         # Fallback to a default name if no WandB logger
@@ -75,9 +75,9 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         # Get project name from WandB logger if available
         project_name = "clt"
         if trainer.loggers:
-            for logger in trainer.loggers:
-                if hasattr(logger, "project") and logger.project:
-                    project_name = logger.project
+            for trainer_logger in trainer.loggers:
+                if hasattr(trainer_logger, "project") and trainer_logger.project:
+                    project_name = trainer_logger.project
                     break
 
         checkpoint_name = f"{project_name}-{self.run_name}-epoch{epoch}-step{step}-final.ckpt"

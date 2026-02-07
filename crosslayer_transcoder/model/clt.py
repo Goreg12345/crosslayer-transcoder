@@ -55,11 +55,7 @@ class SimpleCrossLayerTranscoder(nn.Module):
 
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         self.W_dec.data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
-        mask = (
-            self.mask.unsqueeze(-1)
-            .unsqueeze(-1)
-            .repeat(1, 1, self.d_features, self.d_acts)
-        )
+        mask = self.mask.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.d_features, self.d_acts)
         self.W_dec.data = torch.where(mask.bool(), self.W_dec.data, 0.0)
 
         if self.tied_init:
@@ -71,9 +67,7 @@ class SimpleCrossLayerTranscoder(nn.Module):
         # norm = self.W_dec.norm(p=2, dim=-1)
         # self.W_dec.data = self.W_dec.data / norm.unsqueeze(-1)
 
-    def initialize_standardizers(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
-    ):
+    def initialize_standardizers(self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]):
         self.input_standardizer.initialize_from_batch(batch)
         self.output_standardizer.initialize_from_batch(batch)
 
@@ -88,9 +82,7 @@ class SimpleCrossLayerTranscoder(nn.Module):
             "from_layer to_layer -> batch_size to_layer d_acts",
         )
 
-    def forward(
-        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
-    ) -> Tuple[
+    def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],
         Float[torch.Tensor, "batch_size n_layers d_features"],
         Float[torch.Tensor, "batch_size n_layers d_acts"],
@@ -171,11 +163,15 @@ class Encoder(SerializableModule):
         if self._is_folded:
             return self
 
-        self.W.data = self.W / input_standardizer.std.unsqueeze(-1)
+        # Convert standardizer tensors to match encoder parameter dtype
+        std = input_standardizer.std.to(dtype=self.W.dtype)
+        mean = input_standardizer.mean.to(dtype=self.W.dtype)
+
+        self.W.data = self.W / std.unsqueeze(-1)
 
         self.b.data = self.b - (
             einsum(
-                input_standardizer.mean,
+                mean,
                 self.W,
                 "n_layers d_acts, n_layers d_acts d_features -> n_layers d_features",
             )
@@ -201,9 +197,7 @@ class Decoder(SerializableModule):
         self.d_acts = d_acts
         self.d_features = d_features
         self.n_layers = n_layers
-        self.register_parameter(
-            f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts)))
-        )
+        self.register_parameter(f"W", nn.Parameter(torch.empty((n_layers, d_features, d_acts))))
         self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self._is_folded = False
         self.reset_parameters()
@@ -253,13 +247,17 @@ class Decoder(SerializableModule):
         if self._is_folded:
             return self
 
+        # Convert standardizer tensors to match decoder parameter dtype
+        std = output_standardizer.std.to(dtype=self.W.dtype)
+        mean = output_standardizer.mean.to(dtype=self.b.dtype)
+
         self.W.data = einsum(
             self.W,
-            output_standardizer.std,
+            std,
             "n_layers d_features d_acts, n_layers d_acts -> n_layers d_features d_acts",
         )
 
-        self.b.data = self.b * output_standardizer.std + output_standardizer.mean
+        self.b.data = self.b * std + mean
 
         self._is_folded = True
 
@@ -283,9 +281,7 @@ class CrosslayerDecoder(SerializableModule):
         self.d_features = d_features
         self.n_layers = n_layers
         for i in range(n_layers):
-            self.register_parameter(
-                f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts)))
-            )
+            self.register_parameter(f"W_{i}", nn.Parameter(torch.empty((i + 1, d_features, d_acts))))
         self._is_folded = False
         self.register_parameter(f"b", nn.Parameter(torch.empty((n_layers, d_acts))))
         self.reset_parameters()
@@ -293,9 +289,7 @@ class CrosslayerDecoder(SerializableModule):
     def reset_parameters(self):
         dec_uniform_thresh = 1 / ((self.d_acts * self.n_layers) ** 0.5)
         for i in range(self.n_layers):
-            self.get_parameter(f"W_{i}").data.uniform_(
-                -dec_uniform_thresh, dec_uniform_thresh
-            )
+            self.get_parameter(f"W_{i}").data.uniform_(-dec_uniform_thresh, dec_uniform_thresh)
             # for l in range(i):
             #    self.get_parameter(f"W_{i}").data[l, :, :] = self.get_parameter(f"W_{l}").data[l, :, :] * 0.0
 
@@ -348,12 +342,17 @@ class CrosslayerDecoder(SerializableModule):
         if self._is_folded:
             return self
 
-        self.b.data = self.b * output_standardizer.std + output_standardizer.mean
+        # Convert standardizer tensors to match decoder parameter dtype
+        std = output_standardizer.std.to(dtype=self.b.dtype)
+        mean = output_standardizer.mean.to(dtype=self.b.dtype)
+
+        self.b.data = self.b * std + mean
         for layer in range(self.n_layers):
-            std = output_standardizer.std[layer]
-            self.get_parameter(f"W_{layer}").data = einsum(
-                self.get_parameter(f"W_{layer}"),
-                std,
+            W_layer = self.get_parameter(f"W_{layer}")
+            std_layer = std[layer].to(dtype=W_layer.dtype)
+            W_layer.data = einsum(
+                W_layer,
+                std_layer,
                 "n_layers d_features d_acts, d_acts -> n_layers d_features d_acts",
             )
         self._is_folded = True
@@ -449,12 +448,17 @@ class MatryoshkaCrosslayerDecoder(SerializableModule):
         if self._is_folded:
             return self
 
-        self.b.data = self.b * output_standardizer.std + output_standardizer.mean
+        # Convert standardizer tensors to match decoder parameter dtype
+        std = output_standardizer.std.to(dtype=self.b.dtype)
+        mean = output_standardizer.mean.to(dtype=self.b.dtype)
+
+        self.b.data = self.b * std + mean
         for layer in range(self.n_layers):
-            std = output_standardizer.std[layer]
-            self.get_parameter(f"W_{layer}").data = einsum(
-                self.get_parameter(f"W_{layer}"),
-                std,
+            W_layer = self.get_parameter(f"W_{layer}")
+            std_layer = std[layer].to(dtype=W_layer.dtype)
+            W_layer.data = einsum(
+                W_layer,
+                std_layer,
                 "n_layers d_features d_acts, d_acts -> n_layers d_features d_acts",
             )
         self._is_folded = True
@@ -496,15 +500,11 @@ class CrossLayerTranscoder(SerializableModule):
         self.encoder.reset_parameters()
         self.decoder.reset_parameters()
 
-    def initialize_standardizers(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
-    ):
+    def initialize_standardizers(self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]):
         self.input_standardizer.initialize_from_batch(batch)
         self.output_standardizer.initialize_from_batch(batch)
 
-    def forward(
-        self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]
-    ) -> Tuple[
+    def forward(self, acts: Float[torch.Tensor, "batch_size n_layers d_acts"]) -> Tuple[
         Float[torch.Tensor, "batch_size n_layers d_features"],  # pre_actvs
         Float[torch.Tensor, "batch_size n_layers d_features"],  # features
         Float[torch.Tensor, "batch_size n_layers d_acts"],  # recons_norm
@@ -533,12 +533,12 @@ class CrossLayerTranscoder(SerializableModule):
                 "nonlinearity": self.nonlinearity.to_config(),
                 "encoder": self.encoder.to_config(),
                 "decoder": self.decoder.to_config(),
-                "input_standardizer": self.input_standardizer.to_config()
-                if self.input_standardizer is not None
-                else None,
-                "output_standardizer": self.output_standardizer.to_config()
-                if self.output_standardizer is not None
-                else None,
+                "input_standardizer": (
+                    self.input_standardizer.to_config() if self.input_standardizer is not None else None
+                ),
+                "output_standardizer": (
+                    self.output_standardizer.to_config() if self.output_standardizer is not None else None
+                ),
             },
         }
 
