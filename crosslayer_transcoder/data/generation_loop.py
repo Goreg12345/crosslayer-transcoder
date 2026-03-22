@@ -4,6 +4,7 @@ Handles model selection, buffer monitoring, and coordinates between different da
 """
 
 import logging
+import multiprocessing as mp
 import time
 from typing import Any, Optional
 
@@ -47,7 +48,9 @@ class DataGenerationLoop:
         deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         device_map: str = "auto",
         disk_source: Optional[DiskActivationSource] = None,
+        stop_event: Optional[mp.Event] = None,
     ):
+        self._stop_event = stop_event
         self.shared_buffer = shared_buffer
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
@@ -101,9 +104,10 @@ class DataGenerationLoop:
             token_dataset,
             batch_size=None,
             shuffle=False,
-            num_workers=8,  # Optimal for performance
-            prefetch_factor=4,  # Optimal for performance
-            worker_init_fn=text_dataset.worker_init_fn,
+            num_workers=0,  # Workers run in-process; spawning sub-workers from within
+            # the already-spawned DataGeneratorProcess causes each worker to
+            # re-import everything + re-load the dataset (~30s each), adding
+            # ~3-4 minutes of startup time with no throughput benefit.
         )
         self.text_dataset_loader = iter(text_dataset_loader)
 
@@ -124,7 +128,7 @@ class DataGenerationLoop:
 
         last_time = time.time()
 
-        while self.running:
+        while self.running and not (self._stop_event and self._stop_event.is_set()):
             # Check for indices that need refreshing (invalid indices)
             indices_to_refresh = self.shared_buffer._get_invalid_indices()
 
@@ -132,7 +136,10 @@ class DataGenerationLoop:
                 # Update dashboard when sleeping
                 stats = self.shared_buffer.get_stats()
                 self.monitor.update_dashboard("SLEEPING", stats, self.deployment_policy.get_current_device())
-                time.sleep(self.refresh_interval)
+                if self._stop_event and self._stop_event.wait(self.refresh_interval):
+                    break  # stop event was set during sleep
+                elif not self._stop_event:
+                    time.sleep(self.refresh_interval)
                 continue
 
             # Generate new activations

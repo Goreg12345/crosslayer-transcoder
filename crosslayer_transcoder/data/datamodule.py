@@ -277,6 +277,19 @@ class ActivationDataModule(L.LightningDataModule):
         self.data_generator.start()
         logger.info("Data generator process started")
 
+        # Register atexit handler to ensure the data generator is stopped
+        # even if teardown() is not called (e.g. due to exceptions during shutdown)
+        import atexit
+
+        def _cleanup_data_generator():
+            if self.data_generator and self.data_generator.is_alive():
+                self.data_generator._stop_event.set()
+                self.data_generator.join(timeout=5.0)
+                if self.data_generator.is_alive():
+                    self.data_generator.kill()
+
+        atexit.register(_cleanup_data_generator)
+
         self.data_loader = torch.utils.data.DataLoader(
             self.shared_buffer,
             batch_size=None,
@@ -340,9 +353,9 @@ class ActivationDataModule(L.LightningDataModule):
             self.data_loader.cleanup()
 
         if self.data_generator and self.data_generator.is_alive():
-            logger.info("Terminating data generator process...")
-            self.data_generator.terminate()
-            self.data_generator.join(timeout=5.0)
+            logger.info("Stopping data generator process...")
+            self.data_generator._stop_event.set()
+            self.data_generator.join(timeout=10.0)
 
             if self.data_generator.is_alive():
                 logger.warning("Force killing data generator process...")

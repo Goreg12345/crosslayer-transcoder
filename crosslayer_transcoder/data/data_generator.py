@@ -52,7 +52,8 @@ class DataGeneratorProcess(mp.Process):
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
     ):
-        super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
+        super().__init__(daemon=True)  # Daemon so it auto-exits when the main process ends
+        self._stop_event = mp.Event()
         self.shared_buffer = shared_buffer
 
         # Store parameters directly instead of config object
@@ -154,6 +155,7 @@ class DataGeneratorProcess(mp.Process):
             disk_source=self.disk_source,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
+            stop_event=self._stop_event,
         )
 
         self.generation_loop.refill_from_disk()
