@@ -29,6 +29,10 @@ from crosslayer_transcoder.feature_dash.load import (
     load_molt,
     load_molt_from_hf,
 )
+from crosslayer_transcoder.feature_dash.logits import (
+    compute_feature_logits,
+    compute_feature_logits_for_hf_lm,
+)
 from crosslayer_transcoder.feature_dash.render import copy_render_assets
 
 __all__ = [
@@ -38,6 +42,8 @@ __all__ = [
     "GateCollector",
     "MoltCheckpointMetadata",
     "collect_features",
+    "compute_feature_logits",
+    "compute_feature_logits_for_hf_lm",
     "copy_render_assets",
     "default_bundle_filename",
     "dump_dashboard",

@@ -88,6 +88,7 @@ def test_window_feature_summary_passes_through_metadata():
         top_peaks=[2.5, 1.0],
         top_token_ids=[[10, 11, 12], [20, 21, 22]],
         top_activations=[[0.0, 2.5, 0.0], [1.0, 0.0, 0.0]],
+        act_histogram=[0, 1, 2, 0, 0],
     )
     out = window_feature_summary(summary, _StubTokenizer(), window=10)
 
@@ -97,6 +98,7 @@ def test_window_feature_summary_passes_through_metadata():
     assert len(out["examples"]) == 2
     assert out["examples"][0]["peak_activation"] == 2.5
     assert out["examples"][1]["peak_activation"] == 1.0
+    assert out["act_histogram"] == [0, 1, 2, 0, 0]
 
 
 # ---- Step 4 -----------------------------------------------------------------

@@ -63,6 +63,8 @@ def _metadata_payload(
             # Per-feature aggregates so the index page renders from one fetch.
             "feature_activation_rate": rates,
             "feature_max_activation": max_acts,
+            # Bin edges shared by every feature's activation histogram.
+            "act_histogram_edges": collector.hist_edges(),
         }
     )
     return payload
@@ -74,11 +76,14 @@ def _feature_payload(
     meta: MoltCheckpointMetadata,
     tokenizer,
     window: int,
+    feature_logits: Optional[list[dict]] = None,
 ) -> dict[str, Any]:
     summary = collector.feature_summary(feature_id)
     body = window_feature_summary(summary, tokenizer, window=window)
     body["tier"] = meta.feature_tier[feature_id]
     body["rank"] = meta.feature_rank[feature_id]
+    if feature_logits is not None:
+        body["logits"] = feature_logits[feature_id]
     return body
 
 
@@ -92,11 +97,16 @@ def dump_dashboard(
     seq_len: Optional[int] = None,
     window: int = 32,
     copy_assets: bool = True,
+    feature_logits: Optional[list[dict]] = None,
 ) -> Path:
     """Write `metadata.json` + `features/<id>.json` per transform, then copy
     the static HTML/CSS/JS into `out_dir` (set `copy_assets=False` to skip).
 
     `seq_len` defaults to the collector's seq_len. Returns the data root.
+    `feature_logits`, if provided, is the result of
+    `crosslayer_transcoder.feature_dash.logits.compute_feature_logits` — a
+    list of length `meta.n_features` with per-feature top-pos/top-neg/histogram
+    entries. When omitted, no logit panel data is written.
     """
     out_dir = Path(out_dir)
     data_dir = out_dir / "data"
@@ -105,6 +115,12 @@ def dump_dashboard(
 
     seq_len = seq_len if seq_len is not None else collector.T
     top_k = collector.K
+
+    if feature_logits is not None and len(feature_logits) != meta.n_features:
+        raise ValueError(
+            f"feature_logits has length {len(feature_logits)}, "
+            f"expected {meta.n_features}"
+        )
 
     md = _metadata_payload(
         meta=meta,
@@ -115,11 +131,14 @@ def dump_dashboard(
         top_k=top_k,
         window=window,
     )
+    md["has_logits"] = feature_logits is not None
     (data_dir / "metadata.json").write_text(json.dumps(md, indent=2))
 
     width = _feature_id_width(meta.n_features)
     for f_id in range(meta.n_features):
-        payload = _feature_payload(collector, f_id, meta, tokenizer, window)
+        payload = _feature_payload(
+            collector, f_id, meta, tokenizer, window, feature_logits
+        )
         (feat_dir / f"{f_id:0{width}d}.json").write_text(
             json.dumps(payload, separators=(",", ":"))
         )

@@ -152,13 +152,22 @@ def test_full_pipeline_contract(tmp_path: Path):
     assert len(md["feature_rank"]) == meta.n_features
     assert all(0.0 <= r <= 1.0 for r in md["feature_activation_rate"])
     assert all(m >= 0.0 for m in md["feature_max_activation"])
+    # Activation histogram bin edges, log-spaced, ascending.
+    edges = md["act_histogram_edges"]
+    assert len(edges) >= 2
+    assert all(edges[i] < edges[i + 1] for i in range(len(edges) - 1))
+    # `has_logits` flag should be present (False for this test — we don't
+    # pass `feature_logits` into dump_dashboard here).
+    assert md["has_logits"] is False
 
     # --- per-feature invariants ---
     for fp in feat_files:
         d = json.loads(fp.read_text())
         assert {"feature_id", "tier", "rank", "activation_rate",
-                "max_activation", "examples"} <= set(d.keys())
+                "max_activation", "examples", "act_histogram"} <= set(d.keys())
         assert 0.0 <= d["activation_rate"] <= 1.0
+        # Histogram length must match metadata edges - 1.
+        assert len(d["act_histogram"]) == len(md["act_histogram_edges"]) - 1
         for ex in d["examples"]:
             assert {"peak_activation", "peak_token_pos", "tokens", "activations"} <= set(ex.keys())
             assert len(ex["tokens"]) == len(ex["activations"])
@@ -171,6 +180,57 @@ def test_full_pipeline_contract(tmp_path: Path):
             assert argmax == ex["peak_token_pos"]
             # Peak activation must be > 0 (dead-feature filter in feature_summary).
             assert ex["peak_activation"] > 0
+
+
+def test_full_pipeline_with_logits(tmp_path: Path):
+    """Same as the basic pipeline test, but also pass `feature_logits` and
+    verify they end up in the per-feature JSON."""
+    from crosslayer_transcoder.feature_dash.logits import compute_feature_logits
+
+    src_molt = _build_molt()
+    ckpt_path = _save_lightning_checkpoint(tmp_path, src_molt)
+    molt, meta = load_molt(ckpt_path, device="cpu")
+
+    collector = GateCollector(
+        n_features=meta.n_features, top_k=TOP_K, seq_len=SEQ_LEN
+    )
+    _populate_collector_with_molt_gates(molt, collector)
+
+    tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+
+    # Synthesize a tiny W_U / ln_f to avoid loading a real GPT-2.
+    vocab = 32
+    torch.manual_seed(7)
+    W_U = torch.randn(vocab, D_ACTS)
+    ln_f = torch.ones(D_ACTS)
+    feature_logits = compute_feature_logits(
+        molt=molt, layer=LAYER, W_U=W_U, ln_f_weight=ln_f,
+        tokenizer=tokenizer, top_k=4, n_bins=8,
+    )
+    assert len(feature_logits) == meta.n_features
+
+    out_dir = tmp_path / "dash_with_logits"
+    dump_dashboard(
+        collector=collector,
+        meta=meta,
+        tokenizer=tokenizer,
+        out_dir=out_dir,
+        layer=LAYER,
+        dataset_name="synthetic",
+        window=2,
+        feature_logits=feature_logits,
+    )
+
+    md = json.loads((out_dir / "data" / "metadata.json").read_text())
+    assert md["has_logits"] is True
+
+    # At least one feature should have non-empty top_pos (the random transforms
+    # produced by xavier init are non-degenerate). For dead-feature filtering
+    # safety, just check the field is present on every payload.
+    for fp in sorted((out_dir / "data" / "features").glob("*.json")):
+        d = json.loads(fp.read_text())
+        assert "logits" in d
+        assert {"top_pos", "top_neg", "histogram"} <= set(d["logits"].keys())
 
 
 def test_cli_help_runs():

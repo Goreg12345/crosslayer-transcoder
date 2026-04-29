@@ -39,7 +39,17 @@ class GateCollector:
     by whatever drives it. Memory is bounded by `n_features * top_k * seq_len`
     on each of token_ids (int64) and activations (float32). For
     `n_features=1550, top_k=20, seq_len=128` that's ~47 MB persistent — fine.
+
+    Also accumulates a log-spaced activation histogram per feature. Bins are
+    fixed at construction (10^-3 .. 10^3, 60 bins) so different features —
+    which can have very different scales — share the same axis. Values
+    outside that range are dropped (gate values < 1e-3 are visually
+    indistinguishable from noise; > 1e3 doesn't happen in trained MoLTs).
     """
+
+    HIST_LOG_LO = -3.0
+    HIST_LOG_HI = 3.0
+    HIST_N_BINS = 60
 
     def __init__(self, n_features: int, top_k: int, seq_len: int):
         self.n_features = n_features
@@ -57,6 +67,15 @@ class GateCollector:
         )
         self.top_activations = torch.zeros(
             (n_features, top_k, seq_len), dtype=torch.float32
+        )
+
+        # Activation histogram. `_hist_edges` has HIST_N_BINS+1 entries; bin i
+        # covers [_hist_edges[i], _hist_edges[i+1]). Counts are per-feature.
+        self._hist_edges = torch.logspace(
+            self.HIST_LOG_LO, self.HIST_LOG_HI, self.HIST_N_BINS + 1
+        )
+        self.act_histogram = torch.zeros(
+            (n_features, self.HIST_N_BINS), dtype=torch.long
         )
 
     @torch.no_grad()
@@ -105,6 +124,40 @@ class GateCollector:
         self.top_token_ids = all_token_ids[F_idx, new_top_idx]
         self.top_activations = all_activations[F_idx, new_top_idx]
 
+        # Histogram update.
+        self._update_histogram(gates)
+
+    def _update_histogram(self, gates: torch.Tensor) -> None:
+        """Bin every nonzero gate value into its feature's log-spaced histogram.
+
+        Values outside [10^HIST_LOG_LO, 10^HIST_LOG_HI) are silently dropped.
+        Vectorised: we compute (B*T, F) bin indices, mask in-range entries, and
+        scatter-add ones into a flat (F * HIST_N_BINS) view.
+        """
+        flat = gates.reshape(-1, self.n_features)  # (BT, F)
+        # right=True gives the left-closed convention: bin i covers
+        # [edges[i], edges[i+1]). After -1, in-range entries fall into
+        # [0, HIST_N_BINS-1]; underflow becomes -1, overflow becomes
+        # HIST_N_BINS, both of which we mask out below.
+        bin_idx = torch.bucketize(flat, self._hist_edges, right=True) - 1
+        in_range = (
+            (flat > 0)
+            & (bin_idx >= 0)
+            & (bin_idx < self.HIST_N_BINS)
+        )
+        if not in_range.any():
+            return
+        pos_idx, feat_idx = torch.where(in_range)
+        bins = bin_idx[pos_idx, feat_idx]
+        flat_idx = feat_idx * self.HIST_N_BINS + bins
+        self.act_histogram.view(-1).scatter_add_(
+            0, flat_idx, torch.ones_like(flat_idx, dtype=torch.long)
+        )
+
+    def hist_edges(self) -> list[float]:
+        """Bin edges shared by every feature's activation histogram."""
+        return self._hist_edges.tolist()
+
     def activation_rate(self) -> torch.Tensor:
         """Per-feature fraction of tokens with gate > 0."""
         if self.total_tokens == 0:
@@ -137,6 +190,7 @@ class GateCollector:
             top_peaks=peaks[order].tolist(),
             top_token_ids=token_ids[order].tolist(),
             top_activations=activations[order].tolist(),
+            act_histogram=self.act_histogram[feature_id].tolist(),
         )
 
 
@@ -150,6 +204,7 @@ class FeatureSummary:
     top_peaks: list[float]               # length <= K
     top_token_ids: list[list[int]]       # shape (n_examples, T)
     top_activations: list[list[float]]   # shape (n_examples, T)
+    act_histogram: list[int]             # length HIST_N_BINS
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +266,7 @@ def window_feature_summary(
 
     Schema (matches FEATURE-DASH.md §2 — minus tier/rank, which the dump step
     fills in from MoltCheckpointMetadata):
-        {feature_id, activation_rate, max_activation, examples: [...]}
+        {feature_id, activation_rate, max_activation, examples, act_histogram}
     """
     examples = [
         window_example(ids, acts, tokenizer, window=window)
@@ -222,6 +277,7 @@ def window_feature_summary(
         "activation_rate": summary.activation_rate,
         "max_activation": summary.max_activation,
         "examples": examples,
+        "act_histogram": summary.act_histogram,
     }
 
 

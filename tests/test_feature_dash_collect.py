@@ -156,3 +156,79 @@ def test_update_rejects_wrong_feature_count():
     except ValueError:
         return
     raise AssertionError("expected ValueError for feature count mismatch")
+
+
+# ---- Activation histogram --------------------------------------------------
+
+
+def test_histogram_starts_empty_and_has_correct_shape():
+    coll = GateCollector(n_features=F, top_k=K, seq_len=T)
+    assert coll.act_histogram.shape == (F, GateCollector.HIST_N_BINS)
+    assert coll.act_histogram.sum() == 0
+    edges = coll.hist_edges()
+    assert len(edges) == GateCollector.HIST_N_BINS + 1
+    # Edges are log-spaced over [10^LO, 10^HI].
+    assert edges[0] == pytest.approx(10 ** GateCollector.HIST_LOG_LO)
+    assert edges[-1] == pytest.approx(10 ** GateCollector.HIST_LOG_HI)
+
+
+def test_histogram_counts_only_firing_values():
+    coll = GateCollector(n_features=F, top_k=K, seq_len=T)
+    g = _zero_gates(2)
+    g[0, 0, 0] = 1.0     # feature 0: one firing
+    g[1, 0, 0] = 5.0     # feature 0: another firing
+    g[0, 1, 1] = 0.0     # feature 1: zero is not "firing"
+    coll.update(torch.zeros(2, T, dtype=torch.long), g)
+
+    # Feature 0 has 2 firings, feature 1 has none, feature 2 has none.
+    assert coll.act_histogram[0].sum().item() == 2
+    assert coll.act_histogram[1].sum().item() == 0
+    assert coll.act_histogram[2].sum().item() == 0
+
+
+def test_histogram_drops_out_of_range_values():
+    coll = GateCollector(n_features=F, top_k=K, seq_len=T)
+    g = _zero_gates(1)
+    # 10^4 is above HI=10^3; should NOT be counted.
+    g[0, 0, 0] = 1e4
+    # 10^-5 is below LO=10^-3; should NOT be counted.
+    g[0, 1, 0] = 1e-5
+    # In-range value, should be counted.
+    g[0, 2, 0] = 1.0
+    coll.update(torch.zeros(1, T, dtype=torch.long), g)
+
+    assert coll.act_histogram[0].sum().item() == 1
+
+
+def test_histogram_accumulates_across_batches():
+    coll = GateCollector(n_features=F, top_k=K, seq_len=T)
+    for _ in range(3):
+        g = _zero_gates(1)
+        g[0, 0, 0] = 0.5
+        coll.update(torch.zeros(1, T, dtype=torch.long), g)
+    assert coll.act_histogram[0].sum().item() == 3
+
+
+def test_histogram_bins_in_correct_log_bucket():
+    """A value of 1.0 with edges spanning 10^-3..10^3 should fall in the
+    middle of the histogram (bin index = HIST_N_BINS / 2)."""
+    coll = GateCollector(n_features=F, top_k=K, seq_len=T)
+    g = _zero_gates(1)
+    g[0, 0, 0] = 1.0
+    coll.update(torch.zeros(1, T, dtype=torch.long), g)
+    nonzero_bins = (coll.act_histogram[0] > 0).nonzero().flatten().tolist()
+    assert len(nonzero_bins) == 1
+    # Bin index equals HIST_N_BINS / 2 since 1.0 is at the geometric midpoint
+    # of [10^-3, 10^3].
+    expected = GateCollector.HIST_N_BINS // 2
+    assert nonzero_bins[0] == expected
+
+
+def test_feature_summary_carries_histogram():
+    coll = GateCollector(n_features=F, top_k=K, seq_len=T)
+    g = _zero_gates(1)
+    g[0, 0, 0] = 1.0
+    coll.update(torch.zeros(1, T, dtype=torch.long), g)
+    s = coll.feature_summary(0)
+    assert len(s.act_histogram) == GateCollector.HIST_N_BINS
+    assert sum(s.act_histogram) == 1

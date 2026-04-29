@@ -24,6 +24,7 @@ from crosslayer_transcoder.feature_dash.load import (
     load_molt,
     load_molt_from_hf,
 )
+from crosslayer_transcoder.feature_dash.logits import compute_feature_logits_for_hf_lm
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -126,6 +127,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip copying the HTML/CSS/JS templates (data only).",
     )
     p.add_argument(
+        "--no-logits",
+        action="store_true",
+        help="Skip computing per-feature logit-lens projections. Saves ~5s "
+             "of LM-load + a minute of SVD work for ~1.5k features.",
+    )
+    p.add_argument(
+        "--logits-top-k",
+        type=int,
+        default=10,
+        help="Number of boosted/suppressed tokens to surface per feature.",
+    )
+    p.add_argument(
         "--bundle",
         action="store_true",
         help="Also write a single-file `bundle.html` with all data inlined "
@@ -196,6 +209,17 @@ def main(argv: list[str] | None = None) -> int:
 
     tokenizer = GPT2TokenizerFast.from_pretrained(args.base_model_name)
 
+    feature_logits = None
+    if not args.no_logits:
+        print("computing per-feature logit-lens projections…", file=sys.stderr)
+        feature_logits = compute_feature_logits_for_hf_lm(
+            molt=molt.cpu(),
+            layer=args.layer,
+            base_model_name=args.base_model_name,
+            tokenizer=tokenizer,
+            top_k=args.logits_top_k,
+        )
+
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -212,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset_name=args.dataset_name,
             window=args.window,
             copy_assets=not args.no_assets,
+            feature_logits=feature_logits,
         )
 
     bundle_path = None
@@ -226,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             layer=args.layer,
             dataset_name=args.dataset_name,
             window=args.window,
+            feature_logits=feature_logits,
         )
 
     if args.bundle_only:

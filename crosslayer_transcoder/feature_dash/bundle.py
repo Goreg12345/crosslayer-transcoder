@@ -104,12 +104,16 @@ def make_bundle(
     dataset_name: str = "Skylion007/openwebtext",
     seq_len: Optional[int] = None,
     window: int = 32,
+    feature_logits: Optional[list[dict]] = None,
 ) -> Path:
     """Build a bundle directly from in-memory state — no disk dump needed.
 
     If `out_path` is a directory (or doesn't exist and ends with a separator),
     the bundle is written as `bundle_<ckpt-stem>.html` inside it. Otherwise
     `out_path` is treated as the explicit file to write.
+
+    `feature_logits` mirrors `dump_dashboard`'s parameter: when provided, each
+    per-feature payload includes `"logits"`.
     """
     out_path = Path(out_path)
     treat_as_dir = out_path.is_dir() or (
@@ -117,6 +121,12 @@ def make_bundle(
     )
     if treat_as_dir:
         out_path = out_path / default_bundle_filename(meta)
+
+    if feature_logits is not None and len(feature_logits) != meta.n_features:
+        raise ValueError(
+            f"feature_logits has length {len(feature_logits)}, "
+            f"expected {meta.n_features}"
+        )
 
     metadata = _metadata_payload(
         meta=meta,
@@ -127,6 +137,7 @@ def make_bundle(
         top_k=collector.K,
         window=window,
     )
+    metadata["has_logits"] = feature_logits is not None
 
     features: dict[str, dict] = {}
     for f_id in range(meta.n_features):
@@ -134,6 +145,8 @@ def make_bundle(
         body = window_feature_summary(summary, tokenizer, window=window)
         body["tier"] = meta.feature_tier[f_id]
         body["rank"] = meta.feature_rank[f_id]
+        if feature_logits is not None:
+            body["logits"] = feature_logits[f_id]
         features[str(f_id)] = body
 
     return _write_bundle(out_path, metadata, features)
