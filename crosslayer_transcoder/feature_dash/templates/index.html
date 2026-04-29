@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MoLT Feature Dashboard — index</title>
+  <link rel="stylesheet" href="assets/dashboard.css">
+</head>
+<body>
+  <h1>MoLT feature dashboard</h1>
+  <div class="index-meta" id="meta">Loading…</div>
+  <div class="filter-row">
+    <label>tier
+      <select id="tier-filter"><option value="">all</option></select>
+    </label>
+    <label>min rate
+      <input id="min-rate" type="number" step="0.001" min="0" max="1" value="0">
+    </label>
+    <label>max rate
+      <input id="max-rate" type="number" step="0.001" min="0" max="1" value="1">
+    </label>
+    <span id="count"></span>
+  </div>
+  <table class="features" id="features">
+    <thead>
+      <tr>
+        <th data-key="feature_id">id</th>
+        <th data-key="tier">tier</th>
+        <th data-key="rank">rank</th>
+        <th data-key="activation_rate">rate</th>
+        <th data-key="max_activation">max act</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <script src="assets/index.js"></script>
+</body>
+</html>
