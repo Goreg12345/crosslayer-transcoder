@@ -1,9 +1,13 @@
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "crosslayer-transcoder"
 version = "0.1.0"
 description = "An implementation of Anthropic's crosslayer transcoders"
 authors = [{name = "Georg Lange"}]
-license = {text = "MIT"}
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 
@@ -31,9 +35,11 @@ dev = [
     "ipykernel>=6.29.5",
 ]
 
+[tool.setuptools]
+packages = ["data", "model", "metrics", "utils"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "jupyterlab>=4.4.2",
     "ipykernel>=6.29.5",
     "pytest>=8.4.1",
