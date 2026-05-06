@@ -1,3 +1,5 @@
+import copy
+
 import einops
 import torch
 import torch.nn as nn
@@ -91,3 +93,73 @@ class Molt(nn.Module):
     def initialize_standardizers(self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]):
         self.input_standardizer.initialize_from_batch(batch)
         self.output_standardizer.initialize_from_batch(batch)
+
+
+class MultiLayerMolt(nn.Module):
+    """A stack of `n_layers` single-layer `Molt` models with shared standardizers.
+
+    Each layer owns its encoder, low-rank transforms (Us, Vs), and nonlinearity
+    parameters. The `nonlinearity` argument is a template that is deep-copied
+    once per layer, so each layer trains independent JumpReLU thetas. The
+    standardizers are shared across layers — they already carry per-layer
+    mean/std for all `n_layers`, so duplicating them per inner Molt would be
+    wasteful and inconsistent.
+    """
+
+    def __init__(
+        self,
+        n_layers: int,
+        d_acts: int,
+        N: int,
+        nonlinearity: nn.Module,
+        input_standardizer: nn.Module,
+        output_standardizer: nn.Module,
+        ranks: list[int] = [512, 256, 128, 64, 32],
+    ):
+        super().__init__()
+        self.n_layers = n_layers
+        self.input_standardizer = input_standardizer
+        self.output_standardizer = output_standardizer
+        self.molts = nn.ModuleList(
+            [
+                Molt(
+                    d_acts=d_acts,
+                    N=N,
+                    nonlinearity=copy.deepcopy(nonlinearity),
+                    input_standardizer=input_standardizer,
+                    output_standardizer=output_standardizer,
+                    ranks=ranks,
+                )
+                for _ in range(n_layers)
+            ]
+        )
+        self.n_features = self.molts[0].n_features
+        self.d_latents = self.molts[0].d_latents
+
+    def initialize_standardizers(
+        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
+    ):
+        self.input_standardizer.initialize_from_batch(batch)
+        self.output_standardizer.initialize_from_batch(batch)
+
+    def transform_norm(self, layer: int) -> Float[torch.Tensor, "n_features"]:
+        return self.molts[layer].transform_norm()
+
+    def forward(
+        self, acts: Float[torch.Tensor, "batch n_layers d_acts"]
+    ) -> tuple[
+        Float[torch.Tensor, "batch n_layers n_features"],
+        Float[torch.Tensor, "batch n_layers d_acts"],
+        Float[torch.Tensor, "batch n_layers d_acts"],
+    ]:
+        gates, recons_norms, reconss = [], [], []
+        for layer in range(self.n_layers):
+            gate, recons_norm, recons = self.molts[layer](acts[:, layer], layer=layer)
+            gates.append(gate)
+            recons_norms.append(recons_norm)
+            reconss.append(recons)
+        return (
+            torch.stack(gates, dim=1),
+            torch.stack(recons_norms, dim=1),
+            torch.stack(reconss, dim=1),
+        )

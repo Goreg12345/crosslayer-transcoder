@@ -1,0 +1,129 @@
+# Multi-layer MoLT training on all 12 GPT2-small layers.
+#
+# N=50 with the original transform distribution (ranks=[512, 256, 128, 64, 32]).
+# 100M tokens at effective batch 1000 (mini-batch 500 * accumulate_grad_batches 2).
+#
+# MEMORY: ~2.4B total params (12 layers * 198M), ~28 GB of fp32 Adam optimizer
+# state alone. Will NOT fit on a single 32 GB 5090; targets 80 GB-class GPUs
+# (A100 80GB / H100 80GB) or multi-GPU. On smaller GPUs, drop ranks to e.g.
+# [256, 128, 64, 32] (cuts U/V params ~2.5x) or shrink batch_size.
+#
+# Per-layer transforms are saved by `MoltPerLayerCheckpointCallback` as
+# `{wandb_run_name}_layer_{l}.pt` at end of training.
+
+seed_everything: 42
+
+trainer:
+  max_steps: 100_000  # 100M tokens at effective batch 1000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [0]
+  accumulate_grad_batches: 2  # mini-batch 500, effective batch 1000
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-multilayer-N50-100M"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-multilayer-N50-100M"
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.MultiLayerMolt
+      init_args:
+        n_layers: 12
+        d_acts: 768
+        N: 50
+        ranks: [512, 256, 128, 64, 32]  # original distribution
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 1550  # = N * (1+2+4+8+16) = 50 * 31
+
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+    replacement_model: null
+    dead_features: null
+
+    learning_rate: 2e-4
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    buffer_size: 350_000
+    n_in_out: 2
+    n_layers: 12
+    activation_dim: 768
+    dtype: "float32"
+    max_batch_size: 50000
+
+    model_name: "openai-community/gpt2"
+    model_dtype: "float32"
+
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    max_sequence_length: 1024
+
+    generation_batch_size: 10
+    refresh_interval: 0.1
+
+    shared_memory_name: "activation_buffer"
+    timeout_seconds: 30
+
+    batch_size: 500
+    num_workers: 10
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+
+    minimum_fill_threshold: 0.01
+
+    use_shared_memory: true
+
+    device_map: "cuda:0"
+    deployment_policy: "gpu_only"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator"
+      tags: ["data-generation"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null

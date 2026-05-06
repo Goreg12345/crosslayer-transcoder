@@ -23,7 +23,7 @@ from crosslayer_transcoder.model.clt import (
     Decoder,
 )
 from crosslayer_transcoder.model.jumprelu import JumpReLU
-from crosslayer_transcoder.model.molt import Molt
+from crosslayer_transcoder.model.molt import Molt, MultiLayerMolt
 from crosslayer_transcoder.model.topk import BatchTopK
 
 
@@ -31,7 +31,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
     def __init__(
         self,
         # Pre-constructed modules
-        model: Union[CrossLayerTranscoder, Molt],
+        model: Union[CrossLayerTranscoder, Molt, MultiLayerMolt],
         replacement_model: Optional[ReplacementModelAccuracy] = None,
         dead_features: Optional[DeadFeatures] = None,
         # Training parameters
@@ -86,7 +86,14 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.beta2 = beta2
         self.log_metrics_every = log_metrics_every
 
-        if isinstance(self.model, Molt):
+        if isinstance(self.model, MultiLayerMolt):
+            self.register_buffer(
+                "last_active",
+                torch.zeros(
+                    (self.model.n_layers, self.model.n_features), dtype=torch.long
+                ),
+            )
+        elif isinstance(self.model, Molt):
             self.register_buffer(
                 "last_active",
                 torch.zeros((self.model.n_features,), dtype=torch.long),
@@ -635,5 +642,60 @@ class MoltModule(CrossLayerTranscoderModule):
 
         if batch_idx % self.log_metrics_every == 0:
             pass
+
+        return loss
+
+
+class MultiLayerMoltModule(MoltModule):
+    """Trains all layers of a `MultiLayerMolt` simultaneously.
+
+    Mirrors `MoltModule`'s loss (per-layer MSE + tanh-weighted sparsity), but
+    sums over all layers and logs aggregate + per-layer metrics. Sparsity is
+    averaged across layers so `lambda_sparsity`/`c_sparsity` keep their
+    single-layer scale.
+    """
+
+    def training_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            self.model.initialize_standardizers(batch)
+            self.log("model/d_latents", self.model.d_latents)
+            self.log("model/n_features", self.model.n_features)
+
+        resid, mlp_out = batch[:, 0], batch[:, 1]
+        gate, recons_norm, _ = self.model(resid)
+
+        self.update_dead_features(gate)
+
+        target = self.model.output_standardizer.standardize(mlp_out)
+        mse = (recons_norm - target) ** 2
+        mse_per_layer = mse.mean(dim=(0, 2))
+        mse_total = mse.mean()
+
+        sparsity_per_layer = []
+        l0_per_layer = []
+        for layer in range(self.model.n_layers):
+            norms = self.model.transform_norm(layer)
+            weighted = norms * gate[:, layer]
+            if self.use_tanh:
+                weighted = torch.tanh(weighted * self.c)
+            sparsity_per_layer.append(weighted.sum(dim=-1).mean())
+            l0_per_layer.append(
+                (gate[:, layer] > 0.0).float().sum() / gate.shape[0]
+            )
+        sparsity_per_layer = torch.stack(sparsity_per_layer)
+        l0_per_layer = torch.stack(l0_per_layer)
+
+        sparsity_loss = self.current_sparsity_penalty() * sparsity_per_layer.mean()
+        loss = mse_total + sparsity_loss
+
+        self.log("training/loss", loss)
+        self.log("training/mse", mse_total)
+        self.log("training/sparsity_loss", sparsity_loss)
+        self.log("metrics/L0_avg_per_layer", l0_per_layer.mean())
+
+        for layer in range(self.model.n_layers):
+            self.log(f"layers/mse/layer_{layer}", mse_per_layer[layer])
+            self.log(f"layers/sparsity/layer_{layer}", sparsity_per_layer[layer])
+            self.log(f"layers/L0/layer_{layer}", l0_per_layer[layer])
 
         return loss

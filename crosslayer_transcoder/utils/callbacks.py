@@ -5,12 +5,13 @@ Simple Lightning callbacks for CrossLayer Transcoder training.
 import logging
 from functools import partial
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import lightning as L
+import torch
 from torch.profiler import ProfilerActivity, profile, schedule, tensorboard_trace_handler
 
-from crosslayer_transcoder.model import CrossLayerTranscoder
+from crosslayer_transcoder.model import CrossLayerTranscoder, MultiLayerMolt
 from crosslayer_transcoder.model.clt_lightning import CrossLayerTranscoderModule
 from crosslayer_transcoder.model.serializable_module import SerializableModule
 
@@ -92,3 +93,44 @@ class FoldAndSaveModelCallback(L.Callback):
     def on_train_end(self, trainer, pl_module):
         pl_module.model.fold()
         pl_module.model.save_pretrained(self.checkpoint_dir)
+
+
+class MoltPerLayerCheckpointCallback(L.Callback):
+    """Save each `MultiLayerMolt` layer's transforms as a separate `.pt`.
+
+    Files are written to `{checkpoint_dir}/{run_name}_layer_{layer}.pt`, where
+    `run_name` is taken from the active wandb logger. If no wandb logger is
+    attached, falls back to "molt".
+    """
+
+    def __init__(self, checkpoint_dir: str = "checkpoints"):
+        super().__init__()
+        self.checkpoint_dir = Path(checkpoint_dir)
+
+    @staticmethod
+    def _wandb_run_name(trainer) -> Optional[str]:
+        loggers = getattr(trainer, "loggers", None) or [trainer.logger]
+        for lg in loggers:
+            if lg is None:
+                continue
+            exp = getattr(lg, "experiment", None)
+            name = getattr(exp, "name", None) if exp is not None else None
+            if name:
+                return name
+        return None
+
+    def on_train_end(self, trainer, pl_module):
+        model = pl_module.model
+        if not isinstance(model, MultiLayerMolt):
+            logger.warning(
+                "MoltPerLayerCheckpointCallback expected MultiLayerMolt, got %s; skipping",
+                type(model).__name__,
+            )
+            return
+
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        run_name = self._wandb_run_name(trainer) or "molt"
+        for layer, molt in enumerate(model.molts):
+            path = self.checkpoint_dir / f"{run_name}_layer_{layer}.pt"
+            torch.save(molt.state_dict(), path)
+            logger.info("Saved MoLT layer %d to %s", layer, path)
