@@ -51,6 +51,7 @@ class DataGeneratorProcess(mp.Process):
         init_file: Optional[str] = None,
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
+        model_arch: str = "gpt2",
     ):
         super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
@@ -72,6 +73,7 @@ class DataGeneratorProcess(mp.Process):
         self.deployment_policy = deployment_policy
         self.init_file = init_file
         self.device_map = device_map
+        self.model_arch = model_arch
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -163,7 +165,7 @@ class DataGeneratorProcess(mp.Process):
         dataset = load_dataset(self.dataset_name, split=self.dataset_split)
 
         # 3. Create components
-        activation_computer = ActivationComputer(self.n_layers)
+        activation_computer = ActivationComputer(self.n_layers, model_arch=self.model_arch)
 
         # Set dataset reference for the loop and start generation
         # Text dataset creation is now handled in generation_loop after models are set up

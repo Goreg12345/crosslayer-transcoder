@@ -44,10 +44,32 @@ class ActivationComputer(ActivationSource):
     """
     Computes activations by running a forward pass through a language model.
     Pure computation - takes model + tokens, returns activations.
+
+    `model_arch` selects the per-layer activation paths:
+      gpt2  : transformer.h[i].ln_2.input  +  transformer.h[i].mlp.output
+      gemma3: layers[i].pre_feedforward_layernorm.input
+              + layers[i].post_feedforward_layernorm.output
+              (Gemma3 normalizes the MLP delta before the residual add, so the
+              "MLP out" a transcoder should reconstruct is the post-FF-norm output.)
     """
 
-    def __init__(self, n_layers: int):
+    def __init__(self, n_layers: int, model_arch: str = "gpt2"):
         self.n_layers = n_layers
+        if model_arch not in ("gpt2", "gemma3"):
+            raise ValueError(f"Unsupported model_arch {model_arch!r}; expected 'gpt2' or 'gemma3'")
+        self.model_arch = model_arch
+        # Cached layout probe: True iff Gemma3 was loaded as the multimodal class
+        # (Gemma3ForConditionalGeneration → has `language_model` submodule). nnsight
+        # proxies forward arbitrary attribute access so we can't try/except inside the
+        # trace; we have to inspect the underlying HF module up front.
+        self._gemma3_multimodal: Optional[bool] = None
+
+    def _detect_gemma3_layout(self, model: Any) -> bool:
+        if self._gemma3_multimodal is not None:
+            return self._gemma3_multimodal
+        underlying = getattr(model, "_model", None) or getattr(model, "local_model", None) or model
+        self._gemma3_multimodal = hasattr(underlying, "language_model")
+        return self._gemma3_multimodal
 
     def get_next_batch(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -63,11 +85,33 @@ class ActivationComputer(ActivationSource):
         gc.collect()
         return self._extract_activations(model, tokens, mask)
 
+    def _layer_handles(self, model: Any, i: int):
+        if self.model_arch == "gpt2":
+            return (
+                model.transformer.h[i].ln_2.input,
+                model.transformer.h[i].mlp.output,
+            )
+        # nnsight 0.5 wraps the inner HF model under `model.model` (the top-level
+        # Envoy). For Gemma3 we have to go through that envoy explicitly, since
+        # `model.language_model` does NOT auto-delegate to an Envoy here (unlike
+        # GPT-2's `model.transformer`, which does).
+        #
+        # Gemma3 layout under the multimodal `Gemma3ForConditionalGeneration`
+        # checkpoint (used by google/gemma-3-4b-it):
+        #   model.model.language_model.layers[i]   (language_model is Gemma3TextModel,
+        #                                           which exposes .layers directly)
+        # For a pure-text Gemma3ForCausalLM checkpoint:
+        #   model.model.layers[i]
+        if self._detect_gemma3_layout(model):
+            layer = model.model.language_model.layers[i]
+        else:
+            layer = model.model.layers[i]
+        return layer.pre_feedforward_layernorm.input, layer.post_feedforward_layernorm.output
+
     @torch.no_grad()
     def _extract_activations(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Extract MLP input/output activations using nnsight tracing.
-        EXACT COPY of existing method - no changes to functionality!
 
         Args:
             model: nnsight LanguageModel to run inference on
@@ -80,16 +124,10 @@ class ActivationComputer(ActivationSource):
         mlp_ins = []
         mlp_outs = []
         with model.trace(tokens) as tracer:
-
-            # Extract from all transformer layers
             for i in range(self.n_layers):
-                # MLP input (after layer norm)
-                mlp_in = model.transformer.h[i].ln_2.input.save()
-                mlp_ins.append(mlp_in)
-
-                # MLP output
-                mlp_out = model.transformer.h[i].mlp.output.save()
-                mlp_outs.append(mlp_out)
+                mlp_in_proxy, mlp_out_proxy = self._layer_handles(model, i)
+                mlp_ins.append(mlp_in_proxy.save())
+                mlp_outs.append(mlp_out_proxy.save())
 
         mlp_ins = torch.stack(mlp_ins, dim=0)
         mlp_outs = torch.stack(mlp_outs, dim=0)

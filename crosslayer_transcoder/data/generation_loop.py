@@ -203,9 +203,20 @@ class DataGenerationLoop:
         batch = batch.to(current_device)
         mask = mask.to(current_device)
 
-        # Prepend BOS token (like in benchmark)
+        # Prepend BOS token (like in benchmark). Resolve BOS robustly: GPT-2 sets
+        # config.bos_token_id directly, but Gemma3 (multimodal) leaves the top-level
+        # Gemma3Config.bos_token_id = None and only sets it on .text_config. Falling
+        # back to the tokenizer is safest — that's the authoritative source.
+        bos_id = getattr(current_model.config, "bos_token_id", None)
+        if bos_id is None:
+            text_cfg = getattr(current_model.config, "text_config", None)
+            bos_id = getattr(text_cfg, "bos_token_id", None) if text_cfg is not None else None
+        if bos_id is None:
+            bos_id = getattr(current_model.tokenizer, "bos_token_id", None)
+        if bos_id is None:
+            raise RuntimeError("Could not resolve a BOS token id from config or tokenizer")
         batch = torch.roll(batch, shifts=1, dims=1)
-        batch[:, 0] = current_model.config.bos_token_id
+        batch[:, 0] = bos_id
 
         # Extract activations using the activation computer
         mlp_acts = self.activation_computer.get_next_batch(current_model, batch, mask)

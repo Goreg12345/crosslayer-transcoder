@@ -60,6 +60,8 @@ class ActivationDataModule(L.LightningDataModule):
         device_map: str = "auto",
         # Deployment policy
         deployment_policy: str = "dynamic",  # CPU/GPU deployment policy: "cpu_only", "gpu_only", or "dynamic"
+        # Activation extraction architecture: "gpt2" (default) or "gemma3"
+        model_arch: str = "gpt2",
         # WandB logging configuration
         wandb_logging: Optional[dict] = None,
         **kwargs,
@@ -156,6 +158,7 @@ class ActivationDataModule(L.LightningDataModule):
         # Advanced settings
         self.use_shared_memory = use_shared_memory
         self.deployment_policy = DeploymentPolicy.from_string(deployment_policy)
+        self.model_arch = model_arch
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -291,6 +294,7 @@ class ActivationDataModule(L.LightningDataModule):
             init_file=self.init_file,
             device_map=gen_device,
             wandb_logging=wandb_cfg,
+            model_arch=self.model_arch,
         )
 
         # 3. Start the data generator process
