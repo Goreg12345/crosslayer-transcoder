@@ -336,7 +336,7 @@ class ActivationDataModule(L.LightningDataModule):
         """Clean up resources."""
         logger.info("Cleaning up activation data loader...")
 
-        if self.data_loader and hasattr(self.data_loader, "cleanup"):
+        if self.data_loader is not None and hasattr(self.data_loader, "cleanup"):
             self.data_loader.cleanup()
 
         if self.data_generator and self.data_generator.is_alive():
