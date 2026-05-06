@@ -235,6 +235,27 @@ class ActivationDataModule(L.LightningDataModule):
             logger.warning(f"Could not set spawn method: {e}. Disabling multiprocessing in DataLoader")
             # If we can't set spawn, disable multiprocessing in the DataLoader
 
+        # Under DDP each rank runs its own generator on its own GPU. We must
+        # use the *absolute* physical device id (cuda:local_rank), not "cuda:0":
+        # Lightning's DDP doesn't filter CUDA_VISIBLE_DEVICES for child processes
+        # spawned by the rank, so a relative "cuda:0" in rank N>0 maps to physical
+        # cuda:0 and competes with rank 0's training memory. Each rank also gets
+        # a unique shared-memory name to avoid /dev/shm collisions.
+        rank = self.trainer.global_rank if self.trainer is not None else 0
+        local_rank = self.trainer.local_rank if self.trainer is not None else 0
+        world_size = self.trainer.world_size if self.trainer is not None else 1
+        if world_size > 1:
+            shm_name = f"{self.shared_memory_name}_rank{rank}"
+            gen_device = f"cuda:{local_rank}"
+            wandb_cfg = dict(self.wandb_logging or {})
+            if wandb_cfg.get("enabled"):
+                base_run = wandb_cfg.get("run_name") or "data-generator"
+                wandb_cfg["run_name"] = f"{base_run}-rank{rank}"
+        else:
+            shm_name = self.shared_memory_name
+            gen_device = self.device_map
+            wandb_cfg = self.wandb_logging
+
         # 1. Create shared memory buffer
         self.shared_buffer = SharedActivationBuffer(
             buffer_size=self.buffer_size,
@@ -242,7 +263,7 @@ class ActivationDataModule(L.LightningDataModule):
             n_layers=self.n_layers,
             activation_dim=self.activation_dim,
             dtype=self.torch_dtype,
-            shared_memory_name=self.shared_memory_name,
+            shared_memory_name=shm_name,
             timeout_seconds=self.timeout_seconds,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
@@ -268,8 +289,8 @@ class ActivationDataModule(L.LightningDataModule):
             refresh_interval=self.refresh_interval,
             deployment_policy=self.deployment_policy,
             init_file=self.init_file,
-            device_map=self.device_map,
-            wandb_logging=self.wandb_logging,
+            device_map=gen_device,
+            wandb_logging=wandb_cfg,
         )
 
         # 3. Start the data generator process

@@ -1,0 +1,142 @@
+# Multi-layer MoLT training on all 12 GPT2-small layers — 2x H200 split.
+#
+# Same model as molt-multilayer.yaml (N=50, ranks=[512,256,128,64,32], 100M tokens).
+# Difference: split data generation onto cuda:1 to keep cuda:0 fully dedicated to
+# training (Option A from the throughput plan). Also bumps generation_batch_size
+# and buffer_size to leverage H200 (141 GB VRAM each, 249 GB /dev/shm).
+
+seed_everything: 42
+
+trainer:
+  # 100M tokens at effective batch 2200 -> 45_455 steps; rounded up to 46000.
+  # Per-step compute is ~4.4x the original config (effective batch 1000 -> 2200);
+  # fewer optimizer updates total but each saturates the H200 better.
+  max_steps: 46_000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [0]  # training on GPU 0
+  accumulate_grad_batches: 1  # batch fits in VRAM, no need to accumulate
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-multilayer-N50-100M-2gpu"
+      save_dir: "./wandb"
+  callbacks:
+    # Checkpoints: each per-layer file is ~790 MB (2.4B params / 12 layers fp32),
+    # so a checkpoint costs ~9.5 GB on disk. /workspace has 35 GB free, which
+    # would only hold 3 checkpoints. To get true 10M-token cadence we offload
+    # each periodic checkpoint to HF (kylelovesllms/molt-sweeps) and delete the
+    # local copy. The final on_train_end checkpoint stays local.
+    # 10M tokens at batch=2200 ≈ 4546 steps, rounded to 4500.
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-multilayer-N50-100M-2gpu"
+        every_n_train_steps: 4500  # ~10M tokens at batch=2200
+        hf_repo_id: "kylelovesllms/molt-sweeps"
+        hf_repo_path: "molt-multilayer-gpt2-N50-100M-fp32weights-full"
+        delete_local_after_upload: true
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.MultiLayerMolt
+      init_args:
+        n_layers: 12
+        d_acts: 768
+        N: 50
+        ranks: [512, 256, 128, 64, 32]
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 1550
+
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+    replacement_model: null
+    dead_features: null
+
+    learning_rate: 2e-4
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    # Buffer: 1M * 12 * 2 * 768 * 4 bytes = ~74 GB on /dev/shm (have 249 GB free).
+    buffer_size: 1_000_000
+    n_in_out: 2
+    n_layers: 12
+    activation_dim: 768
+    dtype: "float32"
+    max_batch_size: 50000
+
+    model_name: "openai-community/gpt2"
+    model_dtype: "float32"
+
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    max_sequence_length: 1024
+
+    # Bumped from 10 -> 64. GPT-2 fwd at b=64,seq=1024 is ~16 TFLOPs; H200 sustains
+    # 600+ TFLOPs bf16, so each gen batch ~30 ms emits 64*1024=65k token activations.
+    generation_batch_size: 64
+    refresh_interval: 0.1
+
+    shared_memory_name: "activation_buffer"
+    timeout_seconds: 30
+
+    # batch_size=2200: probed VRAM ceiling on H200 at batch=2750 (137 GB / 140 GB);
+    # 2600 OOM'd in real training (dataloader workers + cuBLAS overhead added ~2 GB);
+    # 2200 gives ~16 GB headroom while still ~4.4x the original effective batch.
+    batch_size: 2200
+    num_workers: 8       # halved from 16 to reduce per-worker CUDA overhead
+    prefetch_factor: 2   # halved from 4 — at batch=2200 the prefetched buffers add up
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+
+    minimum_fill_threshold: 0.01
+
+    use_shared_memory: true
+
+    device_map: "cuda:1"  # generator on GPU 1, training on GPU 0
+    deployment_policy: "gpu_only"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator-2gpu"
+      tags: ["data-generation"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null

@@ -101,16 +101,26 @@ class MoltPerLayerCheckpointCallback(L.Callback):
     Files are written to `{checkpoint_dir}/{run_name}_layer_{layer}.pt`, where
     `run_name` is taken from the active wandb logger. If no wandb logger is
     attached, falls back to "molt".
+
+    Optional HF offload: when `hf_repo_id` is set, periodic checkpoints are
+    uploaded to that repo under `hf_repo_path/` and deleted locally to free
+    disk. The final on_train_end checkpoint is always kept locally.
     """
 
     def __init__(
         self,
         checkpoint_dir: str = "checkpoints",
         every_n_train_steps: Optional[int] = None,
+        hf_repo_id: Optional[str] = None,
+        hf_repo_path: Optional[str] = None,
+        delete_local_after_upload: bool = False,
     ):
         super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
         self.every_n_train_steps = every_n_train_steps
+        self.hf_repo_id = hf_repo_id
+        self.hf_repo_path = (hf_repo_path or "").strip("/")
+        self.delete_local_after_upload = delete_local_after_upload
 
     @staticmethod
     def _wandb_run_name(trainer) -> Optional[str]:
@@ -124,28 +134,65 @@ class MoltPerLayerCheckpointCallback(L.Callback):
                 return name
         return None
 
-    def _save(self, trainer, pl_module, suffix: str = ""):
+    def _save(self, trainer, pl_module, suffix: str = "") -> List[Path]:
         model = pl_module.model
         if not isinstance(model, MultiLayerMolt):
             logger.warning(
                 "MoltPerLayerCheckpointCallback expected MultiLayerMolt, got %s; skipping",
                 type(model).__name__,
             )
-            return
+            return []
 
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         run_name = self._wandb_run_name(trainer) or "molt"
+        saved: List[Path] = []
         for layer, molt in enumerate(model.molts):
             path = self.checkpoint_dir / f"{run_name}_layer_{layer}{suffix}.pt"
             torch.save(molt.state_dict(), path)
             logger.info("Saved MoLT layer %d to %s", layer, path)
+            saved.append(path)
+        return saved
+
+    def _offload_to_hf(self, paths: List[Path]) -> None:
+        """Upload paths to HF repo (creating it if needed) and optionally delete them."""
+        if not self.hf_repo_id or not paths:
+            return
+        try:
+            from huggingface_hub import HfApi
+        except ImportError:
+            logger.warning("huggingface_hub not installed; skipping HF offload")
+            return
+
+        api = HfApi()
+        # Idempotent — exist_ok=True so this is safe to call every time.
+        try:
+            api.create_repo(repo_id=self.hf_repo_id, exist_ok=True)
+        except Exception as e:
+            logger.warning("HF create_repo failed (continuing): %s", e)
+
+        for p in paths:
+            remote = f"{self.hf_repo_path}/{p.name}" if self.hf_repo_path else p.name
+            try:
+                api.upload_file(
+                    path_or_fileobj=str(p),
+                    path_in_repo=remote,
+                    repo_id=self.hf_repo_id,
+                )
+                logger.info("Uploaded %s to %s:%s", p, self.hf_repo_id, remote)
+                if self.delete_local_after_upload:
+                    p.unlink(missing_ok=True)
+                    logger.info("Deleted local %s", p)
+            except Exception as e:
+                logger.error("HF upload of %s failed: %s", p, e)
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if self.every_n_train_steps is None:
             return
         step = trainer.global_step
         if step > 0 and step % self.every_n_train_steps == 0:
-            self._save(trainer, pl_module, suffix=f"_step{step}")
+            saved = self._save(trainer, pl_module, suffix=f"_step{step}")
+            self._offload_to_hf(saved)
 
     def on_train_end(self, trainer, pl_module):
+        # Final checkpoint stays local — don't offload/delete.
         self._save(trainer, pl_module, suffix="")

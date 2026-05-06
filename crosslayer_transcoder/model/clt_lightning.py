@@ -117,7 +117,15 @@ class CrossLayerTranscoderModule(L.LightningModule):
             print("Compiling model")
             self = torch.compile(self)
 
-        if self.trainer.num_devices > 1:
+        # TP path: only when a tensor-parallel device mesh is provided.
+        # Under DDP, num_devices > 1 but no TP mesh exists — skip TP and let
+        # Lightning's DDP strategy handle gradient sync.
+        device_mesh = getattr(self, "device_mesh", None)
+        if (
+            self.trainer.num_devices > 1
+            and device_mesh is not None
+            and "tensor_parallel" in device_mesh
+        ):
             from crosslayer_transcoder.model.parallel import (
                 ColParallelEncoder,
                 ParallelNonlinearity,

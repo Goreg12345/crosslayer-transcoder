@@ -1,0 +1,137 @@
+# Multi-layer MoLT training on all 12 GPT2-small layers — 2x H200 DDP.
+#
+# Each rank holds: a full DDP model copy (~38 GB params/grad/optim), forward
+# activations at per-GPU batch=1800 (~109 GB probe peak), its own per-rank
+# GPT-2 generator on the same GPU (~5 GB), and dataloader/cuBLAS overhead.
+#
+# Effective batch = 2 * 1800 = 3600. 100M tokens / 3600 ≈ 27778 steps,
+# rounded to 28000. Expected ~4.5 hr wall clock vs ~9 hr single-GPU.
+
+seed_everything: 42
+
+trainer:
+  # Global batch 2800 (2 ranks * 1400), 100M / 2800 = 35714 steps -> 36000.
+  max_steps: 36_000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [0, 1]
+  strategy: "ddp"
+  accumulate_grad_batches: 1
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-multilayer-N50-100M-ddp"
+      save_dir: "./wandb"
+  callbacks:
+    # 10M tokens at global batch 2800 ≈ 3572 steps; rounded to 3600.
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-multilayer-N50-100M-ddp"
+        every_n_train_steps: 3600
+        hf_repo_id: "kylelovesllms/molt-sweeps"
+        hf_repo_path: "molt-multilayer-gpt2-N50-100M-fp32weights-full"
+        delete_local_after_upload: true
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.MultiLayerMolt
+      init_args:
+        n_layers: 12
+        d_acts: 768
+        N: 50
+        ranks: [512, 256, 128, 64, 32]
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 1550
+
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 12
+            activation_dim: 768
+
+    replacement_model: null
+    dead_features: null
+
+    learning_rate: 2e-4
+    compile: false  # tested true: ~1.0 it/s vs 1.33 it/s; recompiles or graph breaks dominate
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    # Smaller buffer per rank — each rank generates into its own /dev/shm region.
+    # 500k * 12 * 2 * 768 * 4 = ~37 GB per rank, 74 GB total on /dev/shm (have 249 GB).
+    buffer_size: 500_000
+    n_in_out: 2
+    n_layers: 12
+    activation_dim: 768
+    dtype: "float32"
+    max_batch_size: 50000
+
+    model_name: "openai-community/gpt2"
+    model_dtype: "float32"
+
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    max_sequence_length: 1024
+
+    # Smaller gen batch — each rank's generator runs on the same GPU as
+    # training, so footprint matters more than peak gen throughput.
+    generation_batch_size: 16
+    refresh_interval: 0.1
+
+    shared_memory_name: "activation_buffer"  # datamodule appends _rank{N} under DDP
+    timeout_seconds: 30
+
+    batch_size: 1400     # per-GPU; DDP doubles to a global batch of 2800. 1500 worked
+                         # but at 0.5 GB headroom, fragile for a 7hr run. 1400 gives ~5 GB.
+    num_workers: 4       # halved further to limit worker GPU shadows
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+
+    minimum_fill_threshold: 0.01
+
+    use_shared_memory: true
+
+    device_map: "cuda:0"  # rank-relative under DDP; datamodule resolves per rank
+    deployment_policy: "gpu_only"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator-ddp"  # datamodule appends -rank{N}
+      tags: ["data-generation"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null
