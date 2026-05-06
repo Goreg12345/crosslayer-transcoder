@@ -103,9 +103,14 @@ class MoltPerLayerCheckpointCallback(L.Callback):
     attached, falls back to "molt".
     """
 
-    def __init__(self, checkpoint_dir: str = "checkpoints"):
+    def __init__(
+        self,
+        checkpoint_dir: str = "checkpoints",
+        every_n_train_steps: Optional[int] = None,
+    ):
         super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
+        self.every_n_train_steps = every_n_train_steps
 
     @staticmethod
     def _wandb_run_name(trainer) -> Optional[str]:
@@ -119,7 +124,7 @@ class MoltPerLayerCheckpointCallback(L.Callback):
                 return name
         return None
 
-    def on_train_end(self, trainer, pl_module):
+    def _save(self, trainer, pl_module, suffix: str = ""):
         model = pl_module.model
         if not isinstance(model, MultiLayerMolt):
             logger.warning(
@@ -131,6 +136,16 @@ class MoltPerLayerCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         run_name = self._wandb_run_name(trainer) or "molt"
         for layer, molt in enumerate(model.molts):
-            path = self.checkpoint_dir / f"{run_name}_layer_{layer}.pt"
+            path = self.checkpoint_dir / f"{run_name}_layer_{layer}{suffix}.pt"
             torch.save(molt.state_dict(), path)
             logger.info("Saved MoLT layer %d to %s", layer, path)
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if self.every_n_train_steps is None:
+            return
+        step = trainer.global_step
+        if step > 0 and step % self.every_n_train_steps == 0:
+            self._save(trainer, pl_module, suffix=f"_step{step}")
+
+    def on_train_end(self, trainer, pl_module):
+        self._save(trainer, pl_module, suffix="")

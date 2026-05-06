@@ -34,6 +34,7 @@ trainer:
     - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints/molt-multilayer-N50-100M"
+        every_n_train_steps: 10000  # save every 10M tokens (10k steps * batch 1000)
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
