@@ -1,0 +1,188 @@
+# Multi-layer MoLT training on Gemma3-4B-it (text decoder), 4xH200 with a
+# 1-producer + 3-DDP-consumer split.
+#
+# Topology:
+#   GPU 0  — standalone producer process: runs Gemma3-4B-it forward, fills the
+#            shared activation buffer in /dev/shm. NOT part of Lightning DDP.
+#   GPU 1,2,3 — Lightning DDP world (3 ranks). Each rank attaches to the
+#            producer's shared buffer (producer_mode: "client") and trains MoLT.
+#
+# Launch order matters — the producer must create the shared buffer first:
+#   Terminal A:
+#     uv run python -m crosslayer_transcoder.data.standalone_producer \
+#       --config config/molt-multilayer-gemma3-4b-it-1_plus_3ddp.yaml
+#     # wait until "buffer ready" appears in stdout
+#   Terminal B (or use scripts/train_molt_gemma3_1plus3.sh):
+#     uv run clt fit --config config/molt-multilayer-gemma3-4b-it-1_plus_3ddp.yaml
+#
+# Architecture facts that drive the sizing here:
+#   Gemma3-4B-it: 34 hidden layers, hidden_size=2560, intermediate_size=10240.
+#   Loaded as Gemma3ForConditionalGeneration; the activation paths in
+#   ActivationComputer (model_arch="gemma3") access:
+#     mlp_in  = language_model.model.layers[i].pre_feedforward_layernorm.input
+#     mlp_out = language_model.model.layers[i].post_feedforward_layernorm.output
+#
+# Memory back-of-envelope (per H200, 141 GB):
+#   Producer (GPU 0):
+#     Gemma3-4B in bf16 ≈ 8 GB params. Forward at gen_batch=8, seq=1024
+#     activations + KV ≈ 30–40 GB peak (multimodal class loads SigLIP too even
+#     when unused; can be ~5 GB extra). Plenty of headroom for gen_batch=8.
+#   Each consumer (GPU 1/2/3):
+#     34 × Molt(d_acts=2560, N=20, ranks=[256,128,64]) ≈ 13M params per layer
+#     ≈ 440M params × 12 bytes (fp32 + Adam) ≈ 5.3 GB. Activation buffer for
+#     batch=512 across 34 layers × 2560 × 2 × 4 bytes ≈ 178 MB live; reconstruction
+#     intermediates a few × that. Easily fits with massive headroom.
+#
+# Buffer (in /dev/shm):
+#   buffer_size=200_000 samples × 2 in/out × 34 layers × 2560 dims × 4 bytes
+#     ≈ 130 GB. /dev/shm typically has ~half of system RAM; you must verify
+#     `df -h /dev/shm` shows ≥ 140 GB free or shrink buffer_size accordingly.
+
+seed_everything: 42
+
+trainer:
+  # Effective batch = 3 ranks × 512 = 1536. At 100M tokens that's ~65k steps.
+  # Tune downward for first runs; this is a rough placeholder.
+  max_steps: 65_000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [1, 2, 3]   # GPU 0 is reserved for the standalone producer
+  strategy: "ddp"
+  accumulate_grad_batches: 1
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-gemma3-4b-it-N20-1plus3ddp"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-gemma3-4b-it-N20-1plus3ddp"
+        every_n_train_steps: 6500   # ~10M tokens at effective batch 1536
+        hf_repo_id: "kylelovesllms/molt-sweeps"
+        hf_repo_path: "molt-multilayer-gemma3-4b-it-N20"
+        delete_local_after_upload: true
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.MultiLayerMolt
+      init_args:
+        n_layers: 34
+        d_acts: 2560
+        # N=20 with ranks=[256,128,64] -> n_features = 20 + 40 + 80 = 140 per layer.
+        # Conservative starting point given 4x larger d_acts than GPT-2; bump after
+        # confirming throughput.
+        N: 20
+        ranks: [256, 128, 64]
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 140
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 34
+            activation_dim: 2560
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 34
+            activation_dim: 2560
+
+    replacement_model: null
+    dead_features: null
+
+    learning_rate: 2e-4
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    # Buffer size is the dominant /dev/shm consumer. Verify with `df -h /dev/shm`.
+    buffer_size: 200_000
+    n_in_out: 2
+    n_layers: 34
+    activation_dim: 2560
+    dtype: "float32"
+    max_batch_size: 50000
+
+    model_name: "google/gemma-3-4b-it"
+    # bf16 producer to fit Gemma3-4B + KV + activations on a single H200.
+    # Activations are downcast to `dtype` (float32) when written to the buffer.
+    model_dtype: "bfloat16"
+
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    # Gemma3 supports up to 131k context but openwebtext text is much shorter
+    # and we want lots of independent samples per gen step.
+    max_sequence_length: 1024
+
+    # Gen batch sized for Gemma3-4B forward:
+    #   FLOPs ≈ 2 * 4B params * (8 * 1024) tokens ≈ 65 GFLOPs/token,
+    #   ~530 TFLOPs per gen-step at b=8,seq=1024.  H200 sustains ~600 TFLOPS bf16
+    #   so ~1 sec/step → 8192 token-activations/sec ≈ 8k acts/sec.
+    # That's the producer's ceiling — see brutally honest analysis in PR for
+    # why this matters.
+    generation_batch_size: 8
+    refresh_interval: 0.05
+
+    # Fixed name (no rank suffix). Both the standalone_producer process AND the
+    # 3 DDP consumers must use this exact name.
+    shared_memory_name: "molt_gemma3_4b_it_buffer"
+    timeout_seconds: 60
+
+    # Per-rank consumer batch. With 3 ranks effective batch = 1536. Conservative
+    # given 34-layer MoLT; can grow to fill VRAM after first profiling run.
+    batch_size: 512
+    num_workers: 4
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+
+    # Block until the buffer is ≥ 5% full so the first training step doesn't
+    # see all-zero activations.
+    minimum_fill_threshold: 0.05
+
+    use_shared_memory: true
+
+    # Producer's GPU. Lightning consumers ignore this field (they attach to shm).
+    device_map: "cuda:0"
+    deployment_policy: "gpu_only"
+
+    # Tells the producer how to extract MLP in/out for Gemma3.
+    model_arch: "gemma3"
+
+    # Tells the trainer ranks they are clients of an external producer's buffer.
+    producer_mode: "client"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator-gemma3-1plus3"
+      tags: ["data-generation", "gemma3"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null

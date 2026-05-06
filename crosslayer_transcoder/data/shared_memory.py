@@ -39,6 +39,9 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         max_sequence_length: int = 1024,
         minimum_fill_threshold: float = 0.0,
         batch_size: int = None,
+        create: bool = True,
+        consumer_rank: int = 0,
+        consumer_world_size: int = 1,
     ):
         """
         Initialize shared activation buffer.
@@ -55,6 +58,14 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
             max_sequence_length: Max sequence length (for pinned buffer sizing)
             minimum_fill_threshold: Minimum buffer fill ratio (0.0-1.0) before providing activations
             batch_size: Batch size for the dataset
+            create: If True (default), create new shared memory segments. If False, attach to
+                existing segments by name (used by consumer processes that share a producer's buffer).
+            consumer_rank: Rank of this consumer (only relevant for cross-process consumers).
+                Used to shard reads — slot i is read only by consumer with `i %
+                consumer_world_size == consumer_rank`. Default 0 means no sharding.
+            consumer_world_size: Total number of cross-process consumer ranks sharing this buffer.
+                Default 1 disables sharding (single consumer). When > 1, each consumer reads a
+                disjoint subset of slots, avoiding races without cross-process locks.
         """
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
@@ -63,6 +74,10 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         self.dtype = dtype
         self.minimum_fill_threshold = minimum_fill_threshold
         self.batch_size = batch_size
+        self.consumer_rank = consumer_rank
+        self.consumer_world_size = consumer_world_size
+        # Only the creating process should unlink (delete) the segment names.
+        self._is_creator = bool(create)
 
         # Calculate memory requirements for 4D tensor [buffer_size, n_in_out, n_layers, activation_dim]
         self.shape = (buffer_size, n_in_out, n_layers, activation_dim)
@@ -70,26 +85,45 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         self.total_size = buffer_size * n_in_out * n_layers * activation_dim * self.element_size
         self.n_elems = buffer_size * n_in_out * n_layers * activation_dim
 
-        logger.info(
-            f"Creating shared PyTorch buffer: {buffer_size} samples x {n_in_out} in/out x {n_layers} layers x {activation_dim} dims"
-        )
-        logger.info(f"Total memory: {self.total_size / (1024**3):.2f} GB")
+        # Names for the two POSIX shm segments.
+        self.shm_name = shared_memory_name
+        self.validity_shm_name = f"{shared_memory_name}_validity"
 
-        # Create shared PyTorch tensor directly
-        # self.buffer_tensor = torch.empty(self.shape, dtype=dtype, requires_grad=False)
-        # Make it shared across processes
-        # self.buffer_tensor.share_memory_()
-        # Faster variant with proper pickling support:
-        self.shm = shared_memory.SharedMemory(create=True, size=self.total_size)
-        atexit.register(lambda: self.shm.unlink())
-        self.shm_name = self.shm.name  # Store name for pickle/unpickle
+        if create:
+            logger.info(
+                f"Creating shared PyTorch buffer: {buffer_size} samples x {n_in_out} in/out x "
+                f"{n_layers} layers x {activation_dim} dims (shm={self.shm_name})"
+            )
+            logger.info(f"Total memory: {self.total_size / (1024**3):.2f} GB")
+            # Pre-clean any stale segments left behind by a previously crashed run.
+            for name in (self.shm_name, self.validity_shm_name):
+                try:
+                    stale = shared_memory.SharedMemory(name=name)
+                    stale.close()
+                    stale.unlink()
+                    logger.warning(f"Removed stale shared memory segment: {name}")
+                except FileNotFoundError:
+                    pass
+            self.shm = shared_memory.SharedMemory(create=True, name=self.shm_name, size=self.total_size)
+            self.validity_shm = shared_memory.SharedMemory(
+                create=True, name=self.validity_shm_name, size=buffer_size
+            )
+            atexit.register(lambda: self._safe_unlink(self.shm))
+            atexit.register(lambda: self._safe_unlink(self.validity_shm))
+        else:
+            logger.info(f"Attaching to existing shared buffer (shm={self.shm_name})")
+            self.shm = shared_memory.SharedMemory(name=self.shm_name)
+            self.validity_shm = shared_memory.SharedMemory(name=self.validity_shm_name)
+
         self.buffer_tensor = torch.frombuffer(self.shm.buf, dtype=self.dtype, count=self.n_elems).view(
             self.shape
         )
-
-        # Create shared validity mask tensor
-        self.validity_tensor = torch.zeros(buffer_size, dtype=torch.bool, requires_grad=False)
-        self.validity_tensor.share_memory_()
+        # validity is uint8 in shared memory so it's reachable by unrelated processes
+        # (torch.bool's share_memory_() relies on /tmp/torch_<pid> + fd inheritance and won't
+        # cross unrelated process trees).
+        self.validity_tensor = torch.frombuffer(self.validity_shm.buf, dtype=torch.uint8, count=buffer_size)
+        if create:
+            self.validity_tensor.zero_()
 
         # OPTIMIZATION: Create pinned memory buffer for fast GPU->CPU transfers
         # Size it for the maximum batch we'll process: generation_batch_size * max_sequence_length
@@ -108,7 +142,11 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         # Queue for statistics updates (if needed in future)
         self.stats_queue = mp.Queue(maxsize=100)  # Statistics updates
 
-        # Multiprocessing-safe locks
+        # Intra-process locks (between dataloader workers within one rank).
+        # Cross-process consumers (different DDP ranks attached to one producer's buffer)
+        # do NOT share these locks — they instead rely on consumer-side sharding (see
+        # consumer_rank/consumer_world_size) plus the writer-then-validity ordering in
+        # set_activations to avoid races.
         self.buffer_lock = mp.RLock()
         self.validity_lock = mp.RLock()
 
@@ -136,9 +174,11 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         state = self.__dict__.copy()
         # Remove the unpicklable objects - these will be recreated in child process
         del state["buffer_tensor"]
+        del state["validity_tensor"]
         del state["shm"]  # Don't pickle the buffer itself
+        del state["validity_shm"]
         del state["pinned_buffer"]  # Don't pickle pinned memory - recreate in child
-        # Keep shm_name so child process can reconnect to same shared memory
+        # Keep shm_name and validity_shm_name so child process can reconnect to same shared memory
         return state
 
     def __setstate__(self, state):
@@ -147,11 +187,18 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         Child process accesses the identical memory created by parent.
         """
         self.__dict__.update(state)
-        # Connect to EXISTING shared memory using the stored name
+        # Pickled copies live in a different process from the original creator and must
+        # never unlink — the original parent (DataModule) is responsible for that.
+        self._is_creator = False
+        # Connect to EXISTING shared memory using the stored names
         self.shm = shared_memory.SharedMemory(name=self.shm_name)
+        self.validity_shm = shared_memory.SharedMemory(name=self.validity_shm_name)
         # Recreate tensor view of the SAME physical memory
         self.buffer_tensor = torch.frombuffer(self.shm.buf, dtype=self.dtype, count=self.n_elems).view(
             self.shape
+        )
+        self.validity_tensor = torch.frombuffer(
+            self.validity_shm.buf, dtype=torch.uint8, count=self.buffer_size
         )
 
         # Recreate pinned memory buffer in child process with correct size
@@ -248,9 +295,11 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
             # Update buffer directly
             self.buffer_tensor[indices] = cpu_activations
 
-            # Mark indices as valid
+            # Mark indices as valid. Order matters for cross-process consumers:
+            # data must be visible before the validity bit flips, otherwise an
+            # unlocked reader could see valid=1 and read pre-write garbage.
             with self.validity_lock:
-                self.validity_tensor[indices] = True
+                self.validity_tensor[indices] = 1
 
             # Update stats
             self.stats["total_writes"] += 1
@@ -264,17 +313,25 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
             indices: Tensor of indices that need new data
         """
         with self.validity_lock:
-            self.validity_tensor[indices] = False
+            self.validity_tensor[indices] = 0
 
     def _get_invalid_indices(self) -> torch.Tensor:
         with self.validity_lock:
-            invalid_indices = torch.nonzero(~self.validity_tensor, as_tuple=False).squeeze(-1)
-
+            invalid_indices = torch.nonzero(self.validity_tensor == 0, as_tuple=False).squeeze(-1)
         return invalid_indices
 
     def _get_valid_indices(self) -> torch.Tensor:
+        """Indices marked valid that this consumer is responsible for.
+
+        When consumer_world_size > 1 (cross-process consumers sharing one buffer), each
+        consumer reads only its assigned shard of slots (`i % world_size == rank`). This
+        eliminates the only race that mattered (two readers picking the same valid slot)
+        without needing cross-process locks.
+        """
         with self.validity_lock:
-            valid_indices = torch.nonzero(self.validity_tensor, as_tuple=False).squeeze(-1)
+            valid_indices = torch.nonzero(self.validity_tensor != 0, as_tuple=False).squeeze(-1)
+        if self.consumer_world_size > 1:
+            valid_indices = valid_indices[(valid_indices % self.consumer_world_size) == self.consumer_rank]
         return valid_indices
 
     def force_refresh(self) -> int:
@@ -286,14 +343,24 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         """
         with self.validity_lock:
             # Mark all as invalid
-            self.validity_tensor.fill_(False)
+            self.validity_tensor.zero_()
 
         return self.buffer_size
+
+    @staticmethod
+    def _safe_unlink(shm: shared_memory.SharedMemory) -> None:
+        """Unlink a POSIX shm segment, swallowing FileNotFoundError if already gone."""
+        try:
+            shm.unlink()
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.warning(f"Error unlinking shared memory: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """Get buffer statistics."""
         with self.validity_lock:
-            valid_samples = int(torch.sum(self.validity_tensor).item())
+            valid_samples = int(torch.sum(self.validity_tensor != 0).item())
 
         fill_percentage = valid_samples / self.buffer_size
         return {
@@ -324,19 +391,18 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
                 del self.pinned_buffer
 
             # Clean up shared memory properly
-            if hasattr(self, "shm"):
-                try:
-                    # Close our reference to shared memory
-                    self.shm.close()
-                    # Try to unlink (delete) the shared memory segment
-                    # This will only succeed from the creating process
+            for attr in ("shm", "validity_shm"):
+                if hasattr(self, attr):
+                    seg = getattr(self, attr)
                     try:
-                        self.shm.unlink()
-                    except FileNotFoundError:
-                        # Already unlinked by another process, that's fine
-                        pass
-                except Exception as shm_error:
-                    logger.warning(f"Error cleaning up shared memory: {shm_error}")
+                        seg.close()
+                        # Only the creator unlinks. Consumers attached via create=False just
+                        # close their reference — unlinking from a consumer would break other
+                        # consumers and any later attach() attempts.
+                        if getattr(self, "_is_creator", True):
+                            self._safe_unlink(seg)
+                    except Exception as shm_error:
+                        logger.warning(f"Error cleaning up shared memory ({attr}): {shm_error}")
 
             logger.info("Shared memory resources cleaned up successfully")
 

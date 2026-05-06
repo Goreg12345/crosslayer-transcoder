@@ -44,10 +44,43 @@ class ActivationComputer(ActivationSource):
     """
     Computes activations by running a forward pass through a language model.
     Pure computation - takes model + tokens, returns activations.
+
+    `model_arch` selects per-layer activation paths:
+      - "gpt2"    (default, back-compat): MLP_in = `transformer.h[i].ln_2.input`,
+                                          MLP_out = `transformer.h[i].mlp.output`
+      - "gemma3":                          MLP_in = `language_model.model.layers[i].pre_feedforward_layernorm.input`,
+                                          MLP_out = `language_model.model.layers[i].post_feedforward_layernorm.output`
+                  Path matches `Gemma3ForConditionalGeneration` (multimodal -it
+                  checkpoints). For `Gemma3ForCausalLM`-only loads, drop the
+                  `language_model.` prefix — but nnsight typically wraps the full
+                  multimodal class for `google/gemma-3-*-it`.
     """
 
-    def __init__(self, n_layers: int):
+    def __init__(self, n_layers: int, model_arch: str = "gpt2"):
         self.n_layers = n_layers
+        if model_arch not in ("gpt2", "gemma3"):
+            raise ValueError(f"Unsupported model_arch {model_arch!r}; expected 'gpt2' or 'gemma3'")
+        self.model_arch = model_arch
+        # Cached arrival-path detection result: True once we've confirmed Gemma3
+        # is loaded as multimodal (Gemma3ForConditionalGeneration → has
+        # `language_model` submodule) vs causal (Gemma3ForCausalLM). nnsight
+        # proxies forward arbitrary attribute access, so we can't try/except at
+        # trace build time; we have to inspect the underlying HF module up front.
+        self._gemma3_multimodal: bool | None = None
+
+    def _detect_gemma3_layout(self, model: Any) -> bool:
+        """Return True if the underlying HF model is the multimodal Gemma3 variant.
+
+        nnsight wraps the HF module — the underlying model is typically reachable
+        via `_model` (or, for older nnsight, `model.local_model`). Falls back to
+        the safer "looks multimodal" heuristic if the unwrap path differs.
+        """
+        if self._gemma3_multimodal is not None:
+            return self._gemma3_multimodal
+        underlying = getattr(model, "_model", None) or getattr(model, "local_model", None) or model
+        # Multimodal Gemma3ForConditionalGeneration exposes `.language_model`.
+        self._gemma3_multimodal = hasattr(underlying, "language_model")
+        return self._gemma3_multimodal
 
     def get_next_batch(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -63,11 +96,31 @@ class ActivationComputer(ActivationSource):
         gc.collect()
         return self._extract_activations(model, tokens, mask)
 
+    def _layer_handles(self, model: Any, i: int):
+        """Return (mlp_in_proxy, mlp_out_proxy) for layer i under the active arch."""
+        if self.model_arch == "gpt2":
+            return (
+                model.transformer.h[i].ln_2.input,
+                model.transformer.h[i].mlp.output,
+            )
+        # gemma3: layers may live at either path depending on which HF class
+        # AutoModelForCausalLM resolves to:
+        #   Gemma3ForCausalLM            -> model.model.layers[i]
+        #   Gemma3ForConditionalGeneration (multimodal -it checkpoints) ->
+        #                                   model.language_model.model.layers[i]
+        # The MLP's residual contribution is `post_feedforward_layernorm.output`
+        # (Gemma3 normalizes the MLP delta before the residual add), so that's
+        # the per-layer "MLP out" a transcoder should reconstruct.
+        if self._detect_gemma3_layout(model):
+            layer = model.language_model.model.layers[i]
+        else:
+            layer = model.model.layers[i]
+        return layer.pre_feedforward_layernorm.input, layer.post_feedforward_layernorm.output
+
     @torch.no_grad()
     def _extract_activations(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Extract MLP input/output activations using nnsight tracing.
-        EXACT COPY of existing method - no changes to functionality!
 
         Args:
             model: nnsight LanguageModel to run inference on
@@ -80,16 +133,10 @@ class ActivationComputer(ActivationSource):
         mlp_ins = []
         mlp_outs = []
         with model.trace(tokens) as tracer:
-
-            # Extract from all transformer layers
             for i in range(self.n_layers):
-                # MLP input (after layer norm)
-                mlp_in = model.transformer.h[i].ln_2.input.save()
-                mlp_ins.append(mlp_in)
-
-                # MLP output
-                mlp_out = model.transformer.h[i].mlp.output.save()
-                mlp_outs.append(mlp_out)
+                mlp_in_proxy, mlp_out_proxy = self._layer_handles(model, i)
+                mlp_ins.append(mlp_in_proxy.save())
+                mlp_outs.append(mlp_out_proxy.save())
 
         mlp_ins = torch.stack(mlp_ins, dim=0)
         mlp_outs = torch.stack(mlp_outs, dim=0)

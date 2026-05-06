@@ -60,6 +60,16 @@ class ActivationDataModule(L.LightningDataModule):
         device_map: str = "auto",
         # Deployment policy
         deployment_policy: str = "dynamic",  # CPU/GPU deployment policy: "cpu_only", "gpu_only", or "dynamic"
+        # Activation extraction model architecture: "gpt2" or "gemma3"
+        model_arch: str = "gpt2",
+        # Producer/consumer split.
+        #   "self":   default. This rank creates and feeds its own buffer (DDP fan-out:
+        #            each rank gets its own producer on its own GPU; existing behavior).
+        #   "client": this rank attaches to an EXTERNAL producer's shared buffer. Used by
+        #            the 1-producer + N-consumer-DDP topology. The standalone producer
+        #            (see crosslayer_transcoder.data.standalone_producer) must be running
+        #            and must have created the buffer with the same `shared_memory_name`.
+        producer_mode: str = "self",
         # WandB logging configuration
         wandb_logging: Optional[dict] = None,
         **kwargs,
@@ -156,6 +166,10 @@ class ActivationDataModule(L.LightningDataModule):
         # Advanced settings
         self.use_shared_memory = use_shared_memory
         self.deployment_policy = DeploymentPolicy.from_string(deployment_policy)
+        self.model_arch = model_arch
+        if producer_mode not in ("self", "client"):
+            raise ValueError(f"producer_mode must be 'self' or 'client', got {producer_mode!r}")
+        self.producer_mode = producer_mode
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -235,68 +249,93 @@ class ActivationDataModule(L.LightningDataModule):
             logger.warning(f"Could not set spawn method: {e}. Disabling multiprocessing in DataLoader")
             # If we can't set spawn, disable multiprocessing in the DataLoader
 
-        # Under DDP each rank runs its own generator on its own GPU. We must
-        # use the *absolute* physical device id (cuda:local_rank), not "cuda:0":
-        # Lightning's DDP doesn't filter CUDA_VISIBLE_DEVICES for child processes
-        # spawned by the rank, so a relative "cuda:0" in rank N>0 maps to physical
-        # cuda:0 and competes with rank 0's training memory. Each rank also gets
-        # a unique shared-memory name to avoid /dev/shm collisions.
         rank = self.trainer.global_rank if self.trainer is not None else 0
         local_rank = self.trainer.local_rank if self.trainer is not None else 0
         world_size = self.trainer.world_size if self.trainer is not None else 1
-        if world_size > 1:
-            shm_name = f"{self.shared_memory_name}_rank{rank}"
-            gen_device = f"cuda:{local_rank}"
-            wandb_cfg = dict(self.wandb_logging or {})
-            if wandb_cfg.get("enabled"):
-                base_run = wandb_cfg.get("run_name") or "data-generator"
-                wandb_cfg["run_name"] = f"{base_run}-rank{rank}"
+
+        if self.producer_mode == "client":
+            # Attach to an externally-launched standalone producer's buffer.
+            # All consumer ranks share ONE buffer with no per-rank suffix; sharded
+            # reads avoid double-consumption (see SharedActivationBuffer).
+            logger.info(
+                f"producer_mode=client: rank {rank}/{world_size} attaching to existing "
+                f"shared buffer {self.shared_memory_name!r}"
+            )
+            self.shared_buffer = SharedActivationBuffer(
+                buffer_size=self.buffer_size,
+                n_in_out=self.n_in_out,
+                n_layers=self.n_layers,
+                activation_dim=self.activation_dim,
+                dtype=self.torch_dtype,
+                shared_memory_name=self.shared_memory_name,
+                timeout_seconds=self.timeout_seconds,
+                generation_batch_size=self.generation_batch_size,
+                max_sequence_length=self.max_sequence_length,
+                minimum_fill_threshold=self.minimum_fill_threshold,
+                batch_size=self.batch_size,
+                create=False,
+                consumer_rank=rank,
+                consumer_world_size=world_size,
+            )
+            self.data_generator = None
         else:
-            shm_name = self.shared_memory_name
-            gen_device = self.device_map
-            wandb_cfg = self.wandb_logging
+            # Under DDP each rank runs its own generator on its own GPU. We must
+            # use the *absolute* physical device id (cuda:local_rank), not "cuda:0":
+            # Lightning's DDP doesn't filter CUDA_VISIBLE_DEVICES for child processes
+            # spawned by the rank, so a relative "cuda:0" in rank N>0 maps to physical
+            # cuda:0 and competes with rank 0's training memory. Each rank also gets
+            # a unique shared-memory name to avoid /dev/shm collisions.
+            if world_size > 1:
+                shm_name = f"{self.shared_memory_name}_rank{rank}"
+                gen_device = f"cuda:{local_rank}"
+                wandb_cfg = dict(self.wandb_logging or {})
+                if wandb_cfg.get("enabled"):
+                    base_run = wandb_cfg.get("run_name") or "data-generator"
+                    wandb_cfg["run_name"] = f"{base_run}-rank{rank}"
+            else:
+                shm_name = self.shared_memory_name
+                gen_device = self.device_map
+                wandb_cfg = self.wandb_logging
 
-        # 1. Create shared memory buffer
-        self.shared_buffer = SharedActivationBuffer(
-            buffer_size=self.buffer_size,
-            n_in_out=self.n_in_out,
-            n_layers=self.n_layers,
-            activation_dim=self.activation_dim,
-            dtype=self.torch_dtype,
-            shared_memory_name=shm_name,
-            timeout_seconds=self.timeout_seconds,
-            generation_batch_size=self.generation_batch_size,
-            max_sequence_length=self.max_sequence_length,
-            minimum_fill_threshold=self.minimum_fill_threshold,
-            batch_size=self.batch_size,
-        )
+            self.shared_buffer = SharedActivationBuffer(
+                buffer_size=self.buffer_size,
+                n_in_out=self.n_in_out,
+                n_layers=self.n_layers,
+                activation_dim=self.activation_dim,
+                dtype=self.torch_dtype,
+                shared_memory_name=shm_name,
+                timeout_seconds=self.timeout_seconds,
+                generation_batch_size=self.generation_batch_size,
+                max_sequence_length=self.max_sequence_length,
+                minimum_fill_threshold=self.minimum_fill_threshold,
+                batch_size=self.batch_size,
+            )
 
-        # 2. Create data generator process
-        self.data_generator = DataGeneratorProcess(
-            shared_buffer=self.shared_buffer,
-            buffer_size=self.buffer_size,
-            n_in_out=self.n_in_out,
-            n_layers=self.n_layers,
-            activation_dim=self.activation_dim,
-            dtype=self.torch_dtype,
-            max_batch_size=self.max_batch_size,
-            model_name=self.model_name,
-            model_dtype=self.model_torch_dtype,
-            dataset_name=self.dataset_name,
-            dataset_split=self.dataset_split,
-            max_sequence_length=self.max_sequence_length,
-            generation_batch_size=self.generation_batch_size,
-            refresh_interval=self.refresh_interval,
-            deployment_policy=self.deployment_policy,
-            init_file=self.init_file,
-            device_map=gen_device,
-            wandb_logging=wandb_cfg,
-        )
+            self.data_generator = DataGeneratorProcess(
+                shared_buffer=self.shared_buffer,
+                buffer_size=self.buffer_size,
+                n_in_out=self.n_in_out,
+                n_layers=self.n_layers,
+                activation_dim=self.activation_dim,
+                dtype=self.torch_dtype,
+                max_batch_size=self.max_batch_size,
+                model_name=self.model_name,
+                model_dtype=self.model_torch_dtype,
+                dataset_name=self.dataset_name,
+                dataset_split=self.dataset_split,
+                max_sequence_length=self.max_sequence_length,
+                generation_batch_size=self.generation_batch_size,
+                refresh_interval=self.refresh_interval,
+                deployment_policy=self.deployment_policy,
+                init_file=self.init_file,
+                device_map=gen_device,
+                wandb_logging=wandb_cfg,
+                model_arch=self.model_arch,
+            )
 
-        # 3. Start the data generator process
-        logger.info("Starting data generator process...")
-        self.data_generator.start()
-        logger.info("Data generator process started")
+            logger.info("Starting data generator process...")
+            self.data_generator.start()
+            logger.info("Data generator process started")
 
         self.data_loader = torch.utils.data.DataLoader(
             self.shared_buffer,
