@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MoLT Multilayer Feature Dashboard (bundle)</title>
+  <style>
+__BUNDLE_CSS__
+  </style>
+</head>
+<body>
+  <div id="root">Loading…</div>
+
+  <script id="metadata" type="application/json">__METADATA_JSON__</script>
+  <script id="features" type="application/json">__FEATURES_JSON__</script>
+
+  <script>
+"use strict";
+const METADATA = JSON.parse(document.getElementById("metadata").textContent);
+const FEATURES = JSON.parse(document.getElementById("features").textContent);
+
+let sortKey = "layer";
+let sortDir = "asc";
+let layerFilter = "";
+let tierFilter = "";
+let minRate = 0;
+let maxRate = 1;
+
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k === "style") Object.assign(e.style, v);
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (c == null) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function ckptLabel() {
+  const stem = METADATA.ckpt_stem || (METADATA.run_name + "@step" + METADATA.step);
+  return stem + " · " + METADATA.n_layers + " layers";
+}
+
+function entryKey(layer, featureId) {
+  return "L" + layer + "F" + featureId;
+}
+
+// --- Index view -----------------------------------------------------------
+
+function renderIndex() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+
+  root.appendChild(el("h1", {}, "MoLT multilayer feature dashboard"));
+  if (METADATA.prompt) {
+    root.appendChild(el("div", { class: "index-meta" },
+      "Prompt: ",
+      el("code", {}, JSON.stringify(METADATA.prompt))
+    ));
+  }
+  root.appendChild(el("div", { class: "index-meta" },
+    `${METADATA.entries.length} (layer, feature) pairs · ${ckptLabel()} · ` +
+    `${METADATA.n_tokens_collected.toLocaleString()} tokens from ${METADATA.dashboard_dataset}`
+  ));
+
+  // Filter row.
+  const filterRow = el("div", { class: "filter-row" });
+
+  const layerSel = el("select", { id: "layer-filter" });
+  layerSel.appendChild(el("option", { value: "" }, "all"));
+  const uniqueLayers = [...new Set(METADATA.entries.map(e => e.layer))].sort((a, b) => a - b);
+  for (const l of uniqueLayers) {
+    const opt = el("option", { value: String(l) }, `layer ${l}`);
+    if (String(l) === layerFilter) opt.setAttribute("selected", "");
+    layerSel.appendChild(opt);
+  }
+  layerSel.addEventListener("change", () => { layerFilter = layerSel.value; renderIndex(); });
+
+  const tierSel = el("select", { id: "tier-filter" });
+  tierSel.appendChild(el("option", { value: "" }, "all"));
+  const uniqueTiers = [...new Set(METADATA.entries.map(e => e.tier))].sort((a, b) => a - b);
+  for (const t of uniqueTiers) {
+    const opt = el("option", { value: String(t) }, `tier ${t} (rank ${METADATA.ranks[t]})`);
+    if (String(t) === tierFilter) opt.setAttribute("selected", "");
+    tierSel.appendChild(opt);
+  }
+  tierSel.addEventListener("change", () => { tierFilter = tierSel.value; renderIndex(); });
+
+  const minInput = el("input", { type: "number", step: "0.001", min: "0", max: "1", value: String(minRate) });
+  minInput.addEventListener("input", () => { minRate = parseFloat(minInput.value) || 0; renderIndex(); });
+  const maxInput = el("input", { type: "number", step: "0.001", min: "0", max: "1", value: String(maxRate) });
+  maxInput.addEventListener("input", () => {
+    const v = parseFloat(maxInput.value);
+    maxRate = Number.isFinite(v) ? v : 1;
+    renderIndex();
+  });
+
+  filterRow.appendChild(el("label", {}, "layer ", layerSel));
+  filterRow.appendChild(el("label", {}, "tier ", tierSel));
+  filterRow.appendChild(el("label", {}, "min rate ", minInput));
+  filterRow.appendChild(el("label", {}, "max rate ", maxInput));
+  const countSpan = el("span", { id: "count" });
+  filterRow.appendChild(countSpan);
+  root.appendChild(filterRow);
+
+  const filtered = METADATA.entries.filter(r =>
+    (layerFilter === "" || String(r.layer) === layerFilter) &&
+    (tierFilter === "" || String(r.tier) === tierFilter) &&
+    r.activation_rate >= minRate &&
+    r.activation_rate <= maxRate
+  );
+  filtered.sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    if (a.layer !== b.layer) return a.layer - b.layer;
+    return a.feature_id - b.feature_id;
+  });
+
+  countSpan.textContent = `${filtered.length.toLocaleString()} of ${METADATA.entries.length.toLocaleString()} shown`;
+
+  const table = el("table", { class: "features" });
+  const thead = el("thead");
+  const headRow = el("tr");
+  const cols = [
+    ["layer", "layer"],
+    ["feature_id", "feature"],
+    ["tier", "tier"],
+    ["rank", "rank"],
+    ["prompt_peak", "prompt peak"],
+    ["activation_rate", "rate"],
+    ["max_activation", "max act"],
+  ];
+  for (const [key, label] of cols) {
+    const th = el("th", {}, label);
+    th.dataset.key = key;
+    if (key === sortKey) th.classList.add(sortDir === "asc" ? "sorted-asc" : "sorted-desc");
+    th.addEventListener("click", () => {
+      if (sortKey === key) sortDir = sortDir === "desc" ? "asc" : "desc";
+      else { sortKey = key; sortDir = (key === "feature_id" || key === "layer" || key === "tier") ? "asc" : "desc"; }
+      renderIndex();
+    });
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  for (const r of filtered) {
+    const tr = el("tr");
+    if (r.activation_rate === 0) tr.classList.add("dead");
+    const link = el("a", { href: `#entry=${entryKey(r.layer, r.feature_id)}` }, `#${r.feature_id}`);
+    tr.appendChild(el("td", { class: "num" }, String(r.layer)));
+    tr.appendChild(el("td", {}, link));
+    tr.appendChild(el("td", { class: "num" }, String(r.tier)));
+    tr.appendChild(el("td", { class: "num" }, String(r.rank)));
+    tr.appendChild(el("td", { class: "num" },
+      r.prompt_peak != null ? r.prompt_peak.toFixed(3) : "—"));
+    tr.appendChild(el("td", { class: "num" }, (r.activation_rate * 100).toFixed(3) + "%"));
+    tr.appendChild(el("td", { class: "num" }, r.max_activation.toFixed(3)));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  root.appendChild(table);
+}
+
+// --- Detail view ----------------------------------------------------------
+
+function renderDetail(key) {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+
+  const f = FEATURES[key];
+  if (!f) {
+    root.appendChild(el("div", { class: "dead" }, `Entry ${key} not in bundle.`));
+    return;
+  }
+
+  document.title = `L${f.layer} #${f.feature_id} — MoLT multilayer`;
+
+  const topbar = el("div", { class: "topbar" });
+  topbar.appendChild(el("a", { href: "#index" }, "← index"));
+  topbar.appendChild(el("span", { class: "ckpt" }, ckptLabel()));
+  root.appendChild(topbar);
+
+  root.appendChild(el("h1", {}, `Layer ${f.layer} · Feature #${f.feature_id}`));
+
+  const meta = el("div", { class: "meta" });
+  meta.appendChild(el("span", {}, `tier ${f.tier} · rank ${f.rank}`));
+  meta.appendChild(el("span", {}, `activation rate: ${(f.activation_rate * 100).toFixed(3)}%`));
+  meta.appendChild(el("span", {}, `max activation: ${f.max_activation.toFixed(3)}`));
+  if (f.prompt_peak != null) {
+    meta.appendChild(el("span", {}, `prompt peak: ${f.prompt_peak.toFixed(3)}`));
+  }
+  meta.appendChild(el("span", {}, `examples: ${f.examples.length}`));
+  root.appendChild(meta);
+
+  // Sibling navigation: prev/next in the metadata.entries order.
+  const order = METADATA.entries;
+  const idx = order.findIndex(e => e.layer === f.layer && e.feature_id === f.feature_id);
+  if (idx >= 0) {
+    const nav = el("div", { class: "meta" });
+    if (idx > 0) {
+      const p = order[idx - 1];
+      nav.appendChild(el("a", { href: `#entry=${entryKey(p.layer, p.feature_id)}` },
+        `← L${p.layer} #${p.feature_id}`));
+    }
+    if (idx < order.length - 1) {
+      const n = order[idx + 1];
+      nav.appendChild(el("a", { href: `#entry=${entryKey(n.layer, n.feature_id)}` },
+        `L${n.layer} #${n.feature_id} →`));
+    }
+    root.appendChild(nav);
+  }
+
+  if (f.prompt_tokens && f.prompt_tokens.length > 0) {
+    root.appendChild(el("h2", {}, "Prompt activation"));
+    root.appendChild(renderPromptTrace(f));
+  }
+
+  root.appendChild(el("h2", {}, "Top activating examples"));
+
+  if (f.examples.length === 0) {
+    root.appendChild(el("div", { class: "dead" },
+      "This transform did not fire on any token in the sampled corpus."));
+    return;
+  }
+
+  const examples = el("div");
+  for (const ex of f.examples) examples.appendChild(renderExample(ex, f.max_activation));
+  root.appendChild(examples);
+}
+
+function renderPromptTrace(f) {
+  const wrap = el("div", { class: "example" });
+  wrap.appendChild(el("div", { class: "example-header" },
+    `prompt peak ${f.prompt_peak.toFixed(3)} at position ${f.prompt_peak_pos}`
+  ));
+  const tokens = el("div", { class: "tokens" });
+  const scale = f.max_activation > 0 ? f.max_activation : 1.0;
+  for (let i = 0; i < f.prompt_tokens.length; i++) {
+    const span = el("span", { class: "tok" });
+    if (i === f.prompt_peak_pos) span.classList.add("peak");
+    const a = f.prompt_activations[i];
+    const alpha = Math.max(0, Math.min(1, a / scale));
+    span.style.backgroundColor = `rgba(50, 100, 220, ${alpha.toFixed(3)})`;
+    span.title = `act ${a.toFixed(4)}`;
+    span.textContent = f.prompt_tokens[i] === "" ? " " : f.prompt_tokens[i];
+    tokens.appendChild(span);
+  }
+  wrap.appendChild(tokens);
+  return wrap;
+}
+
+function renderExample(ex, globalMax) {
+  const wrap = el("div", { class: "example" });
+  wrap.appendChild(el("div", { class: "example-header" },
+    `peak ${ex.peak_activation.toFixed(3)} · position ${ex.peak_token_pos} of ${ex.tokens.length}`
+  ));
+  const tokens = el("div", { class: "tokens" });
+  const scale = globalMax > 0 ? globalMax : 1.0;
+  for (let i = 0; i < ex.tokens.length; i++) {
+    const span = el("span", { class: "tok" });
+    if (i === ex.peak_token_pos) span.classList.add("peak");
+    const a = ex.activations[i];
+    const alpha = Math.max(0, Math.min(1, a / scale));
+    span.style.backgroundColor = `rgba(220, 50, 50, ${alpha.toFixed(3)})`;
+    span.title = `act ${a.toFixed(4)}`;
+    span.textContent = ex.tokens[i] === "" ? " " : ex.tokens[i];
+    tokens.appendChild(span);
+  }
+  wrap.appendChild(tokens);
+  return wrap;
+}
+
+// --- Routing --------------------------------------------------------------
+
+function route() {
+  const h = location.hash;
+  if (h.startsWith("#entry=")) {
+    renderDetail(h.slice("#entry=".length));
+  } else {
+    renderIndex();
+  }
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener("hashchange", route);
+route();
+  </script>
+</body>
+</html>
