@@ -52,12 +52,15 @@ class Molt(nn.Module):
     def transform_norm(self):
         norms = []
         for U, V in zip(self.Us, self.Vs):
-            uv = einops.einsum(
-                U,
-                V,
-                "n_transforms d_transform d_acts_out, n_transforms d_acts_in d_transform -> n_transforms d_acts_in d_acts_out",
-            )
-            norms.append(torch.norm(uv, dim=(1, 2)))
+            # ||V @ U||_F^2 = trace((V^T V)(U U^T)). V^T V and U U^T are
+            # (rank, rank), so this avoids stashing the (n_transforms,
+            # d_acts, d_acts) product in the autograd graph — saves ~80 GB
+            # of activation memory at d_acts=2560 and modest rank lists.
+            # U: (n_transforms, rank, d_acts_out)
+            # V: (n_transforms, d_acts_in, rank)
+            VtV = einops.einsum(V, V, "n d r1, n d r2 -> n r1 r2")
+            UUt = einops.einsum(U, U, "n r1 d, n r2 d -> n r1 r2")
+            norms.append(torch.sqrt((VtV * UUt).sum(dim=(1, 2))))
         return torch.cat(norms, dim=0)
 
     def forward(
@@ -115,11 +118,13 @@ class MultiLayerMolt(nn.Module):
         input_standardizer: nn.Module,
         output_standardizer: nn.Module,
         ranks: list[int] = [512, 256, 128, 64, 32],
+        use_activation_checkpointing: bool = False,
     ):
         super().__init__()
         self.n_layers = n_layers
         self.input_standardizer = input_standardizer
         self.output_standardizer = output_standardizer
+        self.use_activation_checkpointing = use_activation_checkpointing
         self.molts = nn.ModuleList(
             [
                 Molt(
@@ -154,7 +159,14 @@ class MultiLayerMolt(nn.Module):
     ]:
         gates, recons_norms, reconss = [], [], []
         for layer in range(self.n_layers):
-            gate, recons_norm, recons = self.molts[layer](acts[:, layer], layer=layer)
+            molt = self.molts[layer]
+            layer_acts = acts[:, layer]
+            if self.use_activation_checkpointing and self.training:
+                gate, recons_norm, recons = torch.utils.checkpoint.checkpoint(
+                    molt, layer_acts, layer, use_reentrant=False
+                )
+            else:
+                gate, recons_norm, recons = molt(layer_acts, layer=layer)
             gates.append(gate)
             recons_norms.append(recons_norm)
             reconss.append(recons)
