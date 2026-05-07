@@ -46,7 +46,7 @@ class PromptTrace:
 
 
 def _ckpt_stem_multilayer(meta: MultiLayerCheckpointMetadata) -> str:
-    raw = f"{meta.run_name}_step{meta.step}"
+    raw = f"{meta.run_name}_{meta.step}"
     return "".join(c if (c.isalnum() or c in "-_.") else "-" for c in raw).strip("-")
 
 
@@ -60,6 +60,8 @@ def make_multilayer_bundle(
     prompt_traces: Optional[dict[tuple[int, int], PromptTrace]] = None,
     dataset_name: str = "Skylion007/openwebtext",
     window: int = 32,
+    descriptions: Optional[dict[tuple[int, int], str]] = None,
+    base_model_name: Optional[str] = None,
 ) -> Path:
     """Write a portable bundle.html covering only `selected` (layer, feature) pairs.
 
@@ -97,8 +99,12 @@ def make_multilayer_bundle(
         summary = coll.feature_summary(feature_id)
         body = window_feature_summary(summary, tokenizer, window=window)
         body["layer"] = layer
-        body["tier"] = meta.feature_tier[feature_id]
         body["rank"] = meta.feature_rank[feature_id]
+
+        description = ""
+        if descriptions is not None:
+            description = descriptions.get((layer, feature_id), "") or ""
+        body["description"] = description
 
         prompt_peak = None
         prompt_peak_pos = None
@@ -118,12 +124,12 @@ def make_multilayer_bundle(
             "key": key,
             "layer": layer,
             "feature_id": feature_id,
-            "tier": meta.feature_tier[feature_id],
             "rank": meta.feature_rank[feature_id],
             "activation_rate": float(body["activation_rate"]),
             "max_activation": float(body["max_activation"]),
             "prompt_peak": prompt_peak,
             "prompt_peak_pos": prompt_peak_pos,
+            "description": description,
         })
 
     metadata = {
@@ -132,6 +138,7 @@ def make_multilayer_bundle(
         "run_name": meta.run_name,
         "step": meta.step,
         "ckpt_stem": _ckpt_stem_multilayer(meta),
+        "base_model_name": base_model_name,
         "n_layers": meta.n_layers,
         "n_features_per_layer": meta.n_features,
         "ranks": list(meta.ranks),

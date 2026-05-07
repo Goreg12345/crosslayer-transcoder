@@ -34,6 +34,7 @@ from crosslayer_transcoder.feature_dash.multilayer import (
     MultiLayerCheckpointMetadata,
     MultiLayerLMRunner,
     collect_multilayer_features,
+    download_multilayer_from_hf,
     find_latest_step,
     load_multilayer_molt,
 )
@@ -41,20 +42,28 @@ from crosslayer_transcoder.feature_dash.multilayer_bundle import (
     PromptTrace,
     make_multilayer_bundle,
 )
+from crosslayer_transcoder.feature_dash.annotate import (
+    FeatureAnnotation,
+    annotate_features,
+    select_features_for_annotation,
+)
 
 __all__ = [
     "BaseLMRunner",
     "DEFAULT_HF_REPO",
+    "FeatureAnnotation",
     "FeatureSummary",
     "GateCollector",
     "MoltCheckpointMetadata",
     "MultiLayerCheckpointMetadata",
     "MultiLayerLMRunner",
     "PromptTrace",
+    "annotate_features",
     "collect_features",
     "collect_multilayer_features",
     "copy_render_assets",
     "default_bundle_filename",
+    "download_multilayer_from_hf",
     "dump_dashboard",
     "find_latest_step",
     "infer_molt_arch",
@@ -64,6 +73,7 @@ __all__ = [
     "make_bundle",
     "make_bundle_from_disk",
     "make_multilayer_bundle",
+    "select_features_for_annotation",
     "window_example",
     "window_feature_summary",
 ]

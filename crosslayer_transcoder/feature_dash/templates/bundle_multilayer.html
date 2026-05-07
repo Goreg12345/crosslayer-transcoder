@@ -21,7 +21,7 @@ const FEATURES = JSON.parse(document.getElementById("features").textContent);
 let sortKey = "layer";
 let sortDir = "asc";
 let layerFilter = "";
-let tierFilter = "";
+let rankFilter = "";
 let minRate = 0;
 let maxRate = 1;
 
@@ -41,8 +41,9 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function ckptLabel() {
-  const stem = METADATA.ckpt_stem || (METADATA.run_name + "@step" + METADATA.step);
-  return stem + " · " + METADATA.n_layers + " layers";
+  const stem = METADATA.ckpt_stem || (METADATA.run_name + "@" + METADATA.step);
+  const base = METADATA.base_model_name ? METADATA.base_model_name + " · " : "";
+  return base + stem + " · " + METADATA.n_layers + " layers";
 }
 
 function entryKey(layer, featureId) {
@@ -62,8 +63,11 @@ function renderIndex() {
       el("code", {}, JSON.stringify(METADATA.prompt))
     ));
   }
+  const totalFeatures = METADATA.n_features_per_layer * METADATA.n_layers;
   root.appendChild(el("div", { class: "index-meta" },
-    `${METADATA.entries.length} (layer, feature) pairs · ${ckptLabel()} · ` +
+    `${METADATA.entries.length.toLocaleString()} of ${totalFeatures.toLocaleString()} ` +
+    `(layer, feature) pairs · ${METADATA.n_features_per_layer.toLocaleString()} features × ` +
+    `${METADATA.n_layers} layers · ${ckptLabel()} · ` +
     `${METADATA.n_tokens_collected.toLocaleString()} tokens from ${METADATA.dashboard_dataset}`
   ));
 
@@ -80,15 +84,15 @@ function renderIndex() {
   }
   layerSel.addEventListener("change", () => { layerFilter = layerSel.value; renderIndex(); });
 
-  const tierSel = el("select", { id: "tier-filter" });
-  tierSel.appendChild(el("option", { value: "" }, "all"));
-  const uniqueTiers = [...new Set(METADATA.entries.map(e => e.tier))].sort((a, b) => a - b);
-  for (const t of uniqueTiers) {
-    const opt = el("option", { value: String(t) }, `tier ${t} (rank ${METADATA.ranks[t]})`);
-    if (String(t) === tierFilter) opt.setAttribute("selected", "");
-    tierSel.appendChild(opt);
+  const rankSel = el("select", { id: "rank-filter" });
+  rankSel.appendChild(el("option", { value: "" }, "all"));
+  const uniqueRanks = [...new Set(METADATA.entries.map(e => e.rank))].sort((a, b) => b - a);
+  for (const r of uniqueRanks) {
+    const opt = el("option", { value: String(r) }, `rank ${r}`);
+    if (String(r) === rankFilter) opt.setAttribute("selected", "");
+    rankSel.appendChild(opt);
   }
-  tierSel.addEventListener("change", () => { tierFilter = tierSel.value; renderIndex(); });
+  rankSel.addEventListener("change", () => { rankFilter = rankSel.value; renderIndex(); });
 
   const minInput = el("input", { type: "number", step: "0.001", min: "0", max: "1", value: String(minRate) });
   minInput.addEventListener("input", () => { minRate = parseFloat(minInput.value) || 0; renderIndex(); });
@@ -100,7 +104,7 @@ function renderIndex() {
   });
 
   filterRow.appendChild(el("label", {}, "layer ", layerSel));
-  filterRow.appendChild(el("label", {}, "tier ", tierSel));
+  filterRow.appendChild(el("label", {}, "rank ", rankSel));
   filterRow.appendChild(el("label", {}, "min rate ", minInput));
   filterRow.appendChild(el("label", {}, "max rate ", maxInput));
   const countSpan = el("span", { id: "count" });
@@ -109,7 +113,7 @@ function renderIndex() {
 
   const filtered = METADATA.entries.filter(r =>
     (layerFilter === "" || String(r.layer) === layerFilter) &&
-    (tierFilter === "" || String(r.tier) === tierFilter) &&
+    (rankFilter === "" || String(r.rank) === rankFilter) &&
     r.activation_rate >= minRate &&
     r.activation_rate <= maxRate
   );
@@ -129,8 +133,8 @@ function renderIndex() {
   const cols = [
     ["layer", "layer"],
     ["feature_id", "feature"],
-    ["tier", "tier"],
     ["rank", "rank"],
+    ["description", "description"],
     ["prompt_peak", "prompt peak"],
     ["activation_rate", "rate"],
     ["max_activation", "max act"],
@@ -141,7 +145,7 @@ function renderIndex() {
     if (key === sortKey) th.classList.add(sortDir === "asc" ? "sorted-asc" : "sorted-desc");
     th.addEventListener("click", () => {
       if (sortKey === key) sortDir = sortDir === "desc" ? "asc" : "desc";
-      else { sortKey = key; sortDir = (key === "feature_id" || key === "layer" || key === "tier") ? "asc" : "desc"; }
+      else { sortKey = key; sortDir = (key === "feature_id" || key === "layer" || key === "rank") ? "asc" : "desc"; }
       renderIndex();
     });
     headRow.appendChild(th);
@@ -156,8 +160,16 @@ function renderIndex() {
     const link = el("a", { href: `#entry=${entryKey(r.layer, r.feature_id)}` }, `#${r.feature_id}`);
     tr.appendChild(el("td", { class: "num" }, String(r.layer)));
     tr.appendChild(el("td", {}, link));
-    tr.appendChild(el("td", { class: "num" }, String(r.tier)));
     tr.appendChild(el("td", { class: "num" }, String(r.rank)));
+    const descCell = el("td", { class: "desc" });
+    if (r.description) {
+      descCell.textContent = r.description;
+      descCell.title = r.description;
+    } else {
+      descCell.textContent = "—";
+      descCell.style.color = "#888";
+    }
+    tr.appendChild(descCell);
     tr.appendChild(el("td", { class: "num" },
       r.prompt_peak != null ? r.prompt_peak.toFixed(3) : "—"));
     tr.appendChild(el("td", { class: "num" }, (r.activation_rate * 100).toFixed(3) + "%"));
@@ -189,8 +201,15 @@ function renderDetail(key) {
 
   root.appendChild(el("h1", {}, `Layer ${f.layer} · Feature #${f.feature_id}`));
 
+  if (f.description) {
+    root.appendChild(el("div", { class: "feature-desc" },
+      el("strong", {}, "Description: "),
+      f.description
+    ));
+  }
+
   const meta = el("div", { class: "meta" });
-  meta.appendChild(el("span", {}, `tier ${f.tier} · rank ${f.rank}`));
+  meta.appendChild(el("span", {}, `rank ${f.rank}`));
   meta.appendChild(el("span", {}, `activation rate: ${(f.activation_rate * 100).toFixed(3)}%`));
   meta.appendChild(el("span", {}, `max activation: ${f.max_activation.toFixed(3)}`));
   if (f.prompt_peak != null) {

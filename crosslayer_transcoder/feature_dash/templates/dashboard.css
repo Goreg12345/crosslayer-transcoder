@@ -40,3 +40,22 @@ table.features a:hover { text-decoration: underline; }
 .index-meta { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
 .filter-row { display: flex; gap: 0.75rem; align-items: center; margin: 0.75rem 0 1rem; font-size: 0.9rem; }
 .filter-row input { padding: 0.25rem 0.5rem; font-size: 0.9rem; width: 6rem; }
+
+table.features td.desc {
+  max-width: 38rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #2c3e50;
+  font-size: 0.85rem;
+}
+
+.feature-desc {
+  background: #f0f7ff;
+  border-left: 3px solid #2a5db0;
+  padding: 0.6rem 0.9rem;
+  margin: 0.5rem 0 1rem;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
