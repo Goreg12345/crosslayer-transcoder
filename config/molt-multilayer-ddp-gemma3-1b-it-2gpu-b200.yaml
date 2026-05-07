@@ -1,0 +1,192 @@
+# Multi-layer MoLT training on Gemma3-1B-it (text decoder), 2xB200 DDP.
+#
+# Topology: 2 ranks, each rank co-locates a Gemma3-1B-it activation generator
+# and the MoLT trainer on its own B200 (179 GB usable VRAM each).
+#
+# Diff vs the 4B-it B200 sibling (molt-multilayer-ddp-gemma3-4b-it-2gpu-b200.yaml):
+#   * model_name: gemma-3-4b-it -> gemma-3-1b-it
+#   * n_layers: 34 -> 26   (Gemma3-1B has 26 transformer blocks)
+#   * d_acts:   2560 -> 1152
+#   * use_activation_checkpointing: true -> false
+#       The 4B-it config needed ckpt to keep per-layer raw_recons +
+#       weighted_recons stash from overflowing on B200. At d_acts=1152 and
+#       n_layers=26 the same stash is ~3 GB at bf16 (vs 136 GB on 4B), so
+#       ckpt only buys us a 30% per-step penalty for no benefit.
+#   * Standardizer n_layers / activation_dim updated to 26 / 1152.
+#   * Wandb / checkpoint / HF paths renamed to *-1b-it-*.
+#
+# Activation paths (model_arch=gemma3, identical to 4B):
+#   in  = layers[i].pre_feedforward_layernorm.input
+#   out = layers[i].post_feedforward_layernorm.output
+#
+# Sizing notes (per B200, 179 GB) for ranks=[128,64,32,16], N=50, batch=1024:
+#   Gemma3-1B in bf16              ≈   2 GB    (in the generator subprocess)
+#   MoLT params (1.5 B, fp32)      ≈   6 GB
+#   Grads (fp32)                   ≈   6 GB
+#   Adam moments (m+v, fp32)       ≈  12 GB
+#   DDP grad buffer (fp32)         ≈   6 GB
+#   bf16 working / cuBLAS          ≈   5 GB
+#   Per-step autograd at batch=1024≈   3–5 GB  (no ckpt — d_acts=1152 keeps
+#                                    per-layer raw + weighted recon stash
+#                                    small enough to live in the graph)
+#   Trainer total                  ≈  40–45 GB
+#   Generator at gen=8             ≈  10–15 GB
+#   Total per B200                 ≈  55–60 GB  (~120 GB headroom)
+#
+# /dev/shm budget:
+#   100k samples/rank × 26 × 2 × 1152 × 4 B ≈ 24 GB/rank × 2 ranks ≈ 48 GB
+#   (verify with `df -h /dev/shm` on the target box).
+#
+# Per-layer checkpoints are uploaded to HF (kylelovesllms/molt-sweeps under
+# molt-multilayer-gemma3-1b-it-N50-100M-2gpu-b200-fp32weights/) and deleted
+# locally — the local `checkpoints/` dir won't fill up that way.
+#
+# Expected wall clock: ~6–10 hours. The 4B-it B200 reference runs at 0.52 it/s
+# with ckpt on; 1B at ~3x fewer params and no ckpt should hit 1.5–2.0 it/s
+# (49000 steps -> ~7–9 hours), but B200 perf scaling on this workload has
+# been below predicted, so estimate is wider than usual.
+
+seed_everything: 42
+
+trainer:
+  # 100M tokens at effective batch 2 × 1024 = 2048 -> ~48830 optimizer steps;
+  # round to 49000. Lightning's max_steps counts optimizer steps.
+  max_steps: 49_000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [0, 1]
+  strategy: "ddp"
+  accumulate_grad_batches: 1
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-multilayer-gemma3-1b-it-N50-100M-ddp-2gpu-b200"
+      save_dir: "./wandb"
+  callbacks:
+    # 10M tokens at effective batch 2048 ≈ 4882 steps; round to 4900.
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-multilayer-gemma3-1b-it-N50-100M-ddp-2gpu-b200"
+        every_n_train_steps: 4900
+        hf_repo_id: "kylelovesllms/molt-sweeps"
+        hf_repo_path: "molt-multilayer-gemma3-1b-it-N50-100M-2gpu-b200-fp32weights"
+        delete_local_after_upload: true
+        # Effective batch = 2 ranks × 1024 = 2048 tokens/step. Filenames use
+        # tokens-processed (e.g. _tokens0010M035K) instead of step number.
+        tokens_per_step: 2048
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.MultiLayerMolt
+      init_args:
+        n_layers: 26
+        d_acts: 1152
+        # N=50 with ranks=[128, 64, 32, 16].
+        # n_features per layer = 50*(1+2+4+8) = 750.
+        # Per-layer params: Us+Vs ≈ 50*2*(1*128 + 2*64 + 4*32 + 8*16)*1152
+        #   ≈ 59 M; ×26 layers ≈ 1.5 B.
+        N: 50
+        ranks: [128, 64, 32, 16]
+        # No activation checkpointing — d_acts=1152 × n_layers=26 keeps the
+        # per-layer recon stash small (~3 GB bf16 at batch=1024), so we save
+        # the ~30% per-step ckpt penalty.
+        use_activation_checkpointing: false
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 750
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 26
+            activation_dim: 1152
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 26
+            activation_dim: 1152
+
+    replacement_model: null
+    dead_features: null
+
+    learning_rate: 2e-4
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    # Per-rank buffer ≈ 24 GB; /dev/shm under DDP holds 2 of these.
+    buffer_size: 100_000
+    n_in_out: 2
+    n_layers: 26
+    activation_dim: 1152
+    dtype: "float32"
+    max_batch_size: 50000
+
+    model_name: "google/gemma-3-1b-it"
+    # bf16 generator: Gemma3-1B params + forward + KV fit easily with massive
+    # headroom for the MoLT trainer on the same GPU.
+    model_dtype: "bfloat16"
+
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    max_sequence_length: 1024
+
+    # Gen batch 8 — leaves the generator at ~10–15 GB on the GPU. Trainer at
+    # batch=1024 consumes ~4k acts/sec across 2 ranks at 2 it/s; gen=8 emits
+    # well above that for a 1B model, so no throughput gain from pushing
+    # higher.
+    generation_batch_size: 8
+    refresh_interval: 0.1
+
+    shared_memory_name: "activation_buffer"  # datamodule appends _rank{N} under DDP
+    timeout_seconds: 60
+
+    # Per-GPU batch. Effective batch under DDP = 2 × 1024 = 2048
+    # (matches the 4B-it B200 sibling).
+    batch_size: 1024
+    num_workers: 4
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+
+    # Wait for ≥1% buffer fill before training starts so step 0 sees real data.
+    minimum_fill_threshold: 0.01
+
+    use_shared_memory: true
+
+    device_map: "cuda:0"  # rank-relative under DDP; datamodule resolves per rank
+    deployment_policy: "gpu_only"
+    model_arch: "gemma3"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator-gemma3-1b-it-ddp-2gpu-b200"  # datamodule appends -rank{N}
+      tags: ["data-generation", "gemma3"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null

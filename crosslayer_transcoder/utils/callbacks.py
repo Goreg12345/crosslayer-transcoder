@@ -114,6 +114,7 @@ class MoltPerLayerCheckpointCallback(L.Callback):
         hf_repo_id: Optional[str] = None,
         hf_repo_path: Optional[str] = None,
         delete_local_after_upload: bool = False,
+        tokens_per_step: Optional[int] = None,
     ):
         super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
@@ -121,6 +122,19 @@ class MoltPerLayerCheckpointCallback(L.Callback):
         self.hf_repo_id = hf_repo_id
         self.hf_repo_path = (hf_repo_path or "").strip("/")
         self.delete_local_after_upload = delete_local_after_upload
+        # If set, periodic-checkpoint filenames use processed-tokens instead
+        # of optimizer-step. Pass effective batch (per_rank_batch * world_size
+        # * accumulate_grad_batches) — the callback can't infer it reliably.
+        self.tokens_per_step = tokens_per_step
+
+    @staticmethod
+    def _format_tokens(n: int) -> str:
+        # Zero-padded millions for lexicographic sortability up to 9999M;
+        # add K remainder only when non-zero so clean 10M-multiples stay tidy.
+        m, rem = divmod(n, 1_000_000)
+        if rem == 0:
+            return f"{m:04d}M"
+        return f"{m:04d}M{rem // 1_000:03d}K"
 
     @staticmethod
     def _wandb_run_name(trainer) -> Optional[str]:
@@ -128,9 +142,19 @@ class MoltPerLayerCheckpointCallback(L.Callback):
         for lg in loggers:
             if lg is None:
                 continue
+            # Prefer init-arg lookups — they're the same on every rank, unlike
+            # `.experiment` which is a _DummyExperiment on non-zero ranks
+            # (whose __getattr__ returns its `nop` method, stringifying into
+            # the filename if used directly).
+            for attr in ("_name", "_wandb_init"):
+                v = getattr(lg, attr, None)
+                if isinstance(v, dict):
+                    v = v.get("name")
+                if isinstance(v, str) and v:
+                    return v
             exp = getattr(lg, "experiment", None)
             name = getattr(exp, "name", None) if exp is not None else None
-            if name:
+            if isinstance(name, str) and name:
                 return name
         return None
 
@@ -188,11 +212,22 @@ class MoltPerLayerCheckpointCallback(L.Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if self.every_n_train_steps is None:
             return
+        # DDP: only the global-zero rank saves & uploads. Other ranks have a
+        # _DummyExperiment as their wandb logger, so attribute access (e.g.
+        # `.name`) returns a bound `nop` method that would corrupt filenames.
+        if not trainer.is_global_zero:
+            return
         step = trainer.global_step
         if step > 0 and step % self.every_n_train_steps == 0:
-            saved = self._save(trainer, pl_module, suffix=f"_step{step}")
+            if self.tokens_per_step is not None:
+                suffix = f"_tokens{self._format_tokens(step * self.tokens_per_step)}"
+            else:
+                suffix = f"_step{step}"
+            saved = self._save(trainer, pl_module, suffix=suffix)
             self._offload_to_hf(saved)
 
     def on_train_end(self, trainer, pl_module):
+        if not trainer.is_global_zero:
+            return
         # Final checkpoint stays local — don't offload/delete.
         self._save(trainer, pl_module, suffix="")

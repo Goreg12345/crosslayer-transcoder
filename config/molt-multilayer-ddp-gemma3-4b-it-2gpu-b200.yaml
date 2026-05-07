@@ -83,6 +83,9 @@ trainer:
         hf_repo_id: "kylelovesllms/molt-sweeps"
         hf_repo_path: "molt-multilayer-gemma3-4b-it-N50-100M-2gpu-b200-fp32weights"
         delete_local_after_upload: true
+        # Effective batch = 2 ranks × 1024 = 2048 tokens/step. Filenames use
+        # tokens-processed (e.g. _tokens0010M035K) instead of step number.
+        tokens_per_step: 2048
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
