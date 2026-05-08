@@ -2,21 +2,35 @@
 
 Pipeline:
 
-  1. Load all per-layer MoLT checkpoints (one `MultiLayerMolt`).
-  2. Run GPT-2 + MoLT on the prompt to find the top-K activating features
-     per layer per token (same logic as `scripts/analyze_prompt.py`).
-  3. Stream a corpus through GPT-2 + MoLT once to fill a `GateCollector`
-     per layer with max-activating examples for *every* feature.
+  1. Load all per-layer MoLT checkpoints (one `MultiLayerMolt`). Checkpoints
+     can be loaded from a local directory or downloaded from a folder inside
+     a Hugging Face dataset/model repo.
+  2. Run the base LM (GPT-2, Gemma 3, …) + MoLT on the prompt to find the
+     top-K activating features per layer per token.
+  3. Stream a corpus through the base LM + MoLT once to fill a
+     `GateCollector` per layer with max-activating examples for *every*
+     feature.
   4. Splice out only the (layer, feature) pairs that fired on the prompt
      and write a single self-contained `bundle.html` that opens by
      double-click.
 
-Example:
+Examples:
+    # GPT-2 (local checkpoints)
     uv run python scripts/analyze_prompt_dashboard.py \\
         --prompt "Translate to Spanish: cat ->" \\
         --topk 8 \\
         --n-sequences 256 --seq-len 128 --device cpu \\
         --out feature_dash/translate-spanish-cat
+
+    # Gemma 3 1B-it (HF folder download)
+    uv run python scripts/analyze_prompt_dashboard.py \\
+        --prompt "1+3=" \\
+        --hf-folder molt-multilayer-gemma3-1b-it-N50-100M-4gpu-b200-fp32weights \\
+        --run-name molt-multilayer-gemma3-1b-it-N50-100M-ddp-4gpu-b200 \\
+        --base-model-name google/gemma-3-1b-it \\
+        --dataset-name HuggingFaceFW/fineweb-edu --dataset-config sample-10BT \\
+        --dtype bfloat16 \\
+        --out feature_dash/gemma3-1b-prompt-1+3=
 """
 
 from __future__ import annotations
@@ -27,12 +41,17 @@ import sys
 from pathlib import Path
 
 import torch
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from transformers import AutoTokenizer
 
-from crosslayer_transcoder.feature_dash.collect import _decode_token
+from crosslayer_transcoder.feature_dash.collect import (
+    GateCollector,
+    _decode_token,
+    _iter_token_batches,
+)
 from crosslayer_transcoder.feature_dash.multilayer import (
     MultiLayerLMRunner,
     collect_multilayer_features,
+    download_multilayer_from_hf,
     find_latest_step,
     load_multilayer_molt,
 )
@@ -48,14 +67,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--prompt", required=True)
-    p.add_argument("--ckpt-dir", default="checkpoints/molt-multilayer-N10-100M")
-    p.add_argument("--run-name", default="molt-multilayer-N10-100M")
-    p.add_argument("--step", type=int, default=None,
-                   help="checkpoint step (default: latest)")
+
+    # Either local --ckpt-dir or remote --hf-folder.
+    p.add_argument("--ckpt-dir", default=None,
+                   help="local directory holding per-layer .pt files; mutually exclusive with --hf-folder")
+    p.add_argument("--hf-repo", default="kylelovesllms/molt-sweeps",
+                   help="HF repo to download the per-layer .pt files from (with --hf-folder)")
+    p.add_argument("--hf-folder", default=None,
+                   help="folder inside --hf-repo holding the per-layer .pt files")
+    p.add_argument("--run-name", required=True,
+                   help="filename prefix shared by every per-layer .pt (e.g. molt-multilayer-N10-100M)")
+    p.add_argument("--step", default=None,
+                   help="checkpoint suffix like 'step36000' or 'tokens0100M352K' (default: latest)")
+
     p.add_argument("--topk", type=int, default=8,
                    help="top-K features per (layer, token) to include in the bundle")
-    p.add_argument("--base-model-name", default="openai-community/gpt2")
+    p.add_argument("--base-model-name", default="openai-community/gpt2",
+                   help="HF model name of the base LM whose residuals MoLT was trained on")
     p.add_argument("--dataset-name", default="Skylion007/openwebtext")
+    p.add_argument("--dataset-config", default=None,
+                   help="HF datasets config name (some datasets need this, e.g. fineweb-edu sample-10BT)")
     p.add_argument("--dataset-split", default="train")
     p.add_argument("--n-sequences", type=int, default=512,
                    help="corpus sequences to stream for max-activating examples")
@@ -67,11 +98,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="tokens of context on each side of the peak")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--dtype", default="float32",
-                   choices=["float32", "float16", "bfloat16"])
+                   choices=["float32", "float16", "bfloat16"],
+                   help="dtype for the base LM forward pass (MoLT stays in float32)")
     p.add_argument("--out", required=True,
                    help="output directory; bundle.html written inside")
     p.add_argument("-v", "--verbose", action="store_true")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+
+    if (args.ckpt_dir is None) == (args.hf_folder is None):
+        p.error("exactly one of --ckpt-dir or --hf-folder must be provided")
+    return args
 
 
 _DTYPE = {
@@ -88,12 +124,12 @@ def _gates_for_prompt(
     prompt: str,
     device: str,
     dtype: torch.dtype,
+    tokenizer,
 ) -> tuple[list[str], torch.Tensor]:
-    """Run GPT-2 on `prompt` and compute MoLT gates for every layer.
+    """Run the base LM on `prompt` and compute MoLT gates for every layer.
 
     Returns (token strings, gates tensor of shape (n_layers, seq_len, n_features)).
     """
-    tokenizer = GPT2TokenizerFast.from_pretrained(base_model_name)
     runner = MultiLayerLMRunner(
         model_name=base_model_name,
         n_layers=molt.n_layers,
@@ -150,6 +186,104 @@ def _select_topk_per_token(
     return selected, best
 
 
+def _collect_with_optional_config(
+    args: argparse.Namespace,
+    molt,
+    tokenizer,
+    dtype: torch.dtype,
+) -> list[GateCollector]:
+    """Stream a corpus once and fill one `GateCollector` per layer.
+
+    `collect_multilayer_features` uses `_iter_token_batches`, which doesn't
+    accept a `name=` config; for datasets that need one (e.g. fineweb-edu
+    `sample-10BT`) we replicate the loop inline.
+    """
+    if not args.dataset_config:
+        return collect_multilayer_features(
+            molt=molt,
+            base_model_name=args.base_model_name,
+            dataset_name=args.dataset_name,
+            dataset_split=args.dataset_split,
+            n_sequences=args.n_sequences,
+            seq_len=args.seq_len,
+            batch_size=args.batch_size,
+            top_k=args.top_k_examples,
+            device=args.device,
+            dtype=dtype,
+            log_every=8 if args.verbose else 0,
+            tokenizer=tokenizer,
+        )
+
+    from datasets import load_dataset
+
+    ds = load_dataset(
+        args.dataset_name,
+        name=args.dataset_config,
+        split=args.dataset_split,
+        streaming=True,
+    )
+
+    runner = MultiLayerLMRunner(
+        model_name=args.base_model_name,
+        n_layers=molt.n_layers,
+        device=args.device,
+        dtype=dtype,
+    )
+    molt = molt.to(args.device)
+    collectors = [
+        GateCollector(
+            n_features=molt.n_features,
+            top_k=args.top_k_examples,
+            seq_len=args.seq_len,
+        )
+        for _ in range(molt.n_layers)
+    ]
+
+    try:
+        buf: list[torch.Tensor] = []
+        yielded = 0
+        batches = 0
+        for example in ds:
+            if yielded >= args.n_sequences:
+                break
+            text = example.get("text") or example.get("content") or ""
+            if not text:
+                continue
+            enc = tokenizer(
+                text,
+                truncation=True,
+                max_length=args.seq_len,
+                return_tensors="pt",
+                add_special_tokens=False,
+            )
+            ids = enc["input_ids"][0]
+            if ids.numel() < args.seq_len:
+                continue
+            buf.append(ids[: args.seq_len])
+            if len(buf) == args.batch_size:
+                tok = torch.stack(buf, dim=0)
+                buf = []
+                yielded += args.batch_size
+                resid = runner.residuals(tok)
+                for layer in range(molt.n_layers):
+                    inner = molt.molts[layer]
+                    acts = inner.input_standardizer(resid[:, :, layer, :], layer)
+                    pre = inner.e(acts)
+                    gates = inner.nonlinearity(pre)
+                    collectors[layer].update(tok.cpu(), gates.float().cpu())
+                batches += 1
+                if args.verbose and batches % 8 == 0:
+                    rates = [c.activation_rate().mean().item() for c in collectors]
+                    print(
+                        f"  batch {batches}: {collectors[0].total_tokens} tokens, "
+                        f"mean fire rate {sum(rates)/len(rates):.4f}",
+                        file=sys.stderr,
+                    )
+    finally:
+        runner.close()
+    return collectors
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
@@ -158,8 +292,24 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    ckpt_dir = Path(args.ckpt_dir)
-    step = args.step if args.step is not None else find_latest_step(ckpt_dir, args.run_name)
+    # 1. Resolve checkpoint location.
+    if args.hf_folder is not None:
+        print(f"=> downloading {args.hf_folder} from {args.hf_repo}…", file=sys.stderr)
+        ckpt_dir, step = download_multilayer_from_hf(
+            repo_id=args.hf_repo,
+            folder=args.hf_folder,
+            run_name=args.run_name,
+            step=args.step,
+        )
+        print(f"   step={step!r}, cached to {ckpt_dir}", file=sys.stderr)
+    else:
+        ckpt_dir = Path(args.ckpt_dir)
+        step = (
+            args.step
+            if args.step is not None
+            else find_latest_step(ckpt_dir, args.run_name)
+        )
+
     print(f"Loading MoLT checkpoints @ step {step} from {ckpt_dir}", file=sys.stderr)
 
     dtype = _DTYPE[args.dtype]
@@ -169,15 +319,23 @@ def main(argv: list[str] | None = None) -> int:
         step=step,
         device=args.device,
     )
+    print(
+        f"   d_acts={meta.d_acts} n_features={meta.n_features} "
+        f"n_layers={meta.n_layers} ranks={meta.ranks} N={meta.N}",
+        file=sys.stderr,
+    )
 
-    # Stage 1: prompt activations.
-    print(f"Running prompt through GPT-2 + MoLT…", file=sys.stderr)
+    tokenizer = AutoTokenizer.from_pretrained(args.base_model_name)
+
+    # 2. Prompt activations.
+    print(f"Running prompt through {args.base_model_name} + MoLT…", file=sys.stderr)
     tokens, prompt_gates = _gates_for_prompt(
         molt=molt,
         base_model_name=args.base_model_name,
         prompt=args.prompt,
         device=args.device,
         dtype=dtype,
+        tokenizer=tokenizer,
     )
     print(f"  tokens ({len(tokens)}): {tokens}", file=sys.stderr)
     selected, best = _select_topk_per_token(prompt_gates, args.topk)
@@ -187,28 +345,16 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
 
-    # Stage 2: corpus pass for max-activating examples.
+    # 3. Corpus pass for max-activating examples.
+    config_str = f":{args.dataset_config}" if args.dataset_config else ""
     print(
-        f"Streaming {args.n_sequences} sequences from {args.dataset_name} "
-        f"through GPT-2 + MoLT…",
+        f"Streaming {args.n_sequences} sequences from {args.dataset_name}{config_str} "
+        f"through {args.base_model_name} + MoLT…",
         file=sys.stderr,
     )
-    collectors = collect_multilayer_features(
-        molt=molt,
-        base_model_name=args.base_model_name,
-        dataset_name=args.dataset_name,
-        dataset_split=args.dataset_split,
-        n_sequences=args.n_sequences,
-        seq_len=args.seq_len,
-        batch_size=args.batch_size,
-        top_k=args.top_k_examples,
-        device=args.device,
-        dtype=dtype,
-        log_every=8 if args.verbose else 0,
-    )
+    collectors = _collect_with_optional_config(args, molt, tokenizer, dtype)
 
-    # Stage 3: bundle.
-    tokenizer = GPT2TokenizerFast.from_pretrained(args.base_model_name)
+    # 4. Bundle.
     prompt_traces: dict[tuple[int, int], PromptTrace] = {}
     for (layer, feat) in selected:
         prompt_traces[(layer, feat)] = PromptTrace(
@@ -228,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
         prompt_traces=prompt_traces,
         dataset_name=args.dataset_name,
         window=args.window,
+        base_model_name=args.base_model_name,
     )
 
     size_mb = bundle_path.stat().st_size / 1e6
