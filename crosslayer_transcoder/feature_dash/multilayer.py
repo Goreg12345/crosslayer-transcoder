@@ -330,11 +330,19 @@ def _resolve_mlp_input_layers(model) -> list[torch.nn.Module]:
     # GPT-2 family.
     if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
         return [block.ln_2 for block in model.transformer.h]
-    # Gemma 3 / LLaMA family — Gemma 3 uses `pre_feedforward_layernorm`,
-    # LLaMA-style models use `post_attention_layernorm` (which is the layernorm
-    # immediately preceding the MLP, equivalent to GPT-2's `ln_2`).
+    # Gemma 3 multimodal wrapper (Gemma3ForConditionalGeneration) exposes the
+    # text decoder at model.language_model (which is a Gemma3TextModel whose
+    # blocks live at .layers).
+    layers = None
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         layers = model.model.layers
+    elif hasattr(model, "language_model"):
+        lm = model.language_model
+        if hasattr(lm, "layers"):
+            layers = lm.layers
+        elif hasattr(lm, "model") and hasattr(lm.model, "layers"):
+            layers = lm.model.layers
+    if layers is not None:
         sample = layers[0]
         if hasattr(sample, "pre_feedforward_layernorm"):
             return [block.pre_feedforward_layernorm for block in layers]

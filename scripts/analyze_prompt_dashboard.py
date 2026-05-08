@@ -61,6 +61,36 @@ from crosslayer_transcoder.feature_dash.multilayer_bundle import (
 )
 
 
+def apply_chat_template_to_prompt(
+    tokenizer,
+    user_text: str,
+    *,
+    system_prompt: str | None = None,
+) -> str:
+    """Wrap `user_text` in the model's chat template and strip leading BOS.
+
+    Returns the templated prompt as a plain string with `add_generation_prompt=True`.
+    The tokenizer's BOS is stripped from the front because downstream calls of the
+    form `tokenizer(prompt, return_tensors="pt")` add `add_special_tokens=True` by
+    default and would otherwise prepend a second BOS.
+
+    Errors if the tokenizer has no chat template (`apply_chat_template` itself
+    raises). Returns `user_text` unchanged if `system_prompt` is None and the
+    tokenizer's chat template is empty — but in practice IT models all set one.
+    """
+    messages: list[dict] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_text})
+    s = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True,
+    )
+    bos = getattr(tokenizer, "bos_token", None)
+    if bos and s.startswith(bos):
+        s = s[len(bos):]
+    return s
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -102,6 +132,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="dtype for the base LM forward pass (MoLT stays in float32)")
     p.add_argument("--out", required=True,
                    help="output directory; bundle.html written inside")
+    p.add_argument("--chat-template", action="store_true",
+                   help="wrap --prompt as the user message in the tokenizer's "
+                        "chat template (with add_generation_prompt=True). "
+                        "Required for instruction-tuned models like "
+                        "google/gemma-3-4b-it where raw completions don't trigger "
+                        "the right behavior.")
+    p.add_argument("--system-prompt", default=None,
+                   help="optional system message; only meaningful with --chat-template")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
 
@@ -327,12 +365,19 @@ def main(argv: list[str] | None = None) -> int:
 
     tokenizer = AutoTokenizer.from_pretrained(args.base_model_name)
 
+    prompt_text = args.prompt
+    if args.chat_template:
+        prompt_text = apply_chat_template_to_prompt(
+            tokenizer, args.prompt, system_prompt=args.system_prompt,
+        )
+        print(f"Chat-templated prompt:\n{prompt_text!r}", file=sys.stderr)
+
     # 2. Prompt activations.
     print(f"Running prompt through {args.base_model_name} + MoLT…", file=sys.stderr)
     tokens, prompt_gates = _gates_for_prompt(
         molt=molt,
         base_model_name=args.base_model_name,
-        prompt=args.prompt,
+        prompt=prompt_text,
         device=args.device,
         dtype=dtype,
         tokenizer=tokenizer,
@@ -370,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
         tokenizer=tokenizer,
         out_path=out_dir,
         selected=selected,
-        prompt=args.prompt,
+        prompt=prompt_text,
         prompt_traces=prompt_traces,
         dataset_name=args.dataset_name,
         window=args.window,

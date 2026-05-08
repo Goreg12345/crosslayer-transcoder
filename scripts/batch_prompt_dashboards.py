@@ -46,6 +46,7 @@ from analyze_prompt_dashboard import (  # noqa: E402
     _collect_with_optional_config,
     _gates_for_prompt,
     _select_topk_per_token,
+    apply_chat_template_to_prompt,
 )
 
 
@@ -83,6 +84,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    choices=["float32", "float16", "bfloat16"])
     p.add_argument("--out", required=True,
                    help="parent output directory; one subdir per prompt name")
+    p.add_argument("--chat-template", action="store_true",
+                   help="wrap each --prompt TEXT as the user message in the "
+                        "tokenizer's chat template (with add_generation_prompt=True). "
+                        "Required for instruction-tuned models like "
+                        "google/gemma-3-4b-it where raw completions don't trigger "
+                        "the right behavior.")
+    p.add_argument("--system-prompt", default=None,
+                   help="optional system message; only meaningful with --chat-template")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
 
@@ -137,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
     # 2. Per-prompt gates (tiny: one short forward each).
     prompt_payloads: list[tuple[str, str, list[str], torch.Tensor, set[tuple[int, int]]]] = []
     for name, text in args.prompt:
+        if args.chat_template:
+            text = apply_chat_template_to_prompt(
+                tokenizer, text, system_prompt=args.system_prompt,
+            )
+            print(f"[{name}] chat-templated:\n{text!r}", file=sys.stderr)
         print(f"\n[{name}] running prompt {text!r} through {args.base_model_name} + MoLT…",
               file=sys.stderr)
         tokens, prompt_gates = _gates_for_prompt(
