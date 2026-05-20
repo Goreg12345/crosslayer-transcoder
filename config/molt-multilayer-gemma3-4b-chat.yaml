@@ -33,7 +33,7 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      project: "debug-molt"
+      project: "geama3-4B-IT-chat-template-debug"
       name: "molt-multilayer-gemma3-4b-chat"
       save_dir: "./wandb"
   callbacks:
@@ -41,23 +41,6 @@ trainer:
       init_args:
         checkpoint_dir: "checkpoints/molt-multilayer-gemma3-4b-chat"
         every_n_train_steps: 10000
-    # Log spliced completions on probe prompts to wandb at each checkpoint.
-    - class_path: crosslayer_transcoder.utils.callbacks.MoltEvalPromptCallback
-      init_args:
-        base_model: "google/gemma-3-4b-it"
-        chat_template: true            # wrap each probe in the chat template (IT model)
-        mode: "both"                   # vanilla + MoLT-spliced, so we log KL too
-        max_new_tokens: 8
-        topk: 10
-        every_n_train_steps: 10000     # match the checkpoint cadence
-        eval_on_train_end: true
-        # eval_device: "cuda:1"        # put the eval copy on a 2nd GPU to save memory
-        eval_dtype: "bfloat16"
-        prompts:
-          - "3 days after Tuesday is"
-          - "3+47="
-          - "What is 3 + 47?"
-          - "The capital of France is"
 
 model:
   class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
@@ -67,7 +50,7 @@ model:
       init_args:
         n_layers: 34       # PLACEHOLDER — overridden by train_molt_gemma3_chat.sh
         d_acts: 2560       # PLACEHOLDER — overridden by train_molt_gemma3_chat.sh
-        N: 50
+        N: 10              # ~4.48B MoLT params (~72GB fp32 Adam) -> fits one 80GB H100
         ranks: [512, 256, 128, 64, 32]
         nonlinearity:
           class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
@@ -75,7 +58,7 @@ model:
             theta: 0.03
             bandwidth: 1.0
             n_layers: 1
-            d_features: 1550  # = N * (1+2+4+8+16) = 50 * 31
+            d_features: 310   # = N * (1+2+4+8+16) = 10 * 31
 
         input_standardizer:
           class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
@@ -147,7 +130,7 @@ data:
 
     wandb_logging:
       enabled: true
-      project: "debug-molt"
+      project: "gemma3-4B-IT-chat-template-debug"
       group: null
       run_name: "data-generator"
       tags: ["data-generation"]
