@@ -3,6 +3,7 @@ Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
 import logging
+import re
 from functools import partial
 from pathlib import Path
 from typing import List, Optional
@@ -149,3 +150,203 @@ class MoltPerLayerCheckpointCallback(L.Callback):
 
     def on_train_end(self, trainer, pl_module):
         self._save(trainer, pl_module, suffix="")
+
+
+def _slug(text: str, max_len: int = 40) -> str:
+    """A wandb-metric-key-safe slug for a prompt."""
+    s = re.sub(r"[^0-9a-zA-Z]+", "_", text.strip()).strip("_").lower()
+    return s[:max_len] or "prompt"
+
+
+class MoltEvalPromptCallback(L.Callback):
+    """Log MoLT-spliced (and optional vanilla) completions on fixed prompts.
+
+    At each checkpoint step (and at train end) this runs the *current* MoLT
+    weights spliced into a base LM on a handful of probe prompts — e.g.
+    "3 days after Tuesday is" or "3+47=" — and logs the greedy completions,
+    top-1 token, and KL-vs-vanilla to the active wandb logger. This makes it
+    possible to watch, over training, whether the MoLT preserves the base
+    model's manifold/arithmetic behaviour.
+
+    The base LM lives in the data-generator process during training, so this
+    callback loads its *own* copy in the trainer process. Control the memory
+    cost with `eval_device` / `eval_dtype` (e.g. put it on a second GPU or CPU).
+    The model is lazily loaded on the first eval and freed at train end.
+
+    Prompts are wrapped with the tokenizer's chat template by default
+    (`chat_template=True`), matching IT-model training.
+    """
+
+    def __init__(
+        self,
+        prompts: List[str],
+        base_model: str,
+        *,
+        chat_template: bool = True,
+        system_prompt: Optional[str] = None,
+        mode: str = "both",  # "vanilla" | "molt" | "both"
+        splice_layers: Optional[List[int]] = None,
+        max_new_tokens: int = 8,
+        topk: int = 10,
+        every_n_train_steps: Optional[int] = None,
+        eval_on_train_end: bool = True,
+        eval_device: Optional[str] = None,  # default: pl_module.device
+        eval_dtype: str = "bfloat16",
+    ):
+        super().__init__()
+        self.prompts = list(prompts)
+        self.base_model = base_model
+        self.chat_template = chat_template
+        self.system_prompt = system_prompt
+        self.mode = mode
+        self.splice_layers = splice_layers
+        self.max_new_tokens = max_new_tokens
+        self.topk = topk
+        self.every_n_train_steps = every_n_train_steps
+        self.eval_on_train_end = eval_on_train_end
+        self.eval_device = eval_device
+        self.eval_dtype = eval_dtype
+
+        self._model = None
+        self._tokenizer = None
+        self._arch = None
+
+    # -- base LM lifecycle ---------------------------------------------------
+
+    def _ensure_base_model(self, pl_module) -> bool:
+        """Lazily load the base LM + tokenizer. Returns False on failure."""
+        if self._model is not None:
+            return True
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        from crosslayer_transcoder.utils.molt_splice import _DTYPE, resolve_blocks
+
+        device = self.eval_device or str(pl_module.device)
+        dtype = _DTYPE[self.eval_dtype]
+        logger.info(
+            "MoltEvalPromptCallback: loading base LM %s (%s) on %s …",
+            self.base_model, self.eval_dtype, device,
+        )
+        try:
+            self._tokenizer = AutoTokenizer.from_pretrained(self.base_model)
+            model = AutoModelForCausalLM.from_pretrained(
+                self.base_model, torch_dtype=dtype
+            ).to(device).eval()
+            self._arch, _ = resolve_blocks(model)
+            self._model = model
+            return True
+        except Exception as e:  # noqa: BLE001 - eval must never crash training
+            logger.warning("MoltEvalPromptCallback: failed to load base LM: %s", e)
+            return False
+
+    def _free_base_model(self):
+        self._model = None
+        self._tokenizer = None
+        self._arch = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # -- wandb logging -------------------------------------------------------
+
+    @staticmethod
+    def _wandb_experiment(trainer):
+        loggers = getattr(trainer, "loggers", None) or [trainer.logger]
+        for lg in loggers:
+            exp = getattr(lg, "experiment", None)
+            # WandB run objects expose `.log`.
+            if exp is not None and hasattr(exp, "log") and hasattr(exp, "name"):
+                return exp
+        return None
+
+    # -- eval driver ---------------------------------------------------------
+
+    @torch.no_grad()
+    def _run_eval(self, trainer, pl_module, step: int):
+        model = pl_module.model
+        if not isinstance(model, MultiLayerMolt):
+            logger.warning(
+                "MoltEvalPromptCallback expected MultiLayerMolt, got %s; skipping",
+                type(model).__name__,
+            )
+            return
+        if not self._ensure_base_model(pl_module):
+            return
+
+        from crosslayer_transcoder.utils.molt_splice import (
+            apply_chat_template,
+            compare_prompt,
+        )
+
+        was_training = model.training
+        model.eval()
+        try:
+            rows = []
+            metrics = {}
+            for raw in self.prompts:
+                prompt_text = (
+                    apply_chat_template(self._tokenizer, raw, self.system_prompt)
+                    if self.chat_template
+                    else raw
+                )
+                r = compare_prompt(
+                    model=self._model,
+                    tokenizer=self._tokenizer,
+                    prompt_text=prompt_text,
+                    arch=self._arch,
+                    molt=model,
+                    mode=self.mode,
+                    splice_layers=self.splice_layers,
+                    topk=self.topk,
+                    max_new_tokens=self.max_new_tokens,
+                )
+                slug = _slug(raw)
+                vanilla = r.get("vanilla", {})
+                molt = r.get("molt", {})
+                rows.append([
+                    step,
+                    raw,
+                    vanilla.get("completion", ""),
+                    molt.get("completion", ""),
+                    molt.get("top", [("", 0.0)])[0][0] if molt.get("top") else "",
+                    r.get("kl_vanilla_molt", float("nan")),
+                    r.get("agree_top1", None),
+                ])
+                if "kl_vanilla_molt" in r:
+                    metrics[f"eval/{slug}/kl_vanilla_molt"] = r["kl_vanilla_molt"]
+                    metrics[f"eval/{slug}/agree_top1"] = float(r["agree_top1"])
+        finally:
+            if was_training:
+                model.train()
+
+        exp = self._wandb_experiment(trainer)
+        if exp is None:
+            logger.info("MoltEvalPromptCallback: no wandb logger; skipping log")
+            return
+        try:
+            import wandb
+
+            table = wandb.Table(
+                columns=[
+                    "step", "prompt", "vanilla_completion", "molt_completion",
+                    "molt_top1", "kl_vanilla_molt", "agree_top1",
+                ],
+                data=rows,
+            )
+            exp.log({"eval/prompts": table, **metrics}, step=step)
+            logger.info("MoltEvalPromptCallback: logged %d prompts @ step %d", len(rows), step)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("MoltEvalPromptCallback: wandb log failed: %s", e)
+
+    # -- hooks ---------------------------------------------------------------
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if self.every_n_train_steps is None:
+            return
+        step = trainer.global_step
+        if step > 0 and step % self.every_n_train_steps == 0:
+            self._run_eval(trainer, pl_module, step)
+
+    def on_train_end(self, trainer, pl_module):
+        if self.eval_on_train_end:
+            self._run_eval(trainer, pl_module, trainer.global_step)
+        self._free_base_model()

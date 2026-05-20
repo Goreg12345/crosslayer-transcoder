@@ -40,6 +40,10 @@ class ActivationDataModule(L.LightningDataModule):
         dataset_name: str = "Skylion007/openwebtext",
         dataset_split: str = "train",
         max_sequence_length: int = 1024,
+        # Text/chat formatting
+        hf_text_accessor: str = "text",
+        chat_template: bool = False,
+        add_generation_prompt: bool = False,
         # Generation settings
         generation_batch_size: int = 32,
         refresh_interval: float = 0.1,
@@ -133,6 +137,11 @@ class ActivationDataModule(L.LightningDataModule):
         self.dataset_name = dataset_name
         self.dataset_split = dataset_split
         self.max_sequence_length = max_sequence_length
+
+        # Text/chat formatting
+        self.hf_text_accessor = hf_text_accessor
+        self.chat_template = chat_template
+        self.add_generation_prompt = add_generation_prompt
 
         # Generation settings
         self.generation_batch_size = generation_batch_size
@@ -270,6 +279,9 @@ class ActivationDataModule(L.LightningDataModule):
             init_file=self.init_file,
             device_map=self.device_map,
             wandb_logging=self.wandb_logging,
+            hf_text_accessor=self.hf_text_accessor,
+            chat_template=self.chat_template,
+            add_generation_prompt=self.add_generation_prompt,
         )
 
         # 3. Start the data generator process

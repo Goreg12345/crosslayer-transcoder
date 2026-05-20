@@ -51,9 +51,15 @@ class DataGeneratorProcess(mp.Process):
         init_file: Optional[str] = None,
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
+        hf_text_accessor: str = "text",
+        chat_template: bool = False,
+        add_generation_prompt: bool = False,
     ):
         super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
+        self.hf_text_accessor = hf_text_accessor
+        self.chat_template = chat_template
+        self.add_generation_prompt = add_generation_prompt
 
         # Store parameters directly instead of config object
         self.buffer_size = buffer_size
@@ -154,6 +160,9 @@ class DataGeneratorProcess(mp.Process):
             disk_source=self.disk_source,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
+            hf_text_accessor=self.hf_text_accessor,
+            chat_template=self.chat_template,
+            add_generation_prompt=self.add_generation_prompt,
         )
 
         self.generation_loop.refill_from_disk()

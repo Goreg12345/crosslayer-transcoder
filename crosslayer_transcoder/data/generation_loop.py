@@ -47,8 +47,14 @@ class DataGenerationLoop:
         deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         device_map: str = "auto",
         disk_source: Optional[DiskActivationSource] = None,
+        hf_text_accessor: str = "text",
+        chat_template: bool = False,
+        add_generation_prompt: bool = False,
     ):
         self.shared_buffer = shared_buffer
+        self.hf_text_accessor = hf_text_accessor
+        self.chat_template = chat_template
+        self.add_generation_prompt = add_generation_prompt
         self.buffer_size = buffer_size
         self.n_in_out = n_in_out
         self.n_layers = n_layers
@@ -95,6 +101,9 @@ class DataGenerationLoop:
             self.generation_batch_size,
             drop_last_batch=False,
             seq_len=self.max_sequence_length - 1,  # -1 for BOS token
+            hf_text_accessor=self.hf_text_accessor,
+            chat_template=self.chat_template,
+            add_generation_prompt=self.add_generation_prompt,
         )
 
         text_dataset_loader = DataLoader(
@@ -186,6 +195,9 @@ class DataGenerationLoop:
                 self.generation_batch_size,
                 drop_last_batch=False,
                 seq_len=self.max_sequence_length - 1,
+                hf_text_accessor=self.hf_text_accessor,
+                chat_template=self.chat_template,
+                add_generation_prompt=self.add_generation_prompt,
             )
             self.text_dataset_loader = iter(
                 DataLoader(

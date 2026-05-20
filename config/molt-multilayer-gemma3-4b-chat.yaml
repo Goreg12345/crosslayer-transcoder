@@ -1,0 +1,157 @@
+# Multi-layer MoLT training on Gemma3-4B-IT with CHAT-formatted data.
+#
+# Differences from config/molt-multilayer.yaml (GPT-2 / raw openwebtext):
+#   * base model is google/gemma-3-4b-it
+#   * data is a chat dataset (allenai/tulu-3-sft-mixture): the "messages" column
+#     is rendered through the tokenizer's chat template (chat_template: true,
+#     hf_text_accessor: "messages"). This contains general QA *and* math
+#     (Persona MATH/GSM/Algebra, NuminaMath) — good coverage for manifold/
+#     arithmetic probes.
+#   * a MoltEvalPromptCallback logs spliced completions on probe prompts
+#     ("3 days after Tuesday is", "3+47=") to wandb at every checkpoint.
+#
+# MODEL DIMS ARE PLACEHOLDERS. Gemma3-4B-IT's residual width (d_acts /
+# activation_dim) and block count (n_layers) are NOT hardcoded here — they are
+# derived from the model config and injected at launch by
+# scripts/train_molt_gemma3_chat.sh (which calls scripts/model_dims.py).
+# If you launch `clt fit` directly with this config, pass the dim overrides
+# yourself (see that script for the exact flags).
+
+seed_everything: 42
+
+trainer:
+  max_steps: 100_000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [0]
+  accumulate_grad_batches: 2
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-multilayer-gemma3-4b-chat"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltPerLayerCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-multilayer-gemma3-4b-chat"
+        every_n_train_steps: 10000
+    # Log spliced completions on probe prompts to wandb at each checkpoint.
+    - class_path: crosslayer_transcoder.utils.callbacks.MoltEvalPromptCallback
+      init_args:
+        base_model: "google/gemma-3-4b-it"
+        chat_template: true            # wrap each probe in the chat template (IT model)
+        mode: "both"                   # vanilla + MoLT-spliced, so we log KL too
+        max_new_tokens: 8
+        topk: 10
+        every_n_train_steps: 10000     # match the checkpoint cadence
+        eval_on_train_end: true
+        # eval_device: "cuda:1"        # put the eval copy on a 2nd GPU to save memory
+        eval_dtype: "bfloat16"
+        prompts:
+          - "3 days after Tuesday is"
+          - "3+47="
+          - "What is 3 + 47?"
+          - "The capital of France is"
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MultiLayerMoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.MultiLayerMolt
+      init_args:
+        n_layers: 34       # PLACEHOLDER — overridden by train_molt_gemma3_chat.sh
+        d_acts: 2560       # PLACEHOLDER — overridden by train_molt_gemma3_chat.sh
+        N: 50
+        ranks: [512, 256, 128, 64, 32]
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 1550  # = N * (1+2+4+8+16) = 50 * 31
+
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 34         # PLACEHOLDER — overridden at launch
+            activation_dim: 2560 # PLACEHOLDER — overridden at launch
+
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 34         # PLACEHOLDER — overridden at launch
+            activation_dim: 2560 # PLACEHOLDER — overridden at launch
+
+    replacement_model: null
+    dead_features: null
+
+    learning_rate: 2e-4
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    buffer_size: 350_000
+    n_in_out: 2
+    n_layers: 34          # PLACEHOLDER — overridden at launch
+    activation_dim: 2560  # PLACEHOLDER — overridden at launch
+    dtype: "float32"
+    max_batch_size: 50000
+
+    model_name: "google/gemma-3-4b-it"
+    model_dtype: "bfloat16"
+
+    # Chat dataset: render the "messages" column with the chat template.
+    dataset_name: "allenai/tulu-3-sft-mixture"
+    dataset_split: "train"
+    hf_text_accessor: "messages"
+    chat_template: true
+    add_generation_prompt: false   # tokenize the full conversation (user + assistant)
+    max_sequence_length: 1024
+
+    generation_batch_size: 10
+    refresh_interval: 0.1
+
+    shared_memory_name: "activation_buffer"
+    timeout_seconds: 30
+
+    batch_size: 500
+    num_workers: 10
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+
+    minimum_fill_threshold: 0.01
+
+    use_shared_memory: true
+
+    device_map: "cuda:0"
+    deployment_policy: "gpu_only"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator"
+      tags: ["data-generation"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null
