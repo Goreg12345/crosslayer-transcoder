@@ -210,6 +210,7 @@ def main():
     axl.plot(np.arange(100), clean[args.row], lw=1.4, label="vanilla GPT-2")
     axl.plot(np.arange(100), molt[args.row], lw=1.4, label="MOLT sequential")
     axl.plot(np.arange(100), tf[args.row], lw=1.4, label="MOLT teacher-forced")
+    axl.axvline(args.row, color="k", ls="--", lw=0.9, alpha=0.6, label=f"start year YY={args.row}")
     axl.set_xlabel("Predicted Year")
     axl.set_ylabel("probability")
     axl.set_title(f"Probabilities when YY={args.row}")
