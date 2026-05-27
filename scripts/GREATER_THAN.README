@@ -1,0 +1,199 @@
+# Greater-Than Task: GPT-2 vs. MOLT Replacement
+
+Reproduces the "greater-than" behavior of GPT-2 (Hanna et al. 2023, *How does
+GPT-2 compute greater-than?*) and tests whether the MOLT transcoder sweep
+reproduces it under MLP substitution.
+
+Template:  `"The war started in 19YY and ended in 19__"`
+For each start year `YY` (00-99) we read the model's next-token distribution
+restricted to the 100 two-digit year tokens. A correct model puts its mass on
+candidates `ZZ > YY` (upper-triangular heatmap).
+
+---
+
+## Scripts
+
+### `greater_than_heatmap.py` — vanilla GPT-2
+Standalone (plain `transformers`, no nnsight).
+
+```bash
+uv run --with matplotlib python scripts/greater_than_heatmap.py            # YY=41 by default
+uv run --with matplotlib python scripts/greater_than_heatmap.py --row 73
+uv run --with matplotlib python scripts/greater_than_heatmap.py --normalize vocab
+```
+Flags: `--row` (which YY for the line plot), `--lo/--hi` (heatmap YY range, default
+2-98), `--normalize {years,vocab}` (renormalize over the 100 year tokens, default,
+vs. full-vocab softmax then slice), `--century` (default "19"), `--out`.
+Output: side-by-side heatmap + single-row predicted-year distribution.
+
+**Result:** clean greater-than signature — diagonal/upper-triangular mass,
+mean prob-diff `P(>YY)-P(<=YY) = +0.350`. The YY=41 line rises sharply at 41,
+peaks just above it, decays out to 99.
+
+### `greater_than_molt.py` — MOLT replacement model
+Loads the per-layer MOLTs and splices them into GPT-2 via nnsight.
+
+```bash
+uv run --with matplotlib python scripts/greater_than_molt.py
+uv run --with matplotlib python scripts/greater_than_molt.py --step 18000 --batch 5
+```
+Flags: `--step` (checkpoint step, default 36000), `--batch` (prompts per forward
+pass, keep small for GPU memory — see below), `--row`, `--lo/--hi`, `--century`,
+`--out`. Produces a 3-panel heatmap (vanilla / sequential / teacher-forced) + an
+overlaid YY=row line, and prints the metrics table.
+
+---
+
+## The MOLT checkpoints
+
+HF repo: `kylelovesllms/molt-sweeps`
+Subfolder: `molt-multilayer-gpt2-N50-100M-fp32weights-full`
+
+- 120 files: `molt-multilayer-N50-100M-ddp_layer_{L}_step{S}.pt`, L=0..11,
+  S in {3600, 7200, ... , 36000}. **One file per layer** (not a single bundle).
+- Each `.pt` is a raw `state_dict` for one `crosslayer_transcoder.model.molt.Molt`:
+  `e.{weight,bias}`, `Us.0..4`, `Vs.0..4`, `nonlinearity.{theta,bandwidth}`,
+  `{input,output}_standardizer.{mean,std}`.
+- Architecture: `d_acts=768`, `N=50`, ranks `[512,256,128,64,32]` →
+  `n_features = 50+100+200+400+800 = 1550`. JumpReLU gate (theta=0.03), 5 rank
+  levels of low-rank transforms. fp32. ~197M params/layer → 791 MB/file, 9.5 GB
+  for all 12 (step 36000).
+- The standardizers carry per-layer stats for all 12 GPT-2 layers (shape (12,768)),
+  even though each file targets one layer.
+
+### Training (from `config/molt-multilayer-ddp.yaml`)
+- **Tokens: ~100M** (this is what "100M" in the folder name means — token count,
+  not param count). Global batch = 2800 token-activations (2 GPUs × per-GPU
+  `batch_size: 1400`, DDP), `max_steps: 36000` → 2800 × 36000 = **100.8M tokens**.
+- A "token" here = one sequence position; each contributes MLP in/out activations
+  at all 12 layers (`n_in_out: 2`, `n_layers: 12`, `d_acts: 768`).
+- Data: `Skylion007/openwebtext`, `max_sequence_length: 1024`, activations from
+  `openai-community/gpt2` (fp32 activations; training `precision: bf16-mixed`, but
+  the **saved transcoder weights are fp32** — hence "fp32weights").
+- Optimizer: Adam, `lr 2e-4`. Sparsity: JumpReLU theta 0.03, `lambda_sparsity
+  0.00015`, `c_sparsity 100`, `use_tanh: true`.
+- **Checkpoint cadence: every 3600 steps ≈ 10M tokens.** So the available steps map
+  to token counts:
+
+  | step  | 3600 | 7200 | 10800 | 14400 | 18000 | 21600 | 25200 | 28800 | 32400 | 36000 |
+  |-------|------|------|-------|-------|-------|-------|-------|-------|-------|-------|
+  | tokens| 10M  | 20M  | 30M   | 40M   | 50M   | 60M   | 70M   | 80M   | 90M   | 100M  |
+
+  The experiments below use **step 36000 = the final 100M-token checkpoint**.
+
+### How the splice works (matches `metrics/replacement_model_accuracy.py`)
+For each layer L, inside an nnsight trace:
+1. `mlp_in = gpt2.transformer.h[L].ln_2.input`   (MLP input = pre-ln_2 residual)
+2. `_, _, recons = molt(mlp_in.reshape(B*S, -1), layer=L)`
+   (Molt internally: input_standardizer → encoder `e` → JumpReLU gate →
+    gated low-rank transforms → output_standardizer. The 3rd return `recons` is
+    already in real MLP-output space.)
+3. `gpt2.transformer.h[L].mlp.output = recons.reshape(B, S, -1)`
+
+Load each layer with `load_state_dict`, then **manually set**
+`molt.{input,output}_standardizer.is_initialized = True` (it's a plain attribute,
+not in the state_dict, so it won't load from the checkpoint).
+
+### nnsight 0.5 gotchas (learned the hard way)
+- `.trace()` inspects the **caller's source code** → must run from a real `.py`
+  file; `python -c "..."` and `exec(open(...))` fail with
+  `OSError: could not get source code`.
+- Envoy access must be in **forward order**. Capturing all `ln_2.input` then all
+  `mlp.output` raises `OutOfOrderError`; interleave per layer instead.
+- **Don't** assign a list-comprehension result inside the `with trace():` block
+  (`xs = [h[L]...save() for L in ...]`) — it won't bind in the enclosing scope
+  (`UnboundLocalError`). Pre-init `xs = []` and append in an explicit loop.
+- `B`, `S` must be concrete Python ints for the `.reshape` inside the trace; get
+  them from the tokenized input before entering the trace.
+
+### GPU memory
+16 GB card: 9.5 GB of MOLT weights + GPT-2 + the `(B*S, 1550, 768)` reconstruction
+intermediate. Keep `--batch` small (default 5) or it OOMs.
+
+---
+
+## How each metric is computed
+
+**The dataset for every metric** (both scripts):
+- **100 prompts** — one per start year `YY = 00, 01, ..., 99`
+  (`"The war started in 19YY and ended in 19"`). No noun/template averaging.
+- **100 candidate output years** `ZZ = 00, ..., 99`. Each is a single GPT-2 token
+  (the bare two-digit token, e.g. "45" → id 2231 — verified single-token for all
+  00-99). The score is read at the **final token position only** (right after the
+  trailing " 19").
+- `greater_than_molt.py` runs the 100 prompts in batches of `--batch` (default 5).
+
+For each prompt we take the final-position logits and form two views:
+- **year-restricted probs** `p[YY, ZZ]` = `softmax` over just the 100 year-token
+  logits → a 100×100 matrix, each row sums to 1. This is the heatmap and the basis
+  for prob-diff / correlation.
+- **full-vocab probs** = `softmax` over all 50257 logits → used for "mass on year
+  tokens" and the top-1 argmax.
+
+**1. Greater-than prob-diff** `P(ZZ>YY) − P(ZZ≤YY)`, year-restricted:
+```
+upper = strict upper triangle (ZZ > YY, excludes the diagonal ZZ==YY)
+p_gt[YY]     = sum_{ZZ>YY} p[YY, ZZ]
+prob_diff[YY]= 2*p_gt[YY] − sum_ZZ p[YY,ZZ]  == 2*p_gt[YY] − 1   (rows sum to 1)
+```
+Reported value = **mean of `prob_diff[YY]` over all 100 start years** (YY 0–99).
+Range −1…+1; +1 = all mass strictly above YY, 0 = symmetric, − = biased to ≤ YY.
+`ZZ == YY` counts as *not greater*.
+
+**2. Per-cell heatmap correlation vs vanilla:** Pearson `r` between the vanilla and
+MOLT year-restricted matrices, over the **displayed window YY ∈ [--lo, --hi] =
+[2, 98]** (97 rows × 100 columns = **9700 cells**), flattened. (The 2–98 clip drops
+edge years, matching the plot.)
+
+**3. Top-1 next-token agreement:** `argmax` over the **full 50257-vocab** logits at
+the final position, vanilla vs MOLT, fraction equal across the **100 prompts**.
+(Exact-token match — stricter than the heatmap correlation.)
+
+**4. Mass on year tokens:** full-vocab `softmax`, summed over the 100 year-token
+ids, at the final position; **mean over the 100 prompts**. Tells you whether the
+model is even trying to predict a year (vanilla ≈ 0.26).
+
+Per-layer FVU/cosine (mentioned below) is a separate diagnostic: reconstruction of
+each layer's true `mlp.output` from its true `ln_2.input`, over all token positions
+of one ~20-token sentence — not part of the heatmap pipeline.
+
+## Findings (step 36000 = 100M tokens, single template)
+
+| metric                              | vanilla | sequential | teacher-forced |
+|-------------------------------------|---------|------------|----------------|
+| greater-than prob-diff              | +0.350  | -0.377     | -0.120         |
+| per-cell heatmap corr vs vanilla    | —       | -0.03      | 0.62           |
+| top-1 next-token agreement          | —       | 0.000      | 0.010          |
+| prob mass on year tokens            | 0.258   | 0.000      | 0.346          |
+
+- **Sequential** = faithful replacement model (all 12 MLP outputs replaced in one
+  pass; layer L sees the perturbed stream). It **collapses entirely**: 0 mass on
+  years, 0% agreement. Compounding reconstruction error runs away across 12 layers
+  despite healthy per-layer reconstruction. Its heatmap is meaningless noise.
+- **Teacher-forced** = each layer's reconstruction computed from the *clean* input,
+  all injected at once (no compounding). The diagonal **largely returns**
+  (corr 0.62), and it predicts years strongly (mass 0.346), but the **greater-than
+  asymmetry is weakened** (prob-diff +0.35 → -0.12): it predicts years near YY but
+  loses the strictly-greater bias.
+- Teacher-forced per-layer reconstruction FVU (from true mlp_in): 0.05-0.46,
+  cosine 0.80-0.96 — fine in isolation.
+
+**Bottom line:** the MOLTs capture "predict a two-digit year" but (a) aren't
+faithful enough for a full 12-layer replacement to stay a working LM, and (b) even
+without compounding, the precise greater-than circuit is degraded.
+
+### Caveats
+- Step 36000 of a 50k-step run — possibly undertrained.
+- Teacher-forced top-1 agreement of 0.01 is **low**; a well-trained transcoder
+  replacement usually retains much more. Calibrate against the project's own
+  `ReplacementModelAccuracy` for this sweep before over-interpreting.
+- Single template only.
+
+## Next steps (not yet done)
+1. Sweep `--step` 3600→36000: does fidelity / greater-than improve with training?
+2. Layer-wise ablation: replace only layers `[k..11]`, keep early layers clean, to
+   find where collapse begins and which layers carry the greater-than circuit.
+3. Run `crosslayer_transcoder/metrics/replacement_model_accuracy.py` on real text
+   to calibrate overall replacement fidelity of these checkpoints.
+4. Multi-template / noun averaging (Hanna et al. setup) for a cleaner, lower-peak
+   vanilla baseline.
