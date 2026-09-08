@@ -1,0 +1,4743 @@
+{
+  "probes": [
+    {
+      "name": "code_comment",
+      "rate": 0.30612244897959184,
+      "n": 49,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 750,
+          "text": "def",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 75698,
+          "text": " fibonacci",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 1445,
+          "text": "(n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 982,
+          "text": "):\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 262,
+          "text": "   ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 8,
+          "id": 671,
+          "text": " #",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 10,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 1.4296875
+        },
+        {
+          "position": 11,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": 1.4921875
+        },
+        {
+          "position": 12,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.71875
+        },
+        {
+          "position": 13,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.640625
+        },
+        {
+          "position": 14,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.671875
+        },
+        {
+          "position": 15,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.3203125
+        },
+        {
+          "position": 16,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.6484375
+        },
+        {
+          "position": 17,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": 1.4765625
+        },
+        {
+          "position": 18,
+          "id": 323,
+          "text": " and",
+          "special": false,
+          "gate": 1.5546875
+        },
+        {
+          "position": 19,
+          "id": 22378,
+          "text": " settled",
+          "special": false,
+          "gate": 1.984375
+        },
+        {
+          "position": 20,
+          "id": 23969,
+          "text": " beneath",
+          "special": false,
+          "gate": 1.546875
+        },
+        {
+          "position": 21,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.671875
+        },
+        {
+          "position": 22,
+          "id": 2310,
+          "text": " old",
+          "special": false,
+          "gate": 1.75
+        },
+        {
+          "position": 23,
+          "id": 23268,
+          "text": " apple",
+          "special": false,
+          "gate": 1.6171875
+        },
+        {
+          "position": 24,
+          "id": 4916,
+          "text": " tree",
+          "special": false,
+          "gate": 1.4140625
+        },
+        {
+          "position": 25,
+          "id": 624,
+          "text": ".\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 262,
+          "text": "   ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 421,
+          "text": " if",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 308,
+          "text": " n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 29,
+          "id": 2651,
+          "text": " <=",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 30,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 31,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 32,
+          "id": 510,
+          "text": ":\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 286,
+          "text": "       ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 34,
+          "id": 470,
+          "text": " return",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 35,
+          "id": 308,
+          "text": " n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 36,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 37,
+          "id": 262,
+          "text": "   ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 38,
+          "id": 470,
+          "text": " return",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 39,
+          "id": 75698,
+          "text": " fibonacci",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 40,
+          "id": 1445,
+          "text": "(n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 41,
+          "id": 481,
+          "text": " -",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 42,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 43,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 44,
+          "id": 8,
+          "text": ")",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 45,
+          "id": 488,
+          "text": " +",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 46,
+          "id": 75698,
+          "text": " fibonacci",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 47,
+          "id": 1445,
+          "text": "(n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 48,
+          "id": 481,
+          "text": " -",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 49,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 50,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 51,
+          "id": 340,
+          "text": ")\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 52,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 53,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "code_string",
+      "rate": 0.6521739130434783,
+      "n": 23,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 1318,
+          "text": "text",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 284,
+          "text": " =",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 785,
+          "text": "The",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 1.2578125
+        },
+        {
+          "position": 8,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": 1.1328125
+        },
+        {
+          "position": 9,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.375
+        },
+        {
+          "position": 10,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.4375
+        },
+        {
+          "position": 11,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.6171875
+        },
+        {
+          "position": 12,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.375
+        },
+        {
+          "position": 13,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.609375
+        },
+        {
+          "position": 14,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": 1.53125
+        },
+        {
+          "position": 15,
+          "id": 323,
+          "text": " and",
+          "special": false,
+          "gate": 1.4921875
+        },
+        {
+          "position": 16,
+          "id": 22378,
+          "text": " settled",
+          "special": false,
+          "gate": 2.03125
+        },
+        {
+          "position": 17,
+          "id": 23969,
+          "text": " beneath",
+          "special": false,
+          "gate": 1.59375
+        },
+        {
+          "position": 18,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.671875
+        },
+        {
+          "position": 19,
+          "id": 2310,
+          "text": " old",
+          "special": false,
+          "gate": 1.71875
+        },
+        {
+          "position": 20,
+          "id": 23268,
+          "text": " apple",
+          "special": false,
+          "gate": 1.65625
+        },
+        {
+          "position": 21,
+          "id": 4916,
+          "text": " tree",
+          "special": false,
+          "gate": 1.515625
+        },
+        {
+          "position": 22,
+          "id": 10040,
+          "text": ".\"\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 1350,
+          "text": "print",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 7235,
+          "text": "(text",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 8,
+          "text": ")",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "code_prose",
+      "rate": 0.7058823529411765,
+      "n": 34,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 785,
+          "text": "The",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 729,
+          "text": " function",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 5,
+          "id": 12341,
+          "text": " checks",
+          "special": false,
+          "gate": 1.0625
+        },
+        {
+          "position": 6,
+          "id": 421,
+          "text": " if",
+          "special": false,
+          "gate": 1.234375
+        },
+        {
+          "position": 7,
+          "id": 308,
+          "text": " n",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 8,
+          "id": 374,
+          "text": " is",
+          "special": false,
+          "gate": 1.3203125
+        },
+        {
+          "position": 9,
+          "id": 2686,
+          "text": " less",
+          "special": false,
+          "gate": 1.3203125
+        },
+        {
+          "position": 10,
+          "id": 1091,
+          "text": " than",
+          "special": false,
+          "gate": 1.34375
+        },
+        {
+          "position": 11,
+          "id": 476,
+          "text": " or",
+          "special": false,
+          "gate": 0.83984375
+        },
+        {
+          "position": 12,
+          "id": 6144,
+          "text": " equal",
+          "special": false,
+          "gate": 1.375
+        },
+        {
+          "position": 13,
+          "id": 311,
+          "text": " to",
+          "special": false,
+          "gate": 1.2265625
+        },
+        {
+          "position": 14,
+          "id": 825,
+          "text": " one",
+          "special": false,
+          "gate": 1.1640625
+        },
+        {
+          "position": 15,
+          "id": 323,
+          "text": " and",
+          "special": false,
+          "gate": 1.3671875
+        },
+        {
+          "position": 16,
+          "id": 4675,
+          "text": " returns",
+          "special": false,
+          "gate": 1.2734375
+        },
+        {
+          "position": 17,
+          "id": 308,
+          "text": " n",
+          "special": false,
+          "gate": 0.65625
+        },
+        {
+          "position": 18,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 18214,
+          "text": " Otherwise",
+          "special": false,
+          "gate": 1.15625
+        },
+        {
+          "position": 20,
+          "id": 432,
+          "text": " it",
+          "special": false,
+          "gate": 1.1875
+        },
+        {
+          "position": 21,
+          "id": 4675,
+          "text": " returns",
+          "special": false,
+          "gate": 0.8671875
+        },
+        {
+          "position": 22,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.0703125
+        },
+        {
+          "position": 23,
+          "id": 2629,
+          "text": " sum",
+          "special": false,
+          "gate": 1.1953125
+        },
+        {
+          "position": 24,
+          "id": 315,
+          "text": " of",
+          "special": false,
+          "gate": 1.2578125
+        },
+        {
+          "position": 25,
+          "id": 75698,
+          "text": " fibonacci",
+          "special": false,
+          "gate": 1.015625
+        },
+        {
+          "position": 26,
+          "id": 315,
+          "text": " of",
+          "special": false,
+          "gate": 1.15625
+        },
+        {
+          "position": 27,
+          "id": 308,
+          "text": " n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 27283,
+          "text": " minus",
+          "special": false,
+          "gate": 0.76953125
+        },
+        {
+          "position": 29,
+          "id": 825,
+          "text": " one",
+          "special": false,
+          "gate": 0.71875
+        },
+        {
+          "position": 30,
+          "id": 323,
+          "text": " and",
+          "special": false,
+          "gate": 1.2578125
+        },
+        {
+          "position": 31,
+          "id": 75698,
+          "text": " fibonacci",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 32,
+          "id": 315,
+          "text": " of",
+          "special": false,
+          "gate": 0.88671875
+        },
+        {
+          "position": 33,
+          "id": 308,
+          "text": " n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 34,
+          "id": 27283,
+          "text": " minus",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 35,
+          "id": 1378,
+          "text": " two",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 36,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 37,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 38,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "json",
+      "rate": 0.3902439024390244,
+      "n": 41,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 4913,
+          "text": "{\"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 606,
+          "text": "name",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 788,
+          "text": "\":",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 61686,
+          "text": "Alice",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 8,
+          "id": 497,
+          "text": "\",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 424,
+          "text": "age",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 11,
+          "id": 788,
+          "text": "\":",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 20,
+          "text": "5",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 17,
+          "id": 8926,
+          "text": "city",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 18,
+          "id": 788,
+          "text": "\":",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 39572,
+          "text": "London",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 21,
+          "id": 497,
+          "text": "\",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 4684,
+          "text": "description",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 788,
+          "text": "\":",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 785,
+          "text": "The",
+          "special": false,
+          "gate": 0.87890625
+        },
+        {
+          "position": 27,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 1.7109375
+        },
+        {
+          "position": 28,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": 1.3984375
+        },
+        {
+          "position": 29,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.515625
+        },
+        {
+          "position": 30,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.5703125
+        },
+        {
+          "position": 31,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.7265625
+        },
+        {
+          "position": 32,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.484375
+        },
+        {
+          "position": 33,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.7890625
+        },
+        {
+          "position": 34,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": 1.5859375
+        },
+        {
+          "position": 35,
+          "id": 323,
+          "text": " and",
+          "special": false,
+          "gate": 1.734375
+        },
+        {
+          "position": 36,
+          "id": 22378,
+          "text": " settled",
+          "special": false,
+          "gate": 2.03125
+        },
+        {
+          "position": 37,
+          "id": 23969,
+          "text": " beneath",
+          "special": false,
+          "gate": 1.6796875
+        },
+        {
+          "position": 38,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.8984375
+        },
+        {
+          "position": 39,
+          "id": 2310,
+          "text": " old",
+          "special": false,
+          "gate": 1.9375
+        },
+        {
+          "position": 40,
+          "id": 23268,
+          "text": " apple",
+          "special": false,
+          "gate": 1.6796875
+        },
+        {
+          "position": 41,
+          "id": 4916,
+          "text": " tree",
+          "special": false,
+          "gate": 1.6015625
+        },
+        {
+          "position": 42,
+          "id": 1189,
+          "text": ".\"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 43,
+          "id": 92,
+          "text": "}",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 44,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 45,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "number_words",
+      "rate": 0.0,
+      "n": 20,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 603,
+          "text": "one",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 1378,
+          "text": " two",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 2326,
+          "text": " three",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 6,
+          "id": 3040,
+          "text": " four",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 7,
+          "id": 4236,
+          "text": " five",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 8,
+          "id": 4743,
+          "text": " six",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 9,
+          "id": 8094,
+          "text": " seven",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 10,
+          "id": 8063,
+          "text": " eight",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 11,
+          "id": 11627,
+          "text": " nine",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 5779,
+          "text": " ten",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 13,
+          "id": 44214,
+          "text": " eleven",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 14,
+          "id": 29235,
+          "text": " twelve",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 15,
+          "id": 60659,
+          "text": " thirteen",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 16,
+          "id": 62260,
+          "text": " fourteen",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 17,
+          "id": 36655,
+          "text": " fifteen",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 18,
+          "id": 58039,
+          "text": " sixteen",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 19,
+          "id": 81397,
+          "text": " seventeen",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 20,
+          "id": 62034,
+          "text": " eighteen",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 21,
+          "id": 93835,
+          "text": " nineteen",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 17073,
+          "text": " twenty",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "number_digits",
+      "rate": 0.0,
+      "n": 50,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 18,
+          "text": "3",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 8,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 19,
+          "text": "4",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 11,
+          "id": 20,
+          "text": "5",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 21,
+          "text": "6",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 22,
+          "text": "7",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 17,
+          "id": 23,
+          "text": "8",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 18,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 24,
+          "text": "9",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 21,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 15,
+          "text": "0",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 29,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 30,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 31,
+          "id": 18,
+          "text": "3",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 32,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 34,
+          "id": 19,
+          "text": "4",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 35,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 36,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 37,
+          "id": 20,
+          "text": "5",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 38,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 39,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 40,
+          "id": 21,
+          "text": "6",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 41,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 42,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 43,
+          "id": 22,
+          "text": "7",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 44,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 45,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 46,
+          "id": 23,
+          "text": "8",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 47,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 48,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 49,
+          "id": 24,
+          "text": "9",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 50,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 51,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 52,
+          "id": 15,
+          "text": "0",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 53,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 54,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "copy_cycle",
+      "rate": 0.041666666666666664,
+      "n": 48,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 4,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 5,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.73046875
+        },
+        {
+          "position": 6,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 7,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 8,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": 0.6796875
+        },
+        {
+          "position": 9,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 10,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 11,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 12,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 17,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 18,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 21,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 24,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 29,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 30,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 31,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 32,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 34,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 35,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 36,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 37,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 38,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 39,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 40,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 41,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 42,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 43,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 44,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 45,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 46,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 47,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 48,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 49,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 50,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 51,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 52,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "novel_list",
+      "rate": 0.55,
+      "n": 40,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 4,
+          "id": 8251,
+          "text": " cat",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 5,
+          "id": 11958,
+          "text": " bird",
+          "special": false,
+          "gate": 0.73046875
+        },
+        {
+          "position": 6,
+          "id": 15223,
+          "text": " horse",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 7,
+          "id": 7640,
+          "text": " fish",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 8,
+          "id": 8644,
+          "text": " mouse",
+          "special": false,
+          "gate": 0.6796875
+        },
+        {
+          "position": 9,
+          "id": 39032,
+          "text": " lion",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 10,
+          "id": 51735,
+          "text": " tiger",
+          "special": false,
+          "gate": 0.7265625
+        },
+        {
+          "position": 11,
+          "id": 45740,
+          "text": " elephant",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 12,
+          "id": 38724,
+          "text": " rabbit",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 13,
+          "id": 38835,
+          "text": " fox",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 14,
+          "id": 36542,
+          "text": " wolf",
+          "special": false,
+          "gate": 0.83203125
+        },
+        {
+          "position": 15,
+          "id": 11722,
+          "text": " bear",
+          "special": false,
+          "gate": 0.69140625
+        },
+        {
+          "position": 16,
+          "id": 40289,
+          "text": " gir",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 17,
+          "id": 37780,
+          "text": "affe",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 18,
+          "id": 1147,
+          "text": " z",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 50213,
+          "text": "ebra",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 20,
+          "id": 38703,
+          "text": " monkey",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 21,
+          "id": 88222,
+          "text": " panda",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 22,
+          "id": 59889,
+          "text": " eagle",
+          "special": false,
+          "gate": 0.6640625
+        },
+        {
+          "position": 23,
+          "id": 35985,
+          "text": " duck",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 24,
+          "id": 16158,
+          "text": " chicken",
+          "special": false,
+          "gate": 0.65234375
+        },
+        {
+          "position": 25,
+          "id": 44305,
+          "text": " turkey",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 26,
+          "id": 281,
+          "text": " p",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 27,
+          "id": 45872,
+          "text": "enguin",
+          "special": false,
+          "gate": 0.6953125
+        },
+        {
+          "position": 28,
+          "id": 50019,
+          "text": " whale",
+          "special": false,
+          "gate": 0.7734375
+        },
+        {
+          "position": 29,
+          "id": 98169,
+          "text": " dolphin",
+          "special": false,
+          "gate": 0.76171875
+        },
+        {
+          "position": 30,
+          "id": 43792,
+          "text": " shark",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 31,
+          "id": 40320,
+          "text": " salmon",
+          "special": false,
+          "gate": 0.80859375
+        },
+        {
+          "position": 32,
+          "id": 79727,
+          "text": " trout",
+          "special": false,
+          "gate": 0.8125
+        },
+        {
+          "position": 33,
+          "id": 36089,
+          "text": " turtle",
+          "special": false,
+          "gate": 0.7890625
+        },
+        {
+          "position": 34,
+          "id": 59881,
+          "text": " frog",
+          "special": false,
+          "gate": 0.77734375
+        },
+        {
+          "position": 35,
+          "id": 25265,
+          "text": " snake",
+          "special": false,
+          "gate": 0.765625
+        },
+        {
+          "position": 36,
+          "id": 94811,
+          "text": " lizard",
+          "special": false,
+          "gate": 0.671875
+        },
+        {
+          "position": 37,
+          "id": 14093,
+          "text": " cro",
+          "special": false,
+          "gate": 0.76171875
+        },
+        {
+          "position": 38,
+          "id": 82674,
+          "text": "codile",
+          "special": false,
+          "gate": 0.76953125
+        },
+        {
+          "position": 39,
+          "id": 34354,
+          "text": " spider",
+          "special": false,
+          "gate": 0.80859375
+        },
+        {
+          "position": 40,
+          "id": 3196,
+          "text": " ant",
+          "special": false,
+          "gate": 0.79296875
+        },
+        {
+          "position": 41,
+          "id": 37228,
+          "text": " bee",
+          "special": false,
+          "gate": 0.8203125
+        },
+        {
+          "position": 42,
+          "id": 55169,
+          "text": " butterfly",
+          "special": false,
+          "gate": 0.94140625
+        },
+        {
+          "position": 43,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 44,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "sentence_repeat",
+      "rate": 0.55,
+      "n": 60,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 1.2265625
+        },
+        {
+          "position": 5,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": 1.3671875
+        },
+        {
+          "position": 6,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.6015625
+        },
+        {
+          "position": 7,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.2890625
+        },
+        {
+          "position": 8,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.4609375
+        },
+        {
+          "position": 9,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 10,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.625
+        },
+        {
+          "position": 11,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": 1.46875
+        },
+        {
+          "position": 12,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": 0.83203125
+        },
+        {
+          "position": 14,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 1.4140625
+        },
+        {
+          "position": 15,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": 1.0546875
+        },
+        {
+          "position": 16,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.484375
+        },
+        {
+          "position": 17,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.15625
+        },
+        {
+          "position": 18,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.2734375
+        },
+        {
+          "position": 19,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.421875
+        },
+        {
+          "position": 21,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 22,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": 0.7734375
+        },
+        {
+          "position": 24,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 0.95703125
+        },
+        {
+          "position": 25,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.578125
+        },
+        {
+          "position": 27,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.3515625
+        },
+        {
+          "position": 28,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.328125
+        },
+        {
+          "position": 29,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.1484375
+        },
+        {
+          "position": 30,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.2421875
+        },
+        {
+          "position": 31,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 32,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 34,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 35,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 36,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.3671875
+        },
+        {
+          "position": 37,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.171875
+        },
+        {
+          "position": 38,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.3125
+        },
+        {
+          "position": 39,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 40,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.15625
+        },
+        {
+          "position": 41,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 42,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 43,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 44,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 45,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 46,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.3671875
+        },
+        {
+          "position": 47,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 0.92578125
+        },
+        {
+          "position": 48,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.125
+        },
+        {
+          "position": 49,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 50,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.28125
+        },
+        {
+          "position": 51,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 52,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 53,
+          "id": 576,
+          "text": " The",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 54,
+          "id": 2613,
+          "text": " small",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 55,
+          "id": 13876,
+          "text": " brown",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 56,
+          "id": 5562,
+          "text": " dog",
+          "special": false,
+          "gate": 1.2734375
+        },
+        {
+          "position": 57,
+          "id": 14858,
+          "text": " walked",
+          "special": false,
+          "gate": 1.0
+        },
+        {
+          "position": 58,
+          "id": 1526,
+          "text": " through",
+          "special": false,
+          "gate": 1.2265625
+        },
+        {
+          "position": 59,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 60,
+          "id": 11340,
+          "text": " quiet",
+          "special": false,
+          "gate": 1.265625
+        },
+        {
+          "position": 61,
+          "id": 13551,
+          "text": " garden",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 62,
+          "id": 13,
+          "text": ".",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 63,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 64,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "python2",
+      "rate": 0.0,
+      "n": 34,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 37378,
+          "text": "numbers",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 4,
+          "id": 284,
+          "text": " =",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 508,
+          "text": " [",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 8,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 11,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 18,
+          "text": "3",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 19,
+          "text": "4",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 17,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 18,
+          "id": 20,
+          "text": "5",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 921,
+          "text": "]\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 82,
+          "text": "s",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 21,
+          "id": 40856,
+          "text": "quares",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 284,
+          "text": " =",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 508,
+          "text": " [",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 87,
+          "text": "x",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 353,
+          "text": " *",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 856,
+          "text": " x",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 369,
+          "text": " for",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 856,
+          "text": " x",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 29,
+          "id": 304,
+          "text": " in",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 30,
+          "id": 5109,
+          "text": " numbers",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 31,
+          "id": 921,
+          "text": "]\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 32,
+          "id": 1350,
+          "text": "print",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 19713,
+          "text": "(sum",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 34,
+          "id": 1141,
+          "text": "(s",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 35,
+          "id": 40856,
+          "text": "quares",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 36,
+          "id": 593,
+          "text": "))",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 37,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 38,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "python3",
+      "rate": 0.0,
+      "n": 29,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 1040,
+          "text": "class",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 14254,
+          "text": " Dog",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 5,
+          "id": 510,
+          "text": ":\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 262,
+          "text": "   ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 707,
+          "text": " def",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 8,
+          "id": 1304,
+          "text": " __",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 2327,
+          "text": "init",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 3804,
+          "text": "__(",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 11,
+          "id": 721,
+          "text": "self",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 829,
+          "text": " name",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 982,
+          "text": "):\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 286,
+          "text": "       ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 656,
+          "text": " self",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 17,
+          "id": 2644,
+          "text": ".name",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 18,
+          "id": 284,
+          "text": " =",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 829,
+          "text": " name",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 21,
+          "id": 262,
+          "text": "   ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 707,
+          "text": " def",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 53742,
+          "text": " bark",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 24,
+          "id": 1193,
+          "text": "(self",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 982,
+          "text": "):\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 286,
+          "text": "       ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 470,
+          "text": " return",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 330,
+          "text": " \"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 29,
+          "id": 1126,
+          "text": "wo",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 30,
+          "id": 1055,
+          "text": "of",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 31,
+          "id": 1,
+          "text": "\"",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 32,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "sql",
+      "rate": 0.0,
+      "n": 20,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 4858,
+          "text": "SELECT",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 829,
+          "text": " name",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 6,
+          "id": 4231,
+          "text": " age",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 7,
+          "id": 4295,
+          "text": " FROM",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 8,
+          "id": 3847,
+          "text": " users",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 5288,
+          "text": " WHERE",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 4231,
+          "text": " age",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 11,
+          "id": 861,
+          "text": " >",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 23,
+          "text": "8",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 15520,
+          "text": " ORDER",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 7710,
+          "text": " BY",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 17,
+          "id": 829,
+          "text": " name",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 18,
+          "id": 10376,
+          "text": " LIMIT",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 16,
+          "text": "1",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 21,
+          "id": 15,
+          "text": "0",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 26,
+          "text": ";",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "javascript",
+      "rate": 0.0,
+      "n": 27,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 1024,
+          "text": "const",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 912,
+          "text": " add",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 5,
+          "id": 284,
+          "text": " =",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 6,
+          "id": 320,
+          "text": " (",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 7,
+          "id": 64,
+          "text": "a",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 8,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 9,
+          "id": 293,
+          "text": " b",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 8,
+          "text": ")",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 11,
+          "id": 589,
+          "text": " =>",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 12,
+          "id": 264,
+          "text": " a",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 13,
+          "id": 488,
+          "text": " +",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 14,
+          "id": 293,
+          "text": " b",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 15,
+          "id": 280,
+          "text": ";\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 16,
+          "id": 1024,
+          "text": "const",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 17,
+          "id": 1102,
+          "text": " result",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 18,
+          "id": 284,
+          "text": " =",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 19,
+          "id": 912,
+          "text": " add",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 20,
+          "id": 7,
+          "text": "(",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 21,
+          "id": 17,
+          "text": "2",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 22,
+          "id": 11,
+          "text": ",",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 23,
+          "id": 220,
+          "text": " ",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 24,
+          "id": 18,
+          "text": "3",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 317,
+          "text": ");\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 26,
+          "id": 5354,
+          "text": "console",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 27,
+          "id": 1665,
+          "text": ".log",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 28,
+          "id": 4456,
+          "text": "(result",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 29,
+          "id": 1215,
+          "text": ");",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 30,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 31,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "poem",
+      "rate": 0.8620689655172413,
+      "n": 29,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 785,
+          "text": "The",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 14961,
+          "text": " silver",
+          "special": false,
+          "gate": 1.46875
+        },
+        {
+          "position": 5,
+          "id": 17788,
+          "text": " moon",
+          "special": false,
+          "gate": 1.8359375
+        },
+        {
+          "position": 6,
+          "id": 3403,
+          "text": " above",
+          "special": false,
+          "gate": 1.6640625
+        },
+        {
+          "position": 7,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.53125
+        },
+        {
+          "position": 8,
+          "id": 9396,
+          "text": " sea",
+          "special": false,
+          "gate": 1.53125
+        },
+        {
+          "position": 9,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 10,
+          "id": 72789,
+          "text": "Reflect",
+          "special": false,
+          "gate": 1.1796875
+        },
+        {
+          "position": 11,
+          "id": 82,
+          "text": "s",
+          "special": false,
+          "gate": 1.46875
+        },
+        {
+          "position": 12,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.6015625
+        },
+        {
+          "position": 13,
+          "id": 18707,
+          "text": " dreams",
+          "special": false,
+          "gate": 1.734375
+        },
+        {
+          "position": 14,
+          "id": 4766,
+          "text": " inside",
+          "special": false,
+          "gate": 1.6875
+        },
+        {
+          "position": 15,
+          "id": 315,
+          "text": " of",
+          "special": false,
+          "gate": 1.5625
+        },
+        {
+          "position": 16,
+          "id": 752,
+          "text": " me",
+          "special": false,
+          "gate": 1.3984375
+        },
+        {
+          "position": 17,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 18,
+          "id": 3036,
+          "text": "And",
+          "special": false,
+          "gate": 1.5703125
+        },
+        {
+          "position": 19,
+          "id": 1449,
+          "text": " every",
+          "special": false,
+          "gate": 1.734375
+        },
+        {
+          "position": 20,
+          "id": 12060,
+          "text": " wave",
+          "special": false,
+          "gate": 1.8359375
+        },
+        {
+          "position": 21,
+          "id": 5193,
+          "text": " upon",
+          "special": false,
+          "gate": 1.6796875
+        },
+        {
+          "position": 22,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.390625
+        },
+        {
+          "position": 23,
+          "id": 30184,
+          "text": " shore",
+          "special": false,
+          "gate": 1.53125
+        },
+        {
+          "position": 24,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 25,
+          "id": 6590,
+          "text": "Rem",
+          "special": false,
+          "gate": 1.4609375
+        },
+        {
+          "position": 26,
+          "id": 8673,
+          "text": "inds",
+          "special": false,
+          "gate": 1.7890625
+        },
+        {
+          "position": 27,
+          "id": 752,
+          "text": " me",
+          "special": false,
+          "gate": 1.640625
+        },
+        {
+          "position": 28,
+          "id": 315,
+          "text": " of",
+          "special": false,
+          "gate": 1.8046875
+        },
+        {
+          "position": 29,
+          "id": 279,
+          "text": " the",
+          "special": false,
+          "gate": 1.8515625
+        },
+        {
+          "position": 30,
+          "id": 2849,
+          "text": " days",
+          "special": false,
+          "gate": 1.8359375
+        },
+        {
+          "position": 31,
+          "id": 1573,
+          "text": " before",
+          "special": false,
+          "gate": 1.7265625
+        },
+        {
+          "position": 32,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 33,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    },
+    {
+      "name": "gibberish",
+      "rate": 0.918918918918919,
+      "n": 37,
+      "tokens": [
+        {
+          "position": 0,
+          "id": 151644,
+          "text": "<|im_start|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 1,
+          "id": 872,
+          "text": "user",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 2,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 3,
+          "id": 1489,
+          "text": "fl",
+          "special": false,
+          "gate": -0.0
+        },
+        {
+          "position": 4,
+          "id": 1885,
+          "text": "arn",
+          "special": false,
+          "gate": 1.046875
+        },
+        {
+          "position": 5,
+          "id": 342,
+          "text": " g",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 6,
+          "id": 1897,
+          "text": "rib",
+          "special": false,
+          "gate": 1.2890625
+        },
+        {
+          "position": 7,
+          "id": 891,
+          "text": "ble",
+          "special": false,
+          "gate": 1.09375
+        },
+        {
+          "position": 8,
+          "id": 1147,
+          "text": " z",
+          "special": false,
+          "gate": 1.046875
+        },
+        {
+          "position": 9,
+          "id": 669,
+          "text": "ork",
+          "special": false,
+          "gate": 1.0703125
+        },
+        {
+          "position": 10,
+          "id": 625,
+          "text": " pl",
+          "special": false,
+          "gate": 0.8984375
+        },
+        {
+          "position": 11,
+          "id": 318,
+          "text": "im",
+          "special": false,
+          "gate": 1.4921875
+        },
+        {
+          "position": 12,
+          "id": 891,
+          "text": "ble",
+          "special": false,
+          "gate": 1.390625
+        },
+        {
+          "position": 13,
+          "id": 4131,
+          "text": " sn",
+          "special": false,
+          "gate": 1.234375
+        },
+        {
+          "position": 14,
+          "id": 32842,
+          "text": "orf",
+          "special": false,
+          "gate": 1.4921875
+        },
+        {
+          "position": 15,
+          "id": 289,
+          "text": " w",
+          "special": false,
+          "gate": 0.9453125
+        },
+        {
+          "position": 16,
+          "id": 2596,
+          "text": "ugg",
+          "special": false,
+          "gate": 1.3671875
+        },
+        {
+          "position": 17,
+          "id": 642,
+          "text": "les",
+          "special": false,
+          "gate": 1.0859375
+        },
+        {
+          "position": 18,
+          "id": 1501,
+          "text": " bl",
+          "special": false,
+          "gate": 1.2421875
+        },
+        {
+          "position": 19,
+          "id": 858,
+          "text": "arg",
+          "special": false,
+          "gate": 1.234375
+        },
+        {
+          "position": 20,
+          "id": 1422,
+          "text": " fr",
+          "special": false,
+          "gate": 1.171875
+        },
+        {
+          "position": 21,
+          "id": 57763,
+          "text": "indle",
+          "special": false,
+          "gate": 1.2890625
+        },
+        {
+          "position": 22,
+          "id": 274,
+          "text": " s",
+          "special": false,
+          "gate": 0.0
+        },
+        {
+          "position": 23,
+          "id": 776,
+          "text": "pro",
+          "special": false,
+          "gate": 1.4375
+        },
+        {
+          "position": 24,
+          "id": 3996,
+          "text": "cket",
+          "special": false,
+          "gate": 1.0625
+        },
+        {
+          "position": 25,
+          "id": 922,
+          "text": " qu",
+          "special": false,
+          "gate": 1.265625
+        },
+        {
+          "position": 26,
+          "id": 43137,
+          "text": "izzle",
+          "special": false,
+          "gate": 1.3359375
+        },
+        {
+          "position": 27,
+          "id": 1353,
+          "text": " dr",
+          "special": false,
+          "gate": 1.265625
+        },
+        {
+          "position": 28,
+          "id": 524,
+          "text": "ang",
+          "special": false,
+          "gate": 1.34375
+        },
+        {
+          "position": 29,
+          "id": 1525,
+          "text": " sm",
+          "special": false,
+          "gate": 1.3046875
+        },
+        {
+          "position": 30,
+          "id": 1749,
+          "text": "ool",
+          "special": false,
+          "gate": 1.6796875
+        },
+        {
+          "position": 31,
+          "id": 12962,
+          "text": " fle",
+          "special": false,
+          "gate": 1.4453125
+        },
+        {
+          "position": 32,
+          "id": 3065,
+          "text": "eb",
+          "special": false,
+          "gate": 1.640625
+        },
+        {
+          "position": 33,
+          "id": 2770,
+          "text": " gl",
+          "special": false,
+          "gate": 1.1640625
+        },
+        {
+          "position": 34,
+          "id": 30115,
+          "text": "orp",
+          "special": false,
+          "gate": 1.234375
+        },
+        {
+          "position": 35,
+          "id": 4131,
+          "text": " sn",
+          "special": false,
+          "gate": 1.0390625
+        },
+        {
+          "position": 36,
+          "id": 9802,
+          "text": "azz",
+          "special": false,
+          "gate": 1.484375
+        },
+        {
+          "position": 37,
+          "id": 273,
+          "text": "le",
+          "special": false,
+          "gate": 0.984375
+        },
+        {
+          "position": 38,
+          "id": 289,
+          "text": " w",
+          "special": false,
+          "gate": 0.796875
+        },
+        {
+          "position": 39,
+          "id": 82418,
+          "text": "ibble",
+          "special": false,
+          "gate": 1.1171875
+        },
+        {
+          "position": 40,
+          "id": 151645,
+          "text": "<|im_end|>",
+          "special": true,
+          "gate": -0.0
+        },
+        {
+          "position": 41,
+          "id": 198,
+          "text": "\n",
+          "special": false,
+          "gate": -0.0
+        }
+      ]
+    }
+  ],
+  "fresh": [
+    {
+      "conversation": 128,
+      "n": 340,
+      "active": 254
+    },
+    {
+      "conversation": 129,
+      "n": 1024,
+      "active": 175
+    },
+    {
+      "conversation": 130,
+      "n": 643,
+      "active": 522
+    },
+    {
+      "conversation": 131,
+      "n": 1024,
+      "active": 711
+    },
+    {
+      "conversation": 132,
+      "n": 1024,
+      "active": 910
+    },
+    {
+      "conversation": 133,
+      "n": 658,
+      "active": 538
+    },
+    {
+      "conversation": 134,
+      "n": 477,
+      "active": 385
+    },
+    {
+      "conversation": 135,
+      "n": 1024,
+      "active": 863
+    },
+    {
+      "conversation": 136,
+      "n": 1024,
+      "active": 890
+    },
+    {
+      "conversation": 137,
+      "n": 1024,
+      "active": 861
+    },
+    {
+      "conversation": 138,
+      "n": 828,
+      "active": 734
+    },
+    {
+      "conversation": 139,
+      "n": 1024,
+      "active": 790
+    },
+    {
+      "conversation": 140,
+      "n": 711,
+      "active": 534
+    },
+    {
+      "conversation": 141,
+      "n": 678,
+      "active": 508
+    },
+    {
+      "conversation": 142,
+      "n": 1024,
+      "active": 918
+    },
+    {
+      "conversation": 143,
+      "n": 1024,
+      "active": 747
+    },
+    {
+      "conversation": 144,
+      "n": 482,
+      "active": 372
+    },
+    {
+      "conversation": 145,
+      "n": 1024,
+      "active": 374
+    },
+    {
+      "conversation": 146,
+      "n": 817,
+      "active": 665
+    },
+    {
+      "conversation": 147,
+      "n": 1024,
+      "active": 834
+    },
+    {
+      "conversation": 148,
+      "n": 814,
+      "active": 614
+    },
+    {
+      "conversation": 149,
+      "n": 1024,
+      "active": 871
+    },
+    {
+      "conversation": 150,
+      "n": 965,
+      "active": 797
+    },
+    {
+      "conversation": 151,
+      "n": 407,
+      "active": 257
+    },
+    {
+      "conversation": 152,
+      "n": 1024,
+      "active": 828
+    },
+    {
+      "conversation": 153,
+      "n": 527,
+      "active": 447
+    },
+    {
+      "conversation": 154,
+      "n": 858,
+      "active": 690
+    },
+    {
+      "conversation": 155,
+      "n": 1024,
+      "active": 761
+    },
+    {
+      "conversation": 156,
+      "n": 674,
+      "active": 519
+    },
+    {
+      "conversation": 157,
+      "n": 823,
+      "active": 683
+    },
+    {
+      "conversation": 158,
+      "n": 1024,
+      "active": 801
+    },
+    {
+      "conversation": 159,
+      "n": 1024,
+      "active": 868
+    },
+    {
+      "conversation": 160,
+      "n": 1024,
+      "active": 484
+    },
+    {
+      "conversation": 161,
+      "n": 707,
+      "active": 591
+    },
+    {
+      "conversation": 162,
+      "n": 1024,
+      "active": 871
+    },
+    {
+      "conversation": 163,
+      "n": 1024,
+      "active": 823
+    },
+    {
+      "conversation": 164,
+      "n": 1024,
+      "active": 894
+    },
+    {
+      "conversation": 165,
+      "n": 614,
+      "active": 471
+    },
+    {
+      "conversation": 166,
+      "n": 886,
+      "active": 702
+    },
+    {
+      "conversation": 167,
+      "n": 1024,
+      "active": 734
+    },
+    {
+      "conversation": 168,
+      "n": 653,
+      "active": 563
+    },
+    {
+      "conversation": 169,
+      "n": 1024,
+      "active": 904
+    },
+    {
+      "conversation": 170,
+      "n": 1024,
+      "active": 786
+    },
+    {
+      "conversation": 171,
+      "n": 1024,
+      "active": 870
+    },
+    {
+      "conversation": 172,
+      "n": 1024,
+      "active": 722
+    },
+    {
+      "conversation": 173,
+      "n": 1024,
+      "active": 840
+    },
+    {
+      "conversation": 174,
+      "n": 896,
+      "active": 722
+    },
+    {
+      "conversation": 175,
+      "n": 1024,
+      "active": 888
+    },
+    {
+      "conversation": 176,
+      "n": 984,
+      "active": 750
+    },
+    {
+      "conversation": 177,
+      "n": 581,
+      "active": 476
+    },
+    {
+      "conversation": 178,
+      "n": 835,
+      "active": 665
+    },
+    {
+      "conversation": 179,
+      "n": 1024,
+      "active": 760
+    },
+    {
+      "conversation": 180,
+      "n": 1024,
+      "active": 898
+    },
+    {
+      "conversation": 181,
+      "n": 1024,
+      "active": 861
+    },
+    {
+      "conversation": 182,
+      "n": 1024,
+      "active": 904
+    },
+    {
+      "conversation": 183,
+      "n": 1024,
+      "active": 857
+    },
+    {
+      "conversation": 184,
+      "n": 1024,
+      "active": 862
+    },
+    {
+      "conversation": 185,
+      "n": 1024,
+      "active": 754
+    },
+    {
+      "conversation": 186,
+      "n": 1024,
+      "active": 856
+    },
+    {
+      "conversation": 187,
+      "n": 950,
+      "active": 777
+    },
+    {
+      "conversation": 188,
+      "n": 1024,
+      "active": 898
+    },
+    {
+      "conversation": 189,
+      "n": 1024,
+      "active": 858
+    },
+    {
+      "conversation": 190,
+      "n": 1024,
+      "active": 822
+    },
+    {
+      "conversation": 191,
+      "n": 1024,
+      "active": 906
+    }
+  ]
+}

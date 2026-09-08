@@ -1,0 +1,447 @@
+{
+  "cache_checks": [
+    {
+      "conversation": 0,
+      "n": 1024,
+      "mean_abs_gate_difference": 0.0,
+      "max_abs_gate_difference": 0.0,
+      "binary_disagreements": 0
+    },
+    {
+      "conversation": 2,
+      "n": 1024,
+      "mean_abs_gate_difference": 0.0,
+      "max_abs_gate_difference": 0.0,
+      "binary_disagreements": 0
+    },
+    {
+      "conversation": 25,
+      "n": 1024,
+      "mean_abs_gate_difference": 0.0,
+      "max_abs_gate_difference": 0.0,
+      "binary_disagreements": 0
+    },
+    {
+      "conversation": 55,
+      "n": 1024,
+      "mean_abs_gate_difference": 0.0,
+      "max_abs_gate_difference": 0.0,
+      "binary_disagreements": 0
+    }
+  ],
+  "noop": {
+    "id": "7a6bf798509542b99778a7706ce347ea",
+    "state": "done",
+    "phase": "steered",
+    "baseline": "The sky appears blue because molecules in the",
+    "steered": "The sky appears blue because molecules in the",
+    "tokens": 8,
+    "result": {
+      "baseline": {
+        "text": "The sky appears blue because molecules in the",
+        "token_ids": [
+          785,
+          12884,
+          7952,
+          6303,
+          1576,
+          34615,
+          304,
+          279
+        ],
+        "trace": []
+      },
+      "steered": {
+        "text": "The sky appears blue because molecules in the",
+        "token_ids": [
+          785,
+          12884,
+          7952,
+          6303,
+          1576,
+          34615,
+          304,
+          279
+        ],
+        "trace": [
+          {
+            "position": 0,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 1,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 2,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 3,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 4,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 5,
+            "source": "prompt",
+            "before": 0.0,
+            "after": 0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 6,
+            "source": "prompt",
+            "before": 0.90234375,
+            "after": 0.90234375,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 7,
+            "source": "prompt",
+            "before": 1.421875,
+            "after": 1.421875,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 8,
+            "source": "prompt",
+            "before": 1.421875,
+            "after": 1.421875,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 9,
+            "source": "prompt",
+            "before": 1.21875,
+            "after": 1.21875,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 10,
+            "source": "prompt",
+            "before": 1.390625,
+            "after": 1.390625,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 11,
+            "source": "prompt",
+            "before": 0.0,
+            "after": 0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 12,
+            "source": "prompt",
+            "before": 0.0,
+            "after": 0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 13,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 14,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 15,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 16,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 17,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 18,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 19,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 20,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 21,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 22,
+            "source": "prompt",
+            "before": -0.0,
+            "after": -0.0,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 23,
+            "source": "generated",
+            "before": 0.75390625,
+            "after": 0.75390625,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 24,
+            "source": "generated",
+            "before": 1.34375,
+            "after": 1.34375,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 25,
+            "source": "generated",
+            "before": 1.7109375,
+            "after": 1.7109375,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 26,
+            "source": "generated",
+            "before": 1.203125,
+            "after": 1.203125,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 27,
+            "source": "generated",
+            "before": 1.1875,
+            "after": 1.1875,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 28,
+            "source": "generated",
+            "before": 1.5859375,
+            "after": 1.5859375,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          },
+          {
+            "position": 29,
+            "source": "generated",
+            "before": 1.7109375,
+            "after": 1.7109375,
+            "requested": 1.0,
+            "delta_l2": 0.0
+          }
+        ]
+      },
+      "cancelled": false,
+      "first_prediction": {
+        "max_abs_logit_change": 0.0,
+        "tokens": [
+          {
+            "id": 576,
+            "token": " The",
+            "baseline": 28.75,
+            "steered": 28.75,
+            "delta": 0.0
+          },
+          {
+            "id": 785,
+            "token": "The",
+            "baseline": 51.5,
+            "steered": 51.5,
+            "delta": 0.0
+          },
+          {
+            "id": 10022,
+            "token": "\"The",
+            "baseline": 26.75,
+            "steered": 26.75,
+            "delta": 0.0
+          },
+          {
+            "id": 11568,
+            "token": ".The",
+            "baseline": 30.375,
+            "steered": 30.375,
+            "delta": 0.0
+          },
+          {
+            "id": 16357,
+            "token": ">The",
+            "baseline": 25.75,
+            "steered": 25.75,
+            "delta": 0.0
+          },
+          {
+            "id": 17229,
+            "token": "THE",
+            "baseline": 24.0,
+            "steered": 24.0,
+            "delta": 0.0
+          },
+          {
+            "id": 65006,
+            "token": "-The",
+            "baseline": 23.75,
+            "steered": 23.75,
+            "delta": 0.0
+          },
+          {
+            "id": 82596,
+            "token": "(The",
+            "baseline": 25.25,
+            "steered": 25.25,
+            "delta": 0.0
+          }
+        ]
+      },
+      "config": {
+        "prompt": "Explain why the sky is blue in one sentence.",
+        "format": "chat",
+        "tokenization_id": "d136694667c3fbf024eea830f331198788a51986bf423c211e8cede13d15a823",
+        "ids": [
+          151644,
+          872,
+          198,
+          840,
+          20772,
+          3170,
+          279,
+          12884,
+          374,
+          6303,
+          304,
+          825,
+          11652,
+          13,
+          151645,
+          198,
+          151644,
+          77091,
+          198,
+          151667,
+          271,
+          151668,
+          271
+        ],
+        "feature": 29,
+        "mode": "multiply",
+        "strength_reference": "natural",
+        "reference_scale": 1.0,
+        "assignments": {
+          "0": 1.0,
+          "1": 1.0,
+          "2": 1.0,
+          "3": 1.0,
+          "4": 1.0,
+          "5": 1.0,
+          "6": 1.0,
+          "7": 1.0,
+          "8": 1.0,
+          "9": 1.0,
+          "10": 1.0,
+          "11": 1.0,
+          "12": 1.0,
+          "13": 1.0,
+          "14": 1.0,
+          "15": 1.0,
+          "16": 1.0,
+          "17": 1.0,
+          "18": 1.0,
+          "19": 1.0,
+          "20": 1.0,
+          "21": 1.0,
+          "22": 1.0
+        },
+        "generated": {
+          "start": 0,
+          "end": 7,
+          "value": 1.0
+        },
+        "max_new_tokens": 8,
+        "temperature": 0,
+        "top_p": 1,
+        "seed": 42
+      },
+      "checkpoint": {
+        "checkpoint": "/home/georg/Code/crosslayer-transcoder/checkpoints/molt-qwen3-4b/layer-22/chat-ultrachat-lr4e-5/training.ckpt",
+        "global_step": 100000,
+        "model": "Qwen/Qwen3-4B",
+        "layer": 22
+      }
+    }
+  }
+}
