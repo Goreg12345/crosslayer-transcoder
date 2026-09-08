@@ -1,0 +1,28 @@
+# Fresh Qwen3-4B chat repeat with the original BF16 baseline recipe and a
+# reduced learning rate. All other model, data, loss, and precision settings
+# are inherited unchanged.
+trainer:
+  logger:
+    init_args:
+      name: "molt-qwen3-4b-chat-layer22-N80-lr4e-5"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-qwen3-4b/layer-22/chat-ultrachat-lr4e-5"
+        interval_minutes: 90
+        filename: "training.ckpt"
+model:
+  init_args:
+    learning_rate: 4e-5
+    pre_actv_loss: 0.0
+data:
+  init_args:
+    shared_memory_name: "activation_buffer_qwen3_4b_chat_layer22_lr4e_5"
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      run_name: "data-generator-qwen3-4b-chat-ultrachat-lr4e-5"
+      tags: ["data-generation", "qwen3", "chat", "ultrachat", "lr4e-5"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+ckpt_path: null

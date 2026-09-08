@@ -1,0 +1,27 @@
+# Apply after the Gemma hardware/base config and Qwen chat override.
+# Qwen3-4B Base on OpenWebText, layer 22.
+trainer:
+  logger:
+    init_args:
+      name: "molt-qwen3-4b-base-layer22-N80-openwebtext"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-qwen3-4b/layer-22/base-openwebtext"
+        interval_minutes: 90
+        filename: "training.ckpt"
+data:
+  init_args:
+    model_name: "Qwen/Qwen3-4B-Base"
+    dataset_name: "Skylion007/openwebtext"
+    dataset_split: "train"
+    dataset_text_field: "text"
+    shared_memory_name: "activation_buffer_qwen3_4b_base_openwebtext_layer22"
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      run_name: "data-generator-qwen3-4b-base-openwebtext"
+      tags: ["data-generation", "qwen3", "base", "openwebtext"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+ckpt_path: null

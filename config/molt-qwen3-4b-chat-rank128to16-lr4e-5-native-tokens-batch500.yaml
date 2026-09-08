@@ -1,0 +1,120 @@
+# Retry after confirmed first-backward OOM at batch 1000.
+# Only batch size (500) and gradient accumulation (2) changed.
+seed_everything: 42
+trainer:
+  max_steps: 100000
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: gpu
+  devices:
+  - 0
+  accumulate_grad_batches: 2
+  precision: bf16-mixed
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: debug-molt
+      name: molt-qwen3-4b-chat-layer22-N397-rank128to16-lr4e-5-sparsity3e-5-native-tokens
+      save_dir: ./wandb
+  callbacks:
+  - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+    init_args:
+      checkpoint_dir: checkpoints/molt-qwen3-4b/layer-22/chat-ultrachat-rank128to16-lr4e-5-native-tokens
+      interval_minutes: 90
+      filename: training.ckpt
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.Molt
+      init_args:
+        d_acts: 2560
+        N: 397
+        ranks:
+        - 128
+        - 64
+        - 32
+        - 16
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 5955
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 23
+            activation_dim: 2560
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 23
+            activation_dim: 2560
+    replacement_model: null
+    dead_features: null
+    learning_rate: 4e-5
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+    lambda_sparsity: 3e-5
+    c_sparsity: 100
+    use_tanh: true
+    layer: 22
+    compute_dead_features: false
+    compute_dead_features_every: 500
+    pre_actv_loss: 0.0
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    buffer_size: 380000
+    n_in_out: 2
+    n_layers: 23
+    activation_dim: 2560
+    dtype: bfloat16
+    max_batch_size: 10000
+    model_name: Qwen/Qwen3-4B
+    model_dtype: bfloat16
+    model_arch: qwen3
+    dataset_name: HuggingFaceH4/ultrachat_200k
+    dataset_split: train_sft
+    dataset_text_field: messages
+    max_sequence_length: 1024
+    generation_batch_size: 8
+    refresh_interval: 0.1
+    shared_memory_name: activation_buffer_qwen3_rank128to16_native_tokens
+    timeout_seconds: 60
+    batch_size: 500
+    num_workers: 4
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+    minimum_fill_threshold: 0.01
+    use_shared_memory: true
+    device_map: cuda:1
+    deployment_policy: gpu_only
+    wandb_logging:
+      enabled: true
+      project: debug-molt
+      group: null
+      run_name: data-generator-qwen3-rank128to16-native-tokens
+      tags:
+      - data-generation
+      - qwen3
+      - chat
+      - ultrachat
+      - lr4e-5
+      - sparsity3e-5
+      - rank128to16
+      - native-tokenization
+      save_dir: ./wandb
+      log_interval: 5.0
+    activation_input_location: pre_norm
+    activation_output_location: raw
+    zero_activation_dimensions: []
+ckpt_path: null

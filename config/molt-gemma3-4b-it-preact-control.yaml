@@ -1,0 +1,23 @@
+# Apply after molt-gemma3-4b-it-5090-extractor-rtx6000.yaml. This is a
+# deliberately minimal A/B override: only the JumpReLU pre-activation loss and
+# run-specific identities/paths differ from the layer-22 baseline.
+trainer:
+  logger:
+    init_args:
+      name: "molt-gemma3-4b-it-layer22-N80-multiscale-preact-1e-6"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-gemma3-4b-it-rtx6000/layer-22/preact-1e-6"
+        interval_minutes: 90
+        filename: "training.ckpt"
+
+model:
+  init_args:
+    pre_actv_loss: 1.0e-6
+
+data:
+  init_args:
+    shared_memory_name: "activation_buffer_gemma3_4b_it_layer22_preact"
+    wandb_logging:
+      run_name: "data-generator-gemma3-4b-it-5090-layer22-preact-1e-6"

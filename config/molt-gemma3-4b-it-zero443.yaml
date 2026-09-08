@@ -1,0 +1,28 @@
+# Apply after molt-gemma3-4b-it-5090-extractor-rtx6000.yaml.
+# Matched baseline with zero-based residual-basis coordinate 443 masked in
+# both the MLP input and reconstruction target.
+trainer:
+  logger:
+    init_args:
+      name: "molt-gemma3-4b-it-layer22-N80-zero443"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-gemma3-4b-it-rtx6000/layer-22/zero443"
+        interval_minutes: 90
+        filename: "training.ckpt"
+model:
+  init_args:
+    pre_actv_loss: 0.0
+data:
+  init_args:
+    zero_activation_dimensions: [443]
+    shared_memory_name: "activation_buffer_gemma3_4b_it_layer22_zero443"
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      run_name: "data-generator-gemma3-4b-it-zero443"
+      tags: ["data-generation", "gemma3", "zero443"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+ckpt_path: null

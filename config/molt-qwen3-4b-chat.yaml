@@ -1,0 +1,32 @@
+# Apply after molt-gemma3-4b-it-5090-extractor-rtx6000.yaml.
+# Qwen3-4B post-trained/chat model on UltraChat, layer 22.
+trainer:
+  logger:
+    init_args:
+      name: "molt-qwen3-4b-chat-layer22-N80"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-qwen3-4b/layer-22/chat-ultrachat"
+        interval_minutes: 90
+        filename: "training.ckpt"
+model:
+  init_args:
+    pre_actv_loss: 0.0
+data:
+  init_args:
+    model_name: "Qwen/Qwen3-4B"
+    model_arch: "qwen3"
+    activation_input_location: "pre_norm"
+    activation_output_location: "raw"
+    zero_activation_dimensions: []
+    generation_batch_size: 8
+    shared_memory_name: "activation_buffer_qwen3_4b_chat_layer22"
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      run_name: "data-generator-qwen3-4b-chat-ultrachat"
+      tags: ["data-generation", "qwen3", "chat", "ultrachat"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+ckpt_path: null
