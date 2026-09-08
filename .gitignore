@@ -19,3 +19,12 @@ log
 local/
 
 CLAUDE.md
+# Isolated SAE-Vis renderer
+.venv-dashboard/
+
+# Runtime logs and generated model/activation caches
+/logs/
+/results/molt-qwen-dashboard*/
+/results/**/*.log
+/results/**/*.npz
+/results/**/*.pt
