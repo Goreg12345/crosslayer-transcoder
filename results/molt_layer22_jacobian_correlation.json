@@ -1,0 +1,44 @@
+[
+  {
+    "checkpoint": "checkpoints/molt-gemma3-4b-it-rtx6000/layer-22/preact-1e-6/training.ckpt",
+    "global_step": 100000,
+    "epoch": 1,
+    "pre_actv_loss": 1e-06,
+    "layer": 22,
+    "num_datapoints": 8,
+    "jacobian_correlation": 0.2944231629371643,
+    "jacobian_correlation_std": 0.17484310269355774,
+    "mean_l0": 6.0,
+    "per_datapoint": [
+      0.2189115732908249,
+      0.44930335879325867,
+      0.03698311373591423,
+      0.38375571370124817,
+      0.013962134718894958,
+      0.5082915425300598,
+      0.3265186846256256,
+      0.417659193277359
+    ]
+  },
+  {
+    "checkpoint": "checkpoints/molt-gemma3-4b-it-rtx6000/layer-22/baseline/training.ckpt",
+    "global_step": 100000,
+    "epoch": 1,
+    "pre_actv_loss": null,
+    "layer": 22,
+    "num_datapoints": 8,
+    "jacobian_correlation": 0.2517997920513153,
+    "jacobian_correlation_std": 0.16181202232837677,
+    "mean_l0": 3.5,
+    "per_datapoint": [
+      0.17365790903568268,
+      0.3967550992965698,
+      0.002144469413906336,
+      0.3459551930427551,
+      0.0021768836304545403,
+      0.442139595746994,
+      0.29692742228507996,
+      0.3546418845653534
+    ]
+  }
+]
