@@ -44,6 +44,7 @@ class DataGeneratorProcess(mp.Process):
         model_dtype: torch.dtype,
         dataset_name: str,
         dataset_split: str,
+        dataset_text_field: str,
         max_sequence_length: int,
         generation_batch_size: int,
         refresh_interval: float,
@@ -51,6 +52,10 @@ class DataGeneratorProcess(mp.Process):
         init_file: Optional[str] = None,
         device_map: str = "auto",
         wandb_logging: Optional[dict] = None,
+        model_arch: str = "gpt2",
+        activation_input_location: str = "pre_norm",
+        activation_output_location: str = "post_norm",
+        zero_activation_dimensions: Optional[list[int]] = None,
     ):
         super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
@@ -66,12 +71,17 @@ class DataGeneratorProcess(mp.Process):
         self.model_dtype = model_dtype
         self.dataset_name = dataset_name
         self.dataset_split = dataset_split
+        self.dataset_text_field = dataset_text_field
         self.max_sequence_length = max_sequence_length
         self.generation_batch_size = generation_batch_size
         self.refresh_interval = refresh_interval
         self.deployment_policy = deployment_policy
         self.init_file = init_file
         self.device_map = device_map
+        self.model_arch = model_arch
+        self.activation_input_location = activation_input_location
+        self.activation_output_location = activation_output_location
+        self.zero_activation_dimensions = zero_activation_dimensions or []
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -154,6 +164,7 @@ class DataGeneratorProcess(mp.Process):
             disk_source=self.disk_source,
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
+            dataset_text_field=self.dataset_text_field,
         )
 
         self.generation_loop.refill_from_disk()
@@ -163,7 +174,13 @@ class DataGeneratorProcess(mp.Process):
         dataset = load_dataset(self.dataset_name, split=self.dataset_split)
 
         # 3. Create components
-        activation_computer = ActivationComputer(self.n_layers)
+        activation_computer = ActivationComputer(
+            self.n_layers,
+            model_arch=self.model_arch,
+            input_location=self.activation_input_location,
+            output_location=self.activation_output_location,
+            zero_dimensions=self.zero_activation_dimensions,
+        )
 
         # Set dataset reference for the loop and start generation
         # Text dataset creation is now handled in generation_loop after models are set up

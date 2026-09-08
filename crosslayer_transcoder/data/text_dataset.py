@@ -33,6 +33,10 @@ class TextDataset(IterableDataset):
         :param hf_text_accessor: str, key to access the text in the hf_dataset
         :param seq_len: int, sequence length per sample in the batch
         returns batches of shape (batch_size, seq_len), filled with tokens and their respective attention masks for padding
+
+        Conversation rows use the tokenizer's chat template. Both template and
+        plain-text token IDs are authoritative: only truncate and pad here; do
+        not insert additional special tokens in the activation pipeline.
         """
         self.hf_dataset = hf_dataset
         self.to_tokens = to_tokens
@@ -61,9 +65,19 @@ class TextDataset(IterableDataset):
 
         # get a new sample and add it to the batch
         for b_idx in range(self.batch_size):
-            tokens = self.to_tokens(
-                self.hf_dataset[self.token_pointer][self.hf_text_accessor],
-            )["input_ids"]
+            sample = self.hf_dataset[self.token_pointer][self.hf_text_accessor]
+            if isinstance(sample, list):
+                if not callable(getattr(self.to_tokens, "apply_chat_template", None)):
+                    raise TypeError(
+                        "Conversation datasets require a tokenizer with apply_chat_template"
+                    )
+                tokens = self.to_tokens.apply_chat_template(
+                    sample,
+                    tokenize=True,
+                    add_generation_prompt=False,
+                )
+            else:
+                tokens = self.to_tokens(sample)["input_ids"]
             batch[b_idx, : min(len(tokens), self.seq_len)] = torch.tensor(
                 tokens[: self.seq_len], dtype=torch.long
             )

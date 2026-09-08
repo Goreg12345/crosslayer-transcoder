@@ -43,6 +43,7 @@ class DataGenerationLoop:
         refresh_interval: float,
         generation_batch_size: int,
         max_sequence_length: int,
+        dataset_text_field: str,
         monitor: ProcessMonitor,
         deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         device_map: str = "auto",
@@ -58,6 +59,7 @@ class DataGenerationLoop:
         self.refresh_interval = refresh_interval
         self.generation_batch_size = generation_batch_size
         self.max_sequence_length = max_sequence_length
+        self.dataset_text_field = dataset_text_field
         self.text_dataset_loader = None
         self.activation_computer = None
         self.monitor = monitor
@@ -94,7 +96,8 @@ class DataGenerationLoop:
             current_model.tokenizer,
             self.generation_batch_size,
             drop_last_batch=False,
-            seq_len=self.max_sequence_length - 1,  # -1 for BOS token
+            hf_text_accessor=self.dataset_text_field,
+            seq_len=self.max_sequence_length,
         )
 
         text_dataset_loader = DataLoader(
@@ -180,34 +183,16 @@ class DataGenerationLoop:
         except StopIteration:
             # Dataset exhausted, recreate loader
             self.monitor.log_dataset_exhausted()
-            token_dataset = text_dataset.TextDataset(
-                self.dataset,
-                current_model.tokenizer,  # Use current model tokenizer
-                self.generation_batch_size,
-                drop_last_batch=False,
-                seq_len=self.max_sequence_length - 1,
-            )
-            self.text_dataset_loader = iter(
-                DataLoader(
-                    token_dataset,
-                    batch_size=None,
-                    shuffle=False,
-                    num_workers=8,  # Optimal for performance
-                    prefetch_factor=4,  # Optimal for performance
-                    worker_init_fn=text_dataset.worker_init_fn,
-                )
-            )
+            self._setup_text_dataset_loader()
             batch, mask = next(self.text_dataset_loader)
 
         # Move to current device
         batch = batch.to(current_device)
         mask = mask.to(current_device)
 
-        # Prepend BOS token (like in benchmark)
-        batch = torch.roll(batch, shifts=1, dims=1)
-        batch[:, 0] = current_model.config.bos_token_id
-
-        # Extract activations using the activation computer
+        # Tokenization owns special tokens. In particular, chat templates may
+        # already include BOS (Gemma) or deliberately omit it (Qwen). Preserve
+        # the token IDs and their padding mask exactly as produced by the loader.
         mlp_acts = self.activation_computer.get_next_batch(current_model, batch, mask)
 
         return mlp_acts

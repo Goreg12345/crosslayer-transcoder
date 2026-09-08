@@ -23,7 +23,7 @@ trainer:
       name: "molt-0_0001-775-64k-jumprelu-float32-20M"
       save_dir: "./wandb"
   callbacks:
-    - class_path: utils.callbacks.EndOfTrainingCheckpointCallback
+    - class_path: crosslayer_transcoder.utils.callbacks.EndOfTrainingCheckpointCallback
       init_args:
         checkpoint_dir: "checkpoints"
     #- class_path: utils.callbacks.TensorBoardProfilerCallback
@@ -31,17 +31,17 @@ trainer:
     #    log_dir: "log/profiler"
 
 model:
-  class_path: model.clt_lightning.MoltModule
+  class_path: crosslayer_transcoder.model.clt_lightning.MoltModule
   init_args:
     # Pre-constructed CrossLayerTranscoder model
     model:
-      class_path: model.molt.Molt
+      class_path: crosslayer_transcoder.model.molt.Molt
       init_args:
         # Model architecture parameters
         d_acts: 768
         N: 25
         nonlinearity:
-          class_path: model.jumprelu.JumpReLU
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
           init_args:
             theta: 0.03
             bandwidth: 1.0
@@ -50,20 +50,20 @@ model:
         
         # Pre-constructed standardizers
         input_standardizer:
-          class_path: model.standardize.DimensionwiseInputStandardizer
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
           init_args:
             n_layers: 12
             activation_dim: 768
         
         output_standardizer:
-          class_path: model.standardize.DimensionwiseOutputStandardizer
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
           init_args:
             n_layers: 12
             activation_dim: 768
 
     # Pre-constructed replacement model
     replacement_model:
-      class_path: metrics.replacement_model_accuracy.ReplacementModelAccuracy
+      class_path: crosslayer_transcoder.metrics.replacement_model_accuracy.ReplacementModelAccuracy
       init_args:
         model_name: "openai-community/gpt2"
         device_map: "cuda:1"
@@ -71,7 +71,7 @@ model:
     
     # Pre-constructed dead features metric
     dead_features:
-      class_path: metrics.dead_features.DeadFeatures
+      class_path: crosslayer_transcoder.metrics.dead_features.DeadFeatures
       init_args:
         n_features: 120
         n_layers: 12
@@ -95,7 +95,7 @@ model:
     compute_dead_features_every: 500
 
 data:
-  class_path: data.datamodule.ActivationDataModule
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
   init_args:
     # Buffer settings
     buffer_size: 3_000_000

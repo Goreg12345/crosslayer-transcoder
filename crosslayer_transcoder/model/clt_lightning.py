@@ -580,6 +580,8 @@ class MoltModule(CrossLayerTranscoderModule):
         lambda_sparsity: float = 0.0002,
         c_sparsity: float = 0.1,
         use_tanh: bool = True,
+        pre_actv_loss: float = 0.0,
+        layer: int = 8,
         *args,
         **kwargs,
     ):
@@ -587,6 +589,8 @@ class MoltModule(CrossLayerTranscoderModule):
         self._lambda = lambda_sparsity
         self.c = c_sparsity
         self.use_tanh = use_tanh
+        self.pre_actv_loss = pre_actv_loss
+        self.layer = layer
 
     def current_sparsity_penalty(self):
         n_steps = self.trainer.max_steps
@@ -606,13 +610,15 @@ class MoltModule(CrossLayerTranscoderModule):
             self.log("model/d_latents", self.model.d_latents)
             self.log("model/n_features", self.model.n_features)
 
-        layer = 8
+        layer = self.layer
 
         # Forward pass
         resid, mlp_out = batch[:, 0], batch[:, 1]
         resid = resid[:, layer]
         mlp_out = mlp_out[:, layer]
-        gate, recons_norm, recons = self.model.forward(resid, layer)
+        pre_actvs, gate, recons_norm, recons = self.model.forward_with_pre_activations(
+            resid, layer
+        )
 
         self.update_dead_features(gate)
         # Compute MSE loss
@@ -629,7 +635,15 @@ class MoltModule(CrossLayerTranscoderModule):
         self.log("training/sparsity_loss", sparsity)
         self.log("L0", (gate > 0.0).float().sum() / gate.shape[0])
 
-        loss = mse.mean() + sparsity
+        # Match JumpReLUCrossLayerTranscoderModule's optional anti-death loss.
+        # It pushes negative encoder pre-activations back toward the firing
+        # boundary, while a zero coefficient preserves baseline behavior.
+        pre_actv_loss = (
+            torch.relu(-pre_actvs).sum(dim=-1).mean() * self.pre_actv_loss
+        )
+        self.log("training/pre_actv_loss", pre_actv_loss)
+
+        loss = mse.mean() + sparsity + pre_actv_loss
         self.log("training/mse", mse.mean())
         self.log("training/loss", loss)
 
