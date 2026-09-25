@@ -1,4 +1,4 @@
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import einops
 import torch
@@ -110,10 +110,19 @@ class Molt(SerializableModule):
         return pre_actvs, gate, recons_norm, recons
 
     def initialize_standardizers(
-        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"]
+        self, batch: Float[torch.Tensor, "batch_size io n_layers d_acts"],
+        layer: Optional[int] = None,
     ):
-        self.input_standardizer.initialize_from_batch(batch)
-        self.output_standardizer.initialize_from_batch(batch)
+        for standardizer in (self.input_standardizer, self.output_standardizer):
+            n_layers = standardizer.mean.shape[0] if layer is not None else None
+            standardizer.initialize_from_batch(batch)
+            if layer is not None:
+                # Keep statistics indexed by model layer for existing checkpoint readers.
+                for name, default in (("mean", 0), ("std", 1)):
+                    values = getattr(standardizer, name)
+                    expanded = values.new_full((n_layers, *values.shape[1:]), default)
+                    expanded[layer] = values[0]
+                    setattr(standardizer, name, expanded)
 
     def to_config(self) -> Dict[str, Any]:
         return {

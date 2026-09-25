@@ -66,6 +66,7 @@ class ActivationDataModule(L.LightningDataModule):
         activation_input_location: str = "pre_norm",
         activation_output_location: str = "post_norm",
         zero_activation_dimensions: Optional[list[int]] = None,
+        activation_layer: Optional[int] = None,
         # WandB logging configuration
         wandb_logging: Optional[dict] = None,
         **kwargs,
@@ -77,7 +78,8 @@ class ActivationDataModule(L.LightningDataModule):
             # Buffer settings
             buffer_size: Number of activation samples in buffer
             n_in_out: Number of input/output activations per layer (usually 2)
-            n_layers: Number of model layers
+            n_layers: Number of stored layers; use 1 with activation_layer
+            activation_layer: Extract only this model layer when set
             activation_dim: Dimension of activation vectors
             dtype: Data type ("float16" or "float32")
             max_batch_size: Maximum batch size for high-throughput clients
@@ -167,6 +169,9 @@ class ActivationDataModule(L.LightningDataModule):
         self.activation_input_location = activation_input_location
         self.activation_output_location = activation_output_location
         self.zero_activation_dimensions = zero_activation_dimensions or []
+        self.activation_layer = activation_layer
+        if activation_layer is not None and (n_layers != 1 or activation_layer < 0):
+            raise ValueError("Single-layer extraction requires n_layers=1 and activation_layer>=0")
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -286,6 +291,7 @@ class ActivationDataModule(L.LightningDataModule):
             activation_input_location=self.activation_input_location,
             activation_output_location=self.activation_output_location,
             zero_activation_dimensions=self.zero_activation_dimensions,
+            activation_layer=self.activation_layer,
         )
 
         # 3. Start the data generator process
@@ -359,9 +365,14 @@ class ActivationDataModule(L.LightningDataModule):
             self.data_loader.cleanup()
 
         if self.data_generator is not None and self.data_generator.is_alive():
-            logger.info("Terminating data generator process...")
-            self.data_generator.terminate()
-            self.data_generator.join(timeout=5.0)
+            logger.info("Stopping data generator process...")
+            self.data_generator.request_stop()
+            self.data_generator.join(timeout=30.0)
+
+            if self.data_generator.is_alive():
+                logger.warning("Terminating unresponsive data generator process...")
+                self.data_generator.terminate()
+                self.data_generator.join(timeout=5.0)
 
             if self.data_generator.is_alive():
                 logger.warning("Force killing data generator process...")

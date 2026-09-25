@@ -5,6 +5,7 @@ Handles model selection, buffer monitoring, and coordinates between different da
 
 import logging
 import time
+from multiprocessing.synchronize import Event
 from typing import Any, Optional
 
 import torch
@@ -48,6 +49,7 @@ class DataGenerationLoop:
         deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         device_map: str = "auto",
         disk_source: Optional[DiskActivationSource] = None,
+        stop_event: Optional[Event] = None,
     ):
         self.shared_buffer = shared_buffer
         self.buffer_size = buffer_size
@@ -74,6 +76,7 @@ class DataGenerationLoop:
 
         # Runtime state
         self.running = True
+        self.stop_event = stop_event
         self.dataset = None  # Will be set by parent process
 
     def set_dataset(self, dataset: Any) -> None:
@@ -127,7 +130,7 @@ class DataGenerationLoop:
 
         last_time = time.time()
 
-        while self.running:
+        while self.running and not (self.stop_event is not None and self.stop_event.is_set()):
             # Check for indices that need refreshing (invalid indices)
             indices_to_refresh = self.shared_buffer._get_invalid_indices()
 
@@ -135,7 +138,10 @@ class DataGenerationLoop:
                 # Update dashboard when sleeping
                 stats = self.shared_buffer.get_stats()
                 self.monitor.update_dashboard("SLEEPING", stats, self.deployment_policy.get_current_device())
-                time.sleep(self.refresh_interval)
+                if self.stop_event is not None:
+                    self.stop_event.wait(self.refresh_interval)
+                else:
+                    time.sleep(self.refresh_interval)
                 continue
 
             # Generate new activations
@@ -259,5 +265,11 @@ class DataGenerationLoop:
                 break
 
     def stop(self) -> None:
-        """Stop the generation loop."""
+        """Stop the generation loop and join its text DataLoader workers."""
         self.running = False
+        if self.text_dataset_loader is not None:
+            # PyTorch exposes worker shutdown on the iterator, not the loader.
+            shutdown = getattr(self.text_dataset_loader, "_shutdown_workers", None)
+            if shutdown is not None:
+                shutdown()
+            self.text_dataset_loader = None

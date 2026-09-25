@@ -41,6 +41,7 @@ class CrossLayerTranscoderModule(L.LightningModule):
         warmup_steps: int = 0,
         lr_decay_step: int = 0,
         lr_decay_factor: float = 1.0,
+        lr_decay_start_fraction: Optional[float] = None,
         # Dead features computation settings
         compute_dead_features: bool = False,
         compute_dead_features_every: int = 100,
@@ -75,6 +76,12 @@ class CrossLayerTranscoderModule(L.LightningModule):
         self.warmup_steps = warmup_steps
         self.lr_decay_step = lr_decay_step
         self.lr_decay_factor = lr_decay_factor
+        if lr_decay_start_fraction is not None:
+            if not 0 <= lr_decay_start_fraction < 1:
+                raise ValueError("lr_decay_start_fraction must be in [0, 1)")
+            if warmup_steps > 0 or lr_decay_step > 0:
+                raise ValueError("Linear tail decay cannot be combined with warmup or step decay")
+        self.lr_decay_start_fraction = lr_decay_start_fraction
 
         # Dead features computation settings
         self.compute_dead_features = compute_dead_features
@@ -360,6 +367,27 @@ class CrossLayerTranscoderModule(L.LightningModule):
         else:
             raise ValueError(f"Optimizer {self.optimizer} not supported")
 
+        if self.lr_decay_start_fraction is not None:
+            total_steps = self.trainer.max_steps
+            if total_steps <= 0:
+                raise ValueError("Linear tail decay requires a positive trainer.max_steps")
+            start_step = total_steps * self.lr_decay_start_fraction
+            scheduler = torch.optim.lr_scheduler.LambdaLR(
+                optimizer,
+                lr_lambda=lambda step: max(0.0, min(
+                    1.0, (total_steps - step) / (total_steps - start_step)
+                )),
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "step",
+                    "frequency": 1,
+                    "name": "linear_tail_decay",
+                },
+            }
+
         # Use warmup scheduler if requested
         if self.warmup_steps > 0:
             warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
@@ -582,6 +610,7 @@ class MoltModule(CrossLayerTranscoderModule):
         use_tanh: bool = True,
         pre_actv_loss: float = 0.0,
         layer: int = 8,
+        sparsity_ramp_fraction: float = 1.0,
         *args,
         **kwargs,
     ):
@@ -591,31 +620,49 @@ class MoltModule(CrossLayerTranscoderModule):
         self.use_tanh = use_tanh
         self.pre_actv_loss = pre_actv_loss
         self.layer = layer
+        if not 0 < sparsity_ramp_fraction <= 1:
+            raise ValueError("sparsity_ramp_fraction must be in (0, 1]")
+        self.sparsity_ramp_fraction = sparsity_ramp_fraction
 
     def current_sparsity_penalty(self):
         n_steps = self.trainer.max_steps
         current_step = (
             self.global_step
         )  # use global step instead of batch idx to work with gradient accumulation
-        cur_lambda = self._lambda * (current_step / n_steps)
+        if n_steps <= 0:
+            raise ValueError("Sparsity ramp requires a positive trainer.max_steps")
+        cur_lambda = self._lambda * min(
+            current_step / (n_steps * self.sparsity_ramp_fraction), 1.0
+        )
         self.log("training/sparsity_penalty", cur_lambda)
         return cur_lambda
 
     def forward(self, batch, layer):
         return self.model.forward(batch, layer)
 
+    def on_load_checkpoint(self, checkpoint):
+        # mean/std are restored as buffers; these Python flags are not.
+        self.model.input_standardizer.is_initialized = True
+        self.model.output_standardizer.is_initialized = True
+
     def training_step(self, batch, batch_idx):
         if batch_idx == 0:
-            self.model.initialize_standardizers(batch)
+            if not all(getattr(s, "is_initialized", False) for s in (
+                self.model.input_standardizer, self.model.output_standardizer
+            )):
+                self.model.initialize_standardizers(
+                    batch, self.layer if batch.shape[2] == 1 else None
+                )
             self.log("model/d_latents", self.model.d_latents)
             self.log("model/n_features", self.model.n_features)
 
         layer = self.layer
+        buffer_layer = 0 if batch.shape[2] == 1 else layer
 
         # Forward pass
         resid, mlp_out = batch[:, 0], batch[:, 1]
-        resid = resid[:, layer]
-        mlp_out = mlp_out[:, layer]
+        resid = resid[:, buffer_layer]
+        mlp_out = mlp_out[:, buffer_layer]
         pre_actvs, gate, recons_norm, recons = self.model.forward_with_pre_activations(
             resid, layer
         )

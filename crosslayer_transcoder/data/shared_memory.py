@@ -6,6 +6,7 @@ Handles inter-process communication via queues and shared memory buffers.
 import atexit
 import logging
 import multiprocessing as mp
+import os
 import threading
 import time
 from multiprocessing import shared_memory
@@ -80,8 +81,9 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         # Make it shared across processes
         # self.buffer_tensor.share_memory_()
         # Faster variant with proper pickling support:
+        self._owner_pid = os.getpid()
         self.shm = shared_memory.SharedMemory(create=True, size=self.total_size)
-        atexit.register(lambda: self.shm.unlink())
+        atexit.register(self.cleanup)
         self.shm_name = self.shm.name  # Store name for pickle/unpickle
         self.buffer_tensor = torch.frombuffer(self.shm.buf, dtype=self.dtype, count=self.n_elems).view(
             self.shape
@@ -104,9 +106,6 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
         self.max_batch_samples = max_batch_samples
 
         logger.info("Pinned memory buffer created successfully")
-
-        # Queue for statistics updates (if needed in future)
-        self.stats_queue = mp.Queue(maxsize=100)  # Statistics updates
 
         # Multiprocessing-safe locks
         self.buffer_lock = mp.RLock()
@@ -315,6 +314,13 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
     def cleanup(self):
         """Clean up shared memory resources."""
         try:
+            # Drop local lock references so multiprocessing can finalize their
+            # semaphores even while a DataLoader still retains this buffer.
+            # Attached workers only release their copies of the locks.
+            for name in ("buffer_lock", "validity_lock"):
+                if hasattr(self, name):
+                    delattr(self, name)
+
             # Clean up tensors
             if hasattr(self, "buffer_tensor"):
                 del self.buffer_tensor
@@ -324,17 +330,18 @@ class SharedActivationBuffer(torch.utils.data.IterableDataset):
                 del self.pinned_buffer
 
             # Clean up shared memory properly
-            if hasattr(self, "shm"):
+            if getattr(self, "shm", None) is not None:
                 try:
                     # Close our reference to shared memory
                     self.shm.close()
-                    # Try to unlink (delete) the shared memory segment
-                    # This will only succeed from the creating process
-                    try:
-                        self.shm.unlink()
-                    except FileNotFoundError:
-                        # Already unlinked by another process, that's fine
-                        pass
+                    # Attached workers must not unlink the trainer's buffer.
+                    if os.getpid() == self._owner_pid:
+                        try:
+                            self.shm.unlink()
+                        except FileNotFoundError:
+                            pass
+                    self.shm = None
+                    atexit.unregister(self.cleanup)
                 except Exception as shm_error:
                     logger.warning(f"Error cleaning up shared memory: {shm_error}")
 

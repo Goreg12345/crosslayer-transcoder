@@ -56,9 +56,11 @@ class DataGeneratorProcess(mp.Process):
         activation_input_location: str = "pre_norm",
         activation_output_location: str = "post_norm",
         zero_activation_dimensions: Optional[list[int]] = None,
+        activation_layer: Optional[int] = None,
     ):
         super().__init__(daemon=False)  # Can't be daemon if we want to use DataLoader workers
         self.shared_buffer = shared_buffer
+        self.stop_event = mp.Event()
 
         # Store parameters directly instead of config object
         self.buffer_size = buffer_size
@@ -82,6 +84,7 @@ class DataGeneratorProcess(mp.Process):
         self.activation_input_location = activation_input_location
         self.activation_output_location = activation_output_location
         self.zero_activation_dimensions = zero_activation_dimensions or []
+        self.activation_layer = activation_layer
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -97,10 +100,15 @@ class DataGeneratorProcess(mp.Process):
             logger.info("Starting data generator process...")
             self.setup()
 
-        except Exception as e:
-            logger.error(f"Data generator process error: {e}")
+        except Exception:
+            logger.exception("Data generator process error")
+            raise
         finally:
             self.cleanup()
+
+    def request_stop(self):
+        """Ask the child to leave its loop and clean up its own resources."""
+        self.stop_event.set()
 
     def setup(self):
         """Initialize components using the new architecture."""
@@ -121,6 +129,7 @@ class DataGeneratorProcess(mp.Process):
                 "buffer_size": self.buffer_size,
                 "n_in_out": self.n_in_out,
                 "n_layers": self.n_layers,
+                "activation_layer": self.activation_layer,
                 "activation_dim": self.activation_dim,
                 "model_name": self.model_name,
                 "dataset_name": self.dataset_name,
@@ -165,6 +174,7 @@ class DataGeneratorProcess(mp.Process):
             generation_batch_size=self.generation_batch_size,
             max_sequence_length=self.max_sequence_length,
             dataset_text_field=self.dataset_text_field,
+            stop_event=self.stop_event,
         )
 
         self.generation_loop.refill_from_disk()
@@ -180,6 +190,7 @@ class DataGeneratorProcess(mp.Process):
             input_location=self.activation_input_location,
             output_location=self.activation_output_location,
             zero_dimensions=self.zero_activation_dimensions,
+            layer=self.activation_layer,
         )
 
         # Set dataset reference for the loop and start generation
@@ -194,7 +205,7 @@ class DataGeneratorProcess(mp.Process):
         logger.info("Data generator setup complete!")
 
     def cleanup(self):
-        """Clean up resources and terminate any child processes."""
+        """Clean up resources in the generator process, never in the trainer."""
         logger.info("Cleaning up data generator...")
 
         # Stop the generation loop
@@ -209,28 +220,11 @@ class DataGeneratorProcess(mp.Process):
         if self.disk_source:
             self.disk_source.close()
 
+        if self.shared_buffer is not None:
+            self.shared_buffer.cleanup()
+
         # Clear GPU memory
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        # Kill any remaining child processes
-        try:
-            import psutil
-
-            current_process = psutil.Process()
-            children = current_process.children(recursive=True)
-            for child in children:
-                try:
-                    child.terminate()
-                except:
-                    pass
-        except ImportError:
-            pass  # psutil not available
-
         logger.info("Data generator cleanup complete")
-
-    def terminate(self):
-        """Terminate the process gracefully."""
-        logger.info("Terminating data generator process...")
-        self.cleanup()
-        super().terminate()

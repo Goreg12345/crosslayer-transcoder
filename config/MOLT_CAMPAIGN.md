@@ -1,3 +1,42 @@
+# Current campaign
+
+Shared config: [molt-qwen3-all-mlps.yaml](molt-qwen3-all-mlps.yaml).
+Qwen3-4B layers 22, 0, 1, 10, 30 first, then the remaining 31.
+N=80, ranks 512–32, 1.055B parameters per layer, LR 4e-5, peak sparsity 7.5e-5.
+W&B project: `molt`; activation generation batch size: 4.
+Training uses `cuda:0` (RTX PRO 6000); activation generation uses `cuda:1`
+(RTX 5090). These are PyTorch device indices, not `nvidia-smi` indices.
+Sparsity reaches its peak at 80%; LR declines linearly to zero over the final 20%.
+
+Only the target layer is buffered: 8.8M entries, about 90.1 GB BF16 storage.
+Maximum sequence length is 1024. The native Qwen chat template yields
+183,838,055 non-padding training tokens after truncation (207,865 conversations).
+No BOS is manually added. Count: `results/qwen3-campaign/token-count.json`.
+
+Start or resume the first five:
+
+```bash
+tools/run_qwen_molt_campaign.sh --first-five
+```
+
+Start or resume all layers:
+
+```bash
+tools/run_qwen_molt_campaign.sh
+```
+
+Use `--dry-run` to print commands. Ctrl-C stops the training process and its
+workers. The same command resumes an incomplete checkpoint or skips a completed
+100,000-step (100M-token) run. Each layer has one `training.ckpt`, atomically
+overwritten every 90 minutes and at completion. Completed files stay in place.
+Progress since the last saved checkpoint is lost when stopping.
+
+The campaign is prepared, not launched. The older notes below are superseded.
+
+---
+
+## Historical Gemma campaign notes
+
 # MOLT campaign order
 
 All layer numbers are zero-based. Every run gets a distinct W&B name, shared

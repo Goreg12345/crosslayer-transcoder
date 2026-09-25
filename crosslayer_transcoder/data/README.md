@@ -348,3 +348,8 @@ def __setstate__(self, state):
 - **Memory Access**: Both processes access identical physical RAM
 - **Synchronization**: Changes in one process immediately visible in other
 - **Cleanup**: Automatic cleanup when all processes release references
+
+
+For a single-layer MOLT, set `n_layers: 1` and `activation_layer: 22` (or the
+wanted layer) on the datamodule. Only that layer's input and output are saved.
+Omit `activation_layer` to retain extraction of layers 0 through `n_layers-1`.

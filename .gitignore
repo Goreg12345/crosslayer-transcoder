@@ -24,7 +24,9 @@ CLAUDE.md
 
 # Runtime logs and generated model/activation caches
 /logs/
-/results/molt-qwen-dashboard*/
+/results/molt-qwen-dashboard*
+/results/molt-qwen-campaign-interpretation/
+/results/qwen3-campaign/
 /results/**/*.log
 /results/**/*.npz
 /results/**/*.pt

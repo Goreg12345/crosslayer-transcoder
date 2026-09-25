@@ -1,0 +1,41 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH});
+  try {
+    const page = await browser.newPage({viewport:{width:1500,height:1000}});
+    const errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    const url=process.env.PILOT_URL||'http://100.76.58.1:8765/sample-10m/pilot32/';
+    await page.goto(url);
+    assert.equal(await page.locator('tbody tr').count(),32);
+    await page.locator('#rank').selectOption('512');
+    assert.equal(await page.locator('tbody tr:visible').count(),7);
+    await page.locator('#rank').selectOption('');
+    await page.locator('#search').fill('no-such-transform-xyz');
+    assert.equal(await page.locator('tbody tr:visible').count(),0);
+    await page.locator('#search').fill('');
+    const first=page.locator('tbody tr').first();
+    const id=await first.locator('select').getAttribute('data-review-id');
+    await first.locator('select').selectOption('mixed');
+    await first.locator('a').first().click();
+    await page.locator('textarea').fill('Browser validation note');
+    await page.reload();
+    assert.equal(await page.locator('textarea').inputValue(),'Browser validation note');
+    assert.equal(await page.locator('select[data-review-id]').inputValue(),'mixed');
+    await page.locator('summary').filter({hasText:'Explanation evidence'}).click();
+    assert.equal(await page.locator('.tokens').count()>=32,true);
+    const downloadPromise=page.waitForEvent('download');
+    await page.locator('[data-export]').click();
+    const download=await downloadPromise;
+    const data=JSON.parse(await fs.readFile(await download.path(),'utf8'));
+    assert.equal(data.reviews.length,32);
+    assert.equal(data.reviews.find(r=>String(r.id)===id).notes,'Browser validation note');
+    assert.equal(data.reviews.find(r=>String(r.id)===id).verdict,'mixed');
+    await page.goto(url);
+    await page.screenshot({path:'/tmp/molt-pilot-review.png',fullPage:true});
+    assert.deepEqual(errors,[]);
+    console.log('PASS: fixed 32-row cohort, rank/search filters, feature evidence, persisted verdict/notes, JSON export; no inference requests.');
+  } finally { await browser.close(); }
+})().catch(e=>{console.error(e);process.exit(1)});

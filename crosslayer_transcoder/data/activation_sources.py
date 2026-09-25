@@ -53,8 +53,12 @@ class ActivationComputer(ActivationSource):
         input_location: str = "pre_norm",
         output_location: str = "post_norm",
         zero_dimensions: Optional[list[int]] = None,
+        layer: Optional[int] = None,
     ):
         self.n_layers = n_layers
+        self.layers = range(n_layers) if layer is None else [layer]
+        if layer is not None and (n_layers != 1 or layer < 0):
+            raise ValueError("Single-layer extraction requires n_layers=1 and layer>=0")
         if model_arch not in ("gpt2", "gemma3", "qwen3"):
             raise ValueError(
                 f"Unsupported model_arch {model_arch!r}; expected 'gpt2', 'gemma3', or 'qwen3'"
@@ -131,7 +135,7 @@ class ActivationComputer(ActivationSource):
     def _extract_activations(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Extract MLP input/output activations using nnsight tracing.
-        EXACT COPY of existing method - no changes to functionality!
+        Save only the requested layers.
 
         Args:
             model: nnsight LanguageModel to run inference on
@@ -145,7 +149,7 @@ class ActivationComputer(ActivationSource):
         mlp_outs = []
         with model.trace(tokens) as tracer:
 
-            for i in range(self.n_layers):
+            for i in self.layers:
                 mlp_in, mlp_out = self._layer_handles(model, i)
                 mlp_ins.append(mlp_in.save())
                 mlp_outs.append(mlp_out.save())

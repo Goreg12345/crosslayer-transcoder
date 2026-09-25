@@ -62,6 +62,32 @@ PYTHONPATH=. .venv/bin/python tools/compute_molt_dashboard_logits.py
 
 `logit_projections.json` contains the method, formula, aggregate and example-level top/bottom vocabulary IDs and scores, plus decoded tokens. The default is ten vocabulary tokens per sign. No-activation features have no projected logit table. Tests in `tests/test_dashboard_logits.py` verify the raw-space on-minus-off contribution, the frozen-normalization logit difference, and sign filtering.
 
+## Explanations in the activation explorer
+
+The sidebar shows the generated title first, followed by transform ID, rank, and
+activation statistics. Selecting a transform displays its full explanation and
+four Delphi accuracy scores: detection, fuzzing, active fuzzing, and intruder.
+Cards include valid case counts and approximate 95% confidence intervals. Missing
+or incomplete scores and limited evidence are explicit; an unavailable score is
+never displayed as zero.
+
+The index embeds a saved score snapshot and, when served, refreshes from
+`autointerp-layer/summary.json` every 30 seconds. Checkpoint, step, layer, token
+count, and activation-cache hash must match before results are accepted. Refreshes
+preserve the selected transform and activation view. No inference is needed to
+render or view the scores. To publish a UI update using existing activation pages:
+
+```bash
+.venv-dashboard/bin/python tools/render_molt_dashboard.py \
+  results/molt-qwen-dashboard-campaign-layer22-10m --index-only
+```
+
+The live server's `/` now redirects to `/sample-10m/`, preserving transform hashes.
+Its root index is copied from `tools/molt_dashboard_redirect.html`; the original
+110k-token explorer is retained at `/sample-110k.html`, with its original direct
+logit projections. The server's steering engine and its mean-active reference
+sample remain unchanged. Other layers use the same explorer at `/layers/layer-N/`.
+
 ## Token steering
 
 Run the inference server instead of the static-only server to enable steering:
@@ -72,6 +98,19 @@ PYTHONPATH=. .venv/bin/python tools/serve_molt_dashboard.py \
 ```
 
 Open http://100.76.58.1:8765/steer, or choose **Steer this transform** in the feature explorer. The server holds Qwen3-4B in GPU memory and handles one inference operation at a time. Its default bind address is loopback; use this machine's Tailscale address for tailnet access. The page requires this backend; a static file server cannot run generation.
+
+The live campaign instance is `molt-dashboard-layer22.service`, serving
+`results/molt-qwen-dashboard-campaign-layer22` and its `sample-10m/` route. It uses
+the campaign's layer-22, 100,000-step checkpoint. On September 18, 2026 it was moved
+to the RTX PRO 6000 (`GPU-b06d7aae-56d1-04c1-a23b-92a405feae78`), with
+`CUDA_VISIBLE_DEVICES` selecting that GPU and `--device cuda:0` selecting the sole
+visible device. `--gpu-memory-gib 10` caps the server's CUDA allocator; driver
+overhead is additional. The user service override is
+`~/.config/systemd/user/molt-dashboard-layer22.service.d/gpu.conf`. The base unit
+remains transient, so this does not enable automatic startup after reboot.
+Training and the 10M-token collector were left running; the collector remains
+on the RTX 5090. Before switching the public URL, the replacement passed live
+token inspection and exact zero-addition generation checks on the PRO 6000.
 
 1. Construct a conversation with system, user, assistant and thinking segments (or choose the single-prompt or raw-text editor), then inspect its tokenization/natural gates.
 2. Select tokens individually or with Shift-click, choose a strength, and assign it. Different tokens can have different amounts. Chat-template tokens are visible and selectable. Editing the input invalidates the selection to prevent stale token positions.

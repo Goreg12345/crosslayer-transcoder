@@ -4,6 +4,7 @@
 import argparse
 import json
 import logging
+import math
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -183,9 +184,22 @@ def main():
     p.add_argument("--bind", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--device", default="cuda:0")
+    p.add_argument(
+        "--gpu-memory-gib", type=float, help="Cap this process's CUDA allocator"
+    )
     args = p.parse_args()
+    if args.gpu_memory_gib is not None and (
+        not math.isfinite(args.gpu_memory_gib) or args.gpu_memory_gib <= 0
+    ):
+        p.error("gpu-memory-gib must be finite and positive")
     torch.set_num_threads(4)
     torch.set_float32_matmul_precision("highest")
+    device = torch.device(args.device)
+    if device.type == "cuda" and args.gpu_memory_gib is not None:
+        total = torch.cuda.get_device_properties(device).total_memory
+        torch.cuda.set_per_process_memory_fraction(
+            min(1.0, args.gpu_memory_gib * 1024**3 / total), device
+        )
     print("Loading Qwen and MOLT steering weights…", flush=True)
     engine = SteeringEngine(args.directory, args.device)
     app = Application(engine)
