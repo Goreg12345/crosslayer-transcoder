@@ -13,6 +13,7 @@ from delphi.scorers.classifier.sample import (
 from delphi.scorers.simulator.simulation.simulator import NeuronSimulator
 
 from .pilot import parse_simulation
+from .token_display import escape_added_tokens
 
 
 class AuditedFuzzingScorer(FuzzingScorer):
@@ -66,12 +67,9 @@ class AuditedFuzzingScorer(FuzzingScorer):
 class StrictNeuronSimulator(NeuronSimulator):
     async def simulate(self, tokens):
         # Propagate errors; the upstream convenience wrapper silently returns zeros.
-        # Qwen's output reasoning parser can consume literal thinking delimiters.
+        # Added tokens (e.g. </think>) would reach the model as control tokens.
         # Preserve a one-to-one token mapping while displaying those as plain text.
-        displayed = [
-            t.replace("<think>", "⟪think⟫").replace("</think>", "⟪/think⟫")
-            for t in tokens
-        ]
+        displayed = [escape_added_tokens(t) for t in tokens]
         return await self._simulate_with_json(displayed)
 
     def _parse_json_response(self, response, tokens):

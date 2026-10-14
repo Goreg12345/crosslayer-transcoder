@@ -22,6 +22,10 @@ from delphi.explainers import DefaultExplainer
 from delphi.latents import ActivatingExample, NonActivatingExample, Latent, LatentRecord
 from delphi.scorers import DetectionScorer, IntruderScorer
 
+from crosslayer_transcoder.dashboard.token_display import (
+    escape_added_tokens,
+    escape_vocab,
+)
 from crosslayer_transcoder.dashboard.delphi_pilot import (
     AuditedFuzzingScorer,
     StrictNeuronSimulator,
@@ -61,10 +65,7 @@ def prepare(root, output):
         cache = {k: archive[k] for k in archive.files}
     if len(cache["tokens"]) != metadata["tokens"]:
         raise ValueError("Token count disagrees with collection metadata")
-    vocab = {
-        k: v.replace("<|", "⟪").replace("|>", "⟫")
-        for k, v in json.loads((root / "vocab.json").read_text()).items()
-    }
+    vocab = escape_vocab(json.loads((root / "vocab.json").read_text()))
     if (root / "feature_stats.json").exists():
         stats = json.loads((root / "feature_stats.json").read_text())
     else:
@@ -194,6 +195,14 @@ class TaskClient(Client):
 
 def make_record(layer, feature, samples):
     scale = max(max(e["activations"]) for e in samples["train"])
+    # Evidence prepared before every added token was escaped still holds e.g. </think>.
+    samples = {
+        key: [
+            dict(e, str_tokens=[escape_added_tokens(t) for t in e["str_tokens"]])
+            for e in samples[key]
+        ]
+        for key in ("train", "test", "negatives")
+    }
 
     def active(example, quantile=0):
         acts = torch.tensor(example["activations"])

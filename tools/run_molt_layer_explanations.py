@@ -38,6 +38,7 @@ from crosslayer_transcoder.dashboard.pilot import (
     load_response_cache,
     wilson_interval,
 )
+from crosslayer_transcoder.dashboard.token_display import escape_vocab
 from tools.explain_molt_dashboard import Endpoint, atomic_json
 from tools.run_molt_pilot import TaskClient, digest, make_record, now, row_data
 
@@ -84,6 +85,7 @@ def pipeline_settings(root, meta, args, cache_hash):
         exclusions="Exact duplicate windows; preserve rare short windows and report sample counts; active fuzz requires zero-gate distractors",
         evidence_policy="Up to 32 explanation, 50 positive and 50 negative evaluation windows; one evaluation-only conversation may be reassigned exclusively to explanation",
         title_policy="LLM title of 3–8 words from the explanation, without new claims; approved pilot titles reused",
+        special_token_display="every tokenizer added token (incl. <think>, <tool_call>) shown as ⟪name⟫ in evidence and prompts",
         pipeline_version=1,
     )
     return settings, pilot_manifest
@@ -148,10 +150,7 @@ def prepare(root, output, args):
         raise ValueError("Sparse cache token count disagrees with metadata")
     index_features(cache, meta["n_features"])
     train, test = split_conversations(meta["conversations"])
-    vocab = {
-        k: v.replace("<|", "⟪").replace("|>", "⟫")
-        for k, v in json.loads((root / "vocab.json").read_text()).items()
-    }
+    vocab = escape_vocab(json.loads((root / "vocab.json").read_text()))
     pilot_ids = (
         {s["id"] for s in pilot_manifest["selected"]} if pilot_manifest else set()
     )

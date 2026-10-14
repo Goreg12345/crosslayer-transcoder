@@ -31,6 +31,10 @@ from crosslayer_transcoder.dashboard.explanation_samples import (
     split_conversations,
 )
 from crosslayer_transcoder.dashboard.pilot import response_key
+from crosslayer_transcoder.dashboard.token_display import (
+    escape_added_tokens,
+    escape_vocab,
+)
 
 
 class Endpoint(Client):
@@ -128,7 +132,11 @@ class Endpoint(Client):
 
     async def generate(self, prompt, **kwargs):
         # Dataset excerpts are evidence, never instructions for the explainer.
-        prompt = [dict(x) for x in prompt]
+        # Added-token strings anywhere in content (evidence or Delphi few-shots)
+        # would be tokenized as control tokens; send them as plain text.
+        prompt = [
+            dict(x, content=escape_added_tokens(x["content"])) for x in prompt
+        ]
         task = kwargs.get("task") or (
             "binary" if kwargs.get("max_tokens") == 32 else "explanation"
         )
@@ -268,10 +276,7 @@ async def main(args):
     metadata = json.loads((root / "metadata.json").read_text())
     with np.load(root / "activations.npz") as archive:
         cache = {name: archive[name] for name in archive.files}
-    vocab = {
-        k: v.replace("<|", "⟪").replace("|>", "⟫")
-        for k, v in json.loads((root / "vocab.json").read_text()).items()
-    }
+    vocab = escape_vocab(json.loads((root / "vocab.json").read_text()))
     stats = json.loads((root / "feature_stats.json").read_text())
     index_features(cache, metadata["n_features"])
     train_convs, test_convs = split_conversations(metadata["conversations"])
