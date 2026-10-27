@@ -2,6 +2,23 @@
 
 High-performance activation data loader for neural network interpretability research. Provides streaming access to transformer activations with shared memory for efficient multiprocessing.
 
+## Token formatting
+
+Conversation rows are tokenized with
+`tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)`.
+The activation generator uses those IDs directly: it does not prepend BOS,
+roll the sequence, or reserve an extra token slot. Gemma's template supplies its
+own BOS; Qwen's template starts with the first chat-turn delimiter. Plain-text
+rows likewise retain the tokenizer's default special-token handling.
+
+`max_sequence_length` is the actual token capacity, including any special tokens
+already emitted by the tokenizer. Longer sequences are truncated on the right;
+shorter sequences are padded, with padding excluded by the validity mask.
+
+Earlier versions inserted BOS after tokenization. Evaluations of checkpoints
+trained with that version need to reproduce the old preprocessing explicitly;
+new activation generation uses the native tokenizer output.
+
 ## Quick Start
 
 ### Basic Usage
@@ -331,3 +348,8 @@ def __setstate__(self, state):
 - **Memory Access**: Both processes access identical physical RAM
 - **Synchronization**: Changes in one process immediately visible in other
 - **Cleanup**: Automatic cleanup when all processes release references
+
+
+For a single-layer MOLT, set `n_layers: 1` and `activation_layer: 22` (or the
+wanted layer) on the datamodule. Only that layer's input and output are saved.
+Omit `activation_layer` to retain extraction of layers 0 through `n_layers-1`.

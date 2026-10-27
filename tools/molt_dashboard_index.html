@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen MOLT · Transform features</title>
+<style>
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font:15px system-ui;color:#182c3b;background:#f4f7fa;height:100vh;display:flex;flex-direction:column}
+header{padding:20px 28px 12px;border-bottom:1px solid #d9e2eb;background:white}
+h1{margin:4px 0 8px;font-size:26px}h2{margin:6px 0 10px;font-size:24px;line-height:1.3}
+p{line-height:1.5;margin:8px 0;color:#526576}
+.badge{color:#087969;font-size:11px;font-weight:700;letter-spacing:1px}
+.layout{display:grid;grid-template-columns:310px minmax(0,1fr);flex:1;min-height:0}
+aside{padding:18px;background:white;border-right:1px solid #d9e2eb;overflow:auto}
+label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
+input,select,button{font:inherit;padding:8px;border:1px solid #c7d3df;border-radius:6px}
+input,select{width:100%;margin-bottom:12px}button{cursor:pointer;background:white}
+button:hover,button.selected{background:#e7f5f1;border-color:#158d79}
+button:focus-visible,a:focus-visible{outline:2px solid #087969;outline-offset:2px}
+.feature{display:block;width:100%;text-align:left;margin:7px 0;padding:11px 12px;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.feature strong{display:block;font-weight:650;color:#203b43}
+.feature span{display:block;color:#607080;font-size:12px;margin-top:5px}
+#count{font-size:12px;color:#607080;margin:4px 0 12px}
+#workspace{min-width:0;overflow:auto;background:white}
+#interpretation{padding:24px 28px 18px;border-bottom:1px solid #d9e2eb;background:#fbfdfc}
+#feature-description{color:#253f4a;max-width:1100px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px;line-height:1.65}
+#feature-meta{font-size:12px;color:#607080}
+.detail-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.status{display:inline-block;border-radius:5px;padding:4px 8px;background:#edf2f5;color:#526576;font-size:12px}
+.status.limited{background:#fff3dc;color:#895c14}
+.scores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}
+.score{padding:12px 14px;border:1px solid #d9e2eb;border-radius:8px;background:white;min-width:0}
+.score h3{font-size:13px;font-weight:600;margin:0 0 8px}
+.score-value{display:block;font-size:26px;font-weight:650;line-height:1.2;color:#087969}
+.score-value.missing{font-size:17px;color:#73808b;padding:5px 0}
+.score-detail,.score-ci{display:block;font-size:11px;color:#607080;line-height:1.5;margin-top:5px}
+.score-detail.warning{color:#895c14}
+.score-note{font-size:12px;margin:12px 0 0}
+#review-link{font-size:13px;white-space:nowrap}
+#sync-status{font-size:12px;color:#607080;margin:6px 0 0}
+#sync-status.warning{color:#895c14}
+iframe{display:block;width:100%;height:1000px;border:0;background:white}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;font-size:13px}
+.controls label{margin:0}.controls input{width:auto;margin:0}.controls button{padding:5px 12px}
+#provenance{font-size:11px;margin-top:10px}.note{font-size:12px}a{color:#087969}
+@media(max-width:1000px){.layout{grid-template-columns:250px minmax(0,1fr)}.scores{grid-template-columns:repeat(2,minmax(0,1fr))}#interpretation{padding:20px}}
+@media(max-width:650px){body{height:auto;min-height:100vh}header{padding:16px}h1{font-size:22px}.layout{grid-template-columns:minmax(0,1fr)}aside{max-height:330px;border-right:0;border-bottom:1px solid #d9e2eb}#workspace{overflow:visible}.scores{gap:8px}#interpretation{padding:18px}h2{font-size:21px}}
+</style>
+</head>
+<body>
+<header>
+<div class="badge">MOLT FEATURE EXPLORER · SAE-VIS</div>
+<h1>Transform gates</h1><p id="summary"></p>
+<p class="note">One transform = one feature. Highlight intensity shows its scalar gate. Binary mode shows whether it fired. Direct logit projections describe contributions, not causal ablations.</p>
+<div class="controls">
+<button id="previous" aria-label="Previous transform">←</button><button id="next" aria-label="Next transform">→</button>
+<label><input id="binary" type="checkbox"> Binary activation</label>
+<a id="direct" target="_blank" rel="noopener">Open feature page</a>
+<a id="steer-link">Steer this transform →</a>
+<a id="tool-playground-link" href="/tools">Tool playground</a>
+<a href="http://100.76.58.1:8766/trajectories/">Agent trajectories</a>
+<a id="layer-review" hidden>All explanations &amp; scores</a>
+<a href="/layers/" id="layers-link">All layers</a>
+</div>
+<p id="provenance"></p>
+</header>
+<main class="layout">
+<aside>
+<label for="search">Find transform or title</label><input id="search" placeholder="ID, title, or explanation">
+<label for="rank">Transform rank</label><select id="rank"><option value="">All ranks</option><option>512</option><option>256</option><option>128</option><option>64</option><option>32</option></select>
+<label for="sort">Sort features</label><select id="sort"><option value="frequency">Most frequently active</option><option value="maximum">Strongest activation</option><option value="id">Transform ID</option></select>
+<div id="count"></div><div id="features"></div>
+</aside>
+<section id="workspace" aria-label="Selected transform">
+<section id="interpretation" aria-labelledby="feature-title">
+<div class="detail-heading"><div class="badge" id="feature-id"></div><a id="review-link" hidden>Inspect scored examples &amp; add notes →</a></div>
+<h2 id="feature-title"></h2>
+<div id="feature-status" class="status"></div>
+<p id="feature-description"></p>
+<p id="feature-meta"></p>
+<div class="scores" id="scores" aria-label="Delphi evaluation scores"></div>
+<p class="score-note">Scores are accuracy on held-out cases. Detection and fuzzing chance: 50%; intruder: 20%. Intruder measures context coherence. The same LLM explains and judges; these scores describe gate activation, not causal effects. Confidence intervals are approximate for paired or reused contexts.</p>
+<p id="sync-status" role="status"></p>
+</section>
+<iframe id="view" title="SAE-Vis transform activation dashboard"></iframe>
+</section>
+</main>
+<script>
+const META=__METADATA__, FEATURES=__FEATURES__, INITIAL_REVIEW=__INTERPRETATIONS__;
+const el=id=>document.getElementById(id);
+const METHODS=[
+ ['detection','Detection','Predicts whether an unhighlighted context activates the gate.'],
+ ['fuzz','Fuzzing','Judges whether highlighted tokens match the explanation, using positive and negative contexts.'],
+ ['active_fuzz','Active fuzzing','Judges correct versus incorrect highlights within contexts where the gate fires.'],
+ ['intruder','Intruder','Finds the inactive context among four active contexts, without using the explanation.']
+];
+let interpretations=INITIAL_REVIEW.features||{}, reviewAvailable=Boolean(INITIAL_REVIEW.settings);
+let syncMessage=reviewAvailable?'Saved scores · checking for updates…':'Explanations and scores will appear here as they finish.';
+let syncWarning=false, frameObserver;
+const reviewRoot=META.layer_review_url||'autointerp-layer/';
+const statusLabels={complete:'Scoring complete',limited_evidence:'Limited evidence',not_observed:'Not observed in this sample',incomplete:'Scoring incomplete',scoring:'Scoring in progress',ready_to_score:'Scores pending',explaining:'Explanation in progress',error:'Explanation or scoring needs attention',explained:'Explanation available'};
+document.title=`MOLT · Layer ${META.layer} transform gates`;
+document.querySelector('h1').textContent=`${META.model.split('/').pop()} · Layer ${META.layer} transform gates`;
+el('steer-link').hidden=![22,29].includes(META.layer);el('tool-playground-link').hidden=META.layer!==22;
+el('layers-link').hidden=location.protocol==='file:';
+if(META.has_logit_projections===false)document.querySelector('.note').textContent='One transform = one feature. Highlight intensity shows its scalar gate. Binary mode shows whether it fired.';
+const baseSummary=`${META.n_features.toLocaleString()} transforms · step ${META.global_step.toLocaleString()} · ${META.tokens.toLocaleString()} held-out tokens · ${META.conversations.toLocaleString()} UltraChat conversations · sample L0 ${META.sample_l0.toFixed(3)}`;
+el('provenance').textContent=`Checkpoint: ${META.checkpoint.split('/').slice(-3).join('/')} · ${META.split} · first ${META.max_length} tokens/conversation · chat/special tokens included; no padding`;
+if(META.pilot_review_url){const a=document.createElement('a');a.href=META.pilot_review_url;a.textContent='32-transform pilot';el('provenance').append(' · ',a)}
+let selected=Number(location.hash.slice(1));
+if(!location.hash||!FEATURES.some(f=>f.id===selected))selected=FEATURES.reduce((a,b)=>a.frequency>b.frequency?a:b).id;
+function record(f){return interpretations[String(f.id)]||f.explanation||(f.count===0?{status:'not_observed'}:{})}
+function title(f){const r=record(f);return r.title||r.label||(f.count===0?'Not observed in this sample':'Explanation pending')}
+function filtered(){
+ const q=el('search').value.trim().toLowerCase();
+ return FEATURES.filter(f=>[String(f.id),title(f),record(f).explanation||''].some(s=>s.toLowerCase().includes(q))&&(!el('rank').value||f.rank===Number(el('rank').value)))
+  .sort((a,b)=>el('sort').value==='id'?a.id-b.id:b[el('sort').value]-a[el('sort').value]||a.id-b.id);
+}
+function list(){
+ const fs=filtered();el('count').textContent=`${fs.length.toLocaleString()} transforms`;
+ el('features').replaceChildren(...fs.map(f=>{
+  const b=document.createElement('button');b.className='feature'+(f.id===selected?' selected':'');b.dataset.feature=String(f.id);b.setAttribute('aria-pressed',String(f.id===selected));
+  const t=document.createElement('strong');t.textContent=title(f);
+  const id=document.createElement('span');id.textContent=`Transform ${f.id} · rank ${f.rank}`;
+  const s=document.createElement('span');s.textContent=`${(100*f.frequency).toFixed(3)}% active · max ${f.maximum.toFixed(3)}`;
+  b.append(t,id,s);b.onclick=()=>show(f.id);return b;
+ }));
+}
+function scoreCard(name,label,description,row){
+ const method=row.methods?.[name], metrics=method?.metrics;
+ const card=document.createElement('section');card.className='score';card.dataset.method=name;card.title=description;
+ const heading=document.createElement('h3');heading.textContent=label;
+ const value=document.createElement('strong');value.className='score-value';
+ const detail=document.createElement('span');detail.className='score-detail';
+ const ci=document.createElement('span');ci.className='score-ci';
+ if(Number.isFinite(metrics?.accuracy)&&metrics.valid>0){
+  value.textContent=`${(100*metrics.accuracy).toFixed(1)}%`;
+  detail.textContent=`${metrics.valid}/${metrics.total} cases scored`;
+  if(method.status!=='complete'){detail.textContent+=' · incomplete';detail.classList.add('warning')}
+  if(metrics.parse_failures)detail.textContent+=` · ${metrics.parse_failures} unscored`;
+  if(metrics.accuracy_ci95?.length===2)ci.textContent=`95% CI ${(100*metrics.accuracy_ci95[0]).toFixed(1)}–${(100*metrics.accuracy_ci95[1]).toFixed(1)}%`;
+ }else{
+  value.classList.add('missing');
+  const unavailable=method?.status==='unavailable'||row.status==='not_observed';
+  value.textContent=unavailable?'Unavailable':method?.status==='error'?'Error':method?.status==='incomplete'?'Incomplete':reviewAvailable?'Pending':'Awaiting scores';
+  detail.textContent=method?.reason||(unavailable?'No evaluation evidence':method?.status==='incomplete'?'No valid scored cases yet':'');
+ }
+ card.append(heading,value,detail,ci);return card;
+}
+function details(){
+ const f=FEATURES.find(f=>f.id===selected),r=record(f);
+ el('feature-id').textContent=`Layer ${META.layer} · Transform ${f.id} · rank ${f.rank}`;
+ el('feature-title').textContent=title(f);
+ el('feature-description').textContent=r.explanation||(f.count===0?'This transform did not activate in the sampled tokens, so there is no activation evidence to explain or score.':'The full explanation is not available yet.');
+ const limited=r.evidence_counts?.full_budget===false;
+ el('feature-status').textContent=statusLabels[r.status]||(f.count===0?'Not observed in this sample':'Explanation pending');
+ if(limited&&r.status!=='limited_evidence')el('feature-status').textContent+=' · limited evidence';
+ el('feature-status').classList.toggle('limited',limited);
+ el('feature-meta').textContent=`${f.count.toLocaleString()} active tokens / ${META.tokens.toLocaleString()} sampled (${(100*f.frequency).toFixed(3)}%) · max gate ${f.maximum.toFixed(4)} · mean when active ${f.mean_active.toFixed(4)}`;
+ if(limited)el('feature-meta').textContent+=` · evidence: ${r.evidence_counts.train} explanation, ${r.evidence_counts.test} positive / ${r.evidence_counts.negatives} negative evaluation windows`;
+ el('scores').replaceChildren(...METHODS.map(args=>scoreCard(...args,r)));
+ el('review-link').hidden=!reviewAvailable;el('review-link').href=reviewRoot+'features/'+selected+'.html';
+ el('layer-review').hidden=!reviewAvailable;el('layer-review').href=reviewRoot;
+ el('sync-status').textContent=syncMessage;el('sync-status').classList.toggle('warning',syncWarning);
+ const explained=FEATURES.filter(f=>record(f).explanation||f.explanation).length;
+ el('summary').textContent=baseSummary+(explained?` · ${explained.toLocaleString()} LLM explanations`:'');
+}
+function show(id){
+ if(!FEATURES.some(f=>f.id===id))return;
+ const changed=selected!==id;selected=id;history.replaceState(null,'','#'+id);
+ const url=`features/${id}.html`+(el('binary').checked?'?binary=1':'');
+ if(el('view').getAttribute('src')!==url){frameObserver?.disconnect();el('view').style.height='1000px';el('view').src=url}
+ el('direct').href=url;el('steer-link').href='/steer?layer='+META.layer+'&feature='+id;el('tool-playground-link').href='/tools?feature='+id;
+ if(changed)el('workspace').scrollTop=0;
+ list();details();
+}
+el('view').addEventListener('load',()=>{
+ // The explorer owns the live description. Keep standalone SAE-Vis pages intact.
+ try{
+  const doc=el('view').contentDocument;if(!doc)return;
+  const css=doc.createElement('style');css.textContent='.feature-intro,body>h2,body>p,body>section:not(.projection-controls){display:none!important}';doc.head.append(css);
+  const resize=()=>{const height=Math.ceil(doc.body.getBoundingClientRect().height)+40;if(height>40&&Math.abs(height-el('view').offsetHeight)>1)el('view').style.height=height+'px'};
+  frameObserver?.disconnect();frameObserver=new ResizeObserver(resize);frameObserver.observe(doc.body);resize();
+ }catch{/* Local file viewers may isolate the iframe; its standalone header remains visible. */}
+});
+for(const id of ['search','rank','sort'])el(id).addEventListener('input',list);
+el('binary').onchange=()=>show(selected);
+for(const [id,delta] of [['previous',-1],['next',1]])el(id).onclick=()=>{const fs=filtered();if(fs.length)show(fs[(Math.max(0,fs.findIndex(f=>f.id===selected))+delta+fs.length)%fs.length].id)};
+window.addEventListener('hashchange',()=>show(Number(location.hash.slice(1))));
+async function refreshAnnotations(){
+ try{
+  const response=await fetch(reviewRoot+'summary.json',{cache:'no-store'});
+  if(response.status===404&&!reviewAvailable)return;
+  if(!response.ok)throw Error('Could not refresh scores; showing the last saved results.');
+  const a=await response.json(),s=a.settings;
+  if(!META.cache_sha256||s?.cache_sha256!==META.cache_sha256||s.checkpoint!==META.checkpoint||s.global_step!==META.global_step||s.layer!==META.layer||s.tokens!==META.tokens)throw Error('Results belong to a different sample; showing only the verified saved results.');
+  if(!a.features||typeof a.features!=='object'||Array.isArray(a.features))throw Error('Could not read updated scores; showing the last saved results.');
+  interpretations=a.features;reviewAvailable=true;syncWarning=false;
+  syncMessage=a.run?.state==='complete'?'Scoring finished · saved results':`Scores update every 30 seconds${a.run?.updated_at?' · last update '+new Date(a.run.updated_at).toLocaleTimeString():''}`;
+  list();details();
+ }catch(error){syncMessage=error instanceof SyntaxError?'Could not read updated scores; showing the last saved results.':error.message;syncWarning=true;details()}
+}
+show(selected);
+if(location.protocol!=='file:'){refreshAnnotations();setInterval(refreshAnnotations,30000)}else{syncMessage='Saved explanations and scores';details()}
+</script>
+<script src="assets/molt-corrected-run.js" defer></script>
+</body>
+</html>

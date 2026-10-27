@@ -1,0 +1,37 @@
+# Apply after molt-gemma3-4b-it-5090-extractor-rtx6000.yaml.
+# Matched layer-22 baseline with no pre-activation loss, trained from the
+# normalized MLP input to the raw MLP output (before Gemma's post-FF RMSNorm).
+
+trainer:
+  logger:
+    init_args:
+      name: "molt-gemma3-4b-it-layer22-N80-multiscale-postnorm-to-raw"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-gemma3-4b-it-rtx6000/layer-22/postnorm-to-raw"
+        interval_minutes: 90
+        filename: "training.ckpt"
+
+model:
+  init_args:
+    pre_actv_loss: 0.0
+
+data:
+  init_args:
+    # Twelve sequences exceeded the 5090's memory during the final LM-head
+    # projection; this affects extraction throughput only.
+    generation_batch_size: 8
+    activation_input_location: "post_norm"
+    activation_output_location: "raw"
+    shared_memory_name: "activation_buffer_gemma3_4b_it_layer22_postnorm_to_raw"
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator-gemma3-4b-it-5090-postnorm-to-raw"
+      tags: ["data-generation", "gemma3", "rtx5090", "postnorm-to-raw"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null

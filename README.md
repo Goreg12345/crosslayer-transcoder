@@ -38,10 +38,25 @@ We want to understand the “brain” of LLMs: what their representations encode
 
 ### Metrics (logged to WandB during training)
 - ✅ Replacement Model Accuracy and KL divergence
+- ✅ Jacobian correlation (mechanistic faithfulness)
 - ✅ Dead Features
 - ✅ Feature activation frequency and other statistics
 - ✅ L0
 - ⏳ Replacement Model Score
+
+Evaluate the completed Gemma-3 layer-22 MOLTs against the exact Jacobian of
+the composite feed-forward branch they were trained to replace:
+
+```bash
+uv run python tools/evaluate_molt_jacobian.py \
+  --output results/molt_layer22_jacobian_correlation.json
+```
+
+The reported score is the cosine similarity of the flattened replacement and
+underlying Jacobians, computed per token datapoint and then averaged. The MOLT
+Jacobian is analytic (and uses the true derivative of the represented
+JumpReLU, not its straight-through training gradient); the underlying layer
+Jacobian is computed by autograd.
 
 
 ## Installation

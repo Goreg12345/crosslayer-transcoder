@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOLT · Layer 22 explorer</title>
+</head>
+<body>
+<p><a id="explorer" href="sample-10m/">Open the 10M-token MOLT explorer</a></p>
+<p><a href="sample-110k.html">Original 110k-token sample and direct logit projections</a></p>
+<script>
+const destination=new URL('sample-10m/',location.href);
+destination.search=location.search;
+destination.hash=location.hash;
+document.getElementById('explorer').href=destination.href;
+location.replace(destination.href);
+</script>
+</body>
+</html>

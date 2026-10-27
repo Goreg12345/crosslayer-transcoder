@@ -1,0 +1,133 @@
+# Single-layer MOLT on Gemma 3 4B Instruct with split GPU roles.
+#
+# Hardware topology on this workstation:
+# PyTorch CUDA ordering on this workstation (different from nvidia-smi indices):
+#   cuda:0 = RTX PRO 6000 Blackwell: MOLT training only
+#   cuda:1 = RTX 5090: activation extraction only
+#
+# Trained layer: zero-based layer 22 (the 23rd of 34), approximately two-thirds
+# through Gemma. Extraction stops there, so layers 23-33 are not buffered.
+#
+# Shared-memory budget:
+#   380,000 * 2 * 23 * 2,560 * 2 bytes (bfloat16) = 89,497,600,000 bytes
+#   = 89.50 GB (83.35 GiB), plus a ~0.4 MiB validity mask.
+#   NOTE: this machine currently has a 63 GiB /dev/shm mount, so it must be
+#   enlarged to at least 84 GiB (preferably 96 GiB) before this config can run.
+
+seed_everything: 42
+
+trainer:
+  max_steps: 100_000
+  # A replacement-model metric is not meaningful for this single-layer run.
+  val_check_interval: 1000000000
+  limit_val_batches: 1
+  check_val_every_n_epoch: null
+  enable_checkpointing: false
+  num_sanity_val_steps: 0
+  accelerator: "gpu"
+  devices: [0]
+  accumulate_grad_batches: 1
+  precision: "bf16-mixed"
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: "debug-molt"
+      name: "molt-gemma3-4b-it-layer22-N80-multiscale"
+      save_dir: "./wandb"
+  callbacks:
+    - class_path: crosslayer_transcoder.utils.callbacks.TimedCheckpointCallback
+      init_args:
+        checkpoint_dir: "checkpoints/molt-gemma3-4b-it-rtx6000/layer-22/baseline"
+        interval_minutes: 90
+        filename: "training.ckpt"
+
+model:
+  class_path: crosslayer_transcoder.model.clt_lightning.MoltModule
+  init_args:
+    model:
+      class_path: crosslayer_transcoder.model.molt.Molt
+      init_args:
+        d_acts: 2560
+        # Multiscale MOLT hierarchy: N * (1 + 2 + 4 + 8 + 16) = 2,480
+        # transforms distributed across ranks 512 down to 32. N=80 yields
+        # approximately 1.055B parameters per layer and 35.9B across 34 layers.
+        N: 80
+        ranks: [512, 256, 128, 64, 32]
+        nonlinearity:
+          class_path: crosslayer_transcoder.model.jumprelu.JumpReLU
+          init_args:
+            theta: 0.03
+            bandwidth: 1.0
+            n_layers: 1
+            d_features: 2480
+        input_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseInputStandardizer
+          init_args:
+            n_layers: 23
+            activation_dim: 2560
+        output_standardizer:
+          class_path: crosslayer_transcoder.model.standardize.DimensionwiseOutputStandardizer
+          init_args:
+            n_layers: 23
+            activation_dim: 2560
+
+    replacement_model: null
+    dead_features: null
+    learning_rate: 2e-4
+    compile: false
+    lr_decay_step: 1000000000
+    lr_decay_factor: 0.1
+    lambda_sparsity: 0.00015
+    c_sparsity: 100
+    use_tanh: true
+    layer: 22
+    compute_dead_features: false
+    compute_dead_features_every: 500
+
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    buffer_size: 380_000
+    n_in_out: 2
+    n_layers: 23
+    activation_dim: 2560
+    dtype: "bfloat16"
+    max_batch_size: 10_000
+
+    model_name: "google/gemma-3-4b-it"
+    model_dtype: "bfloat16"
+    model_arch: "gemma3"
+
+    dataset_name: "HuggingFaceH4/ultrachat_200k"
+    dataset_split: "train_sft"
+    dataset_text_field: "messages"
+    max_sequence_length: 1024
+
+    generation_batch_size: 12
+    refresh_interval: 0.1
+
+    shared_memory_name: "activation_buffer_gemma3_4b_it"
+    timeout_seconds: 60
+
+    batch_size: 1000
+    num_workers: 4
+    prefetch_factor: 2
+    shuffle: true
+    persistent_workers: true
+    pin_memory: true
+    minimum_fill_threshold: 0.01
+    use_shared_memory: true
+
+    device_map: "cuda:1"
+    deployment_policy: "gpu_only"
+
+    wandb_logging:
+      enabled: true
+      project: "debug-molt"
+      group: null
+      run_name: "data-generator-gemma3-4b-it-5090"
+      tags: ["data-generation", "gemma3", "rtx5090"]
+      save_dir: "./wandb"
+      log_interval: 5.0
+
+ckpt_path: null

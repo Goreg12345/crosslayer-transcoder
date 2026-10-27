@@ -5,6 +5,7 @@ Handles model selection, buffer monitoring, and coordinates between different da
 
 import logging
 import time
+from multiprocessing.synchronize import Event
 from typing import Any, Optional
 
 import torch
@@ -43,10 +44,12 @@ class DataGenerationLoop:
         refresh_interval: float,
         generation_batch_size: int,
         max_sequence_length: int,
+        dataset_text_field: str,
         monitor: ProcessMonitor,
         deployment_policy: DeploymentPolicy = DeploymentPolicy.DYNAMIC,
         device_map: str = "auto",
         disk_source: Optional[DiskActivationSource] = None,
+        stop_event: Optional[Event] = None,
     ):
         self.shared_buffer = shared_buffer
         self.buffer_size = buffer_size
@@ -58,6 +61,7 @@ class DataGenerationLoop:
         self.refresh_interval = refresh_interval
         self.generation_batch_size = generation_batch_size
         self.max_sequence_length = max_sequence_length
+        self.dataset_text_field = dataset_text_field
         self.text_dataset_loader = None
         self.activation_computer = None
         self.monitor = monitor
@@ -72,6 +76,7 @@ class DataGenerationLoop:
 
         # Runtime state
         self.running = True
+        self.stop_event = stop_event
         self.dataset = None  # Will be set by parent process
 
     def set_dataset(self, dataset: Any) -> None:
@@ -94,7 +99,8 @@ class DataGenerationLoop:
             current_model.tokenizer,
             self.generation_batch_size,
             drop_last_batch=False,
-            seq_len=self.max_sequence_length - 1,  # -1 for BOS token
+            hf_text_accessor=self.dataset_text_field,
+            seq_len=self.max_sequence_length,
         )
 
         text_dataset_loader = DataLoader(
@@ -124,7 +130,7 @@ class DataGenerationLoop:
 
         last_time = time.time()
 
-        while self.running:
+        while self.running and not (self.stop_event is not None and self.stop_event.is_set()):
             # Check for indices that need refreshing (invalid indices)
             indices_to_refresh = self.shared_buffer._get_invalid_indices()
 
@@ -132,7 +138,10 @@ class DataGenerationLoop:
                 # Update dashboard when sleeping
                 stats = self.shared_buffer.get_stats()
                 self.monitor.update_dashboard("SLEEPING", stats, self.deployment_policy.get_current_device())
-                time.sleep(self.refresh_interval)
+                if self.stop_event is not None:
+                    self.stop_event.wait(self.refresh_interval)
+                else:
+                    time.sleep(self.refresh_interval)
                 continue
 
             # Generate new activations
@@ -180,34 +189,16 @@ class DataGenerationLoop:
         except StopIteration:
             # Dataset exhausted, recreate loader
             self.monitor.log_dataset_exhausted()
-            token_dataset = text_dataset.TextDataset(
-                self.dataset,
-                current_model.tokenizer,  # Use current model tokenizer
-                self.generation_batch_size,
-                drop_last_batch=False,
-                seq_len=self.max_sequence_length - 1,
-            )
-            self.text_dataset_loader = iter(
-                DataLoader(
-                    token_dataset,
-                    batch_size=None,
-                    shuffle=False,
-                    num_workers=8,  # Optimal for performance
-                    prefetch_factor=4,  # Optimal for performance
-                    worker_init_fn=text_dataset.worker_init_fn,
-                )
-            )
+            self._setup_text_dataset_loader()
             batch, mask = next(self.text_dataset_loader)
 
         # Move to current device
         batch = batch.to(current_device)
         mask = mask.to(current_device)
 
-        # Prepend BOS token (like in benchmark)
-        batch = torch.roll(batch, shifts=1, dims=1)
-        batch[:, 0] = current_model.config.bos_token_id
-
-        # Extract activations using the activation computer
+        # Tokenization owns special tokens. In particular, chat templates may
+        # already include BOS (Gemma) or deliberately omit it (Qwen). Preserve
+        # the token IDs and their padding mask exactly as produced by the loader.
         mlp_acts = self.activation_computer.get_next_batch(current_model, batch, mask)
 
         return mlp_acts
@@ -274,5 +265,11 @@ class DataGenerationLoop:
                 break
 
     def stop(self) -> None:
-        """Stop the generation loop."""
+        """Stop the generation loop and join its text DataLoader workers."""
         self.running = False
+        if self.text_dataset_loader is not None:
+            # PyTorch exposes worker shutdown on the iterator, not the loader.
+            shutdown = getattr(self.text_dataset_loader, "_shutdown_workers", None)
+            if shutdown is not None:
+                shutdown()
+            self.text_dataset_loader = None

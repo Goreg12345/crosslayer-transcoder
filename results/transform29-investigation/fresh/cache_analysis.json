@@ -1,0 +1,1926 @@
+{
+  "groups": {
+    "assistant": {
+      "n": 43879,
+      "active": 35952,
+      "rate": 0.819344105380706,
+      "mean": 1.3595291882221563
+    },
+    "header": {
+      "n": 740,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    "outside": {
+      "n": 331,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    "special": {
+      "n": 702,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    "user": {
+      "n": 12092,
+      "active": 9538,
+      "rate": 0.7887859741978167,
+      "mean": 1.219478141539861
+    },
+    "content": {
+      "n": 55971,
+      "active": 45490,
+      "rate": 0.8127423129835093,
+      "mean": 1.3292724971413767
+    },
+    "content_alpha": {
+      "n": 47024,
+      "active": 43210,
+      "rate": 0.9188924804355223,
+      "mean": 1.5119536699345015
+    },
+    "content_punctuation": {
+      "n": 6813,
+      "active": 2272,
+      "rate": 0.33348011155144575,
+      "mean": 0.48375233927785116
+    },
+    "content_whitespace": {
+      "n": 850,
+      "active": 1,
+      "rate": 0.001176470588235294,
+      "mean": 0.0007950367647058823
+    }
+  },
+  "turn_position": {
+    "0": {
+      "n": 369,
+      "active": 10,
+      "rate": 0.02710027100271003,
+      "mean": 0.025649983062330625
+    },
+    "1": {
+      "n": 368,
+      "active": 80,
+      "rate": 0.21739130434782608,
+      "mean": 0.26003099524456524
+    },
+    "2": {
+      "n": 368,
+      "active": 150,
+      "rate": 0.4076086956521739,
+      "mean": 0.5209748641304348
+    },
+    "3": {
+      "n": 368,
+      "active": 198,
+      "rate": 0.5380434782608695,
+      "mean": 0.683455757472826
+    },
+    "4": {
+      "n": 368,
+      "active": 236,
+      "rate": 0.6413043478260869,
+      "mean": 0.8326150645380435
+    },
+    "5": {
+      "n": 367,
+      "active": 273,
+      "rate": 0.7438692098092643,
+      "mean": 1.01175068119891
+    },
+    "6": {
+      "n": 366,
+      "active": 297,
+      "rate": 0.8114754098360656,
+      "mean": 1.1700499487704918
+    },
+    "7": {
+      "n": 366,
+      "active": 301,
+      "rate": 0.8224043715846995,
+      "mean": 1.2440979337431695
+    },
+    "8": {
+      "n": 366,
+      "active": 308,
+      "rate": 0.8415300546448088,
+      "mean": 1.2914211919398908
+    },
+    "9": {
+      "n": 365,
+      "active": 318,
+      "rate": 0.8712328767123287,
+      "mean": 1.3589897260273973
+    },
+    "10": {
+      "n": 364,
+      "active": 317,
+      "rate": 0.8708791208791209,
+      "mean": 1.3691728193681318
+    },
+    "11": {
+      "n": 362,
+      "active": 319,
+      "rate": 0.8812154696132597,
+      "mean": 1.3775142437845305
+    }
+  },
+  "since_boundary": {
+    "0": {
+      "n": 3297,
+      "active": 1633,
+      "rate": 0.4952987564452533,
+      "mean": 0.7183009648923263
+    },
+    "1": {
+      "n": 3234,
+      "active": 1927,
+      "rate": 0.595856524427953,
+      "mean": 0.8888723813388992
+    },
+    "2": {
+      "n": 2827,
+      "active": 2031,
+      "rate": 0.7184294304916873,
+      "mean": 1.1015804629465864
+    },
+    "3": {
+      "n": 2695,
+      "active": 2107,
+      "rate": 0.7818181818181819,
+      "mean": 1.2286830357142857
+    },
+    "4": {
+      "n": 2630,
+      "active": 2165,
+      "rate": 0.8231939163498099,
+      "mean": 1.3113459481939163
+    },
+    "5": {
+      "n": 2564,
+      "active": 2176,
+      "rate": 0.8486739469578783,
+      "mean": 1.3715965044851794
+    },
+    "6": {
+      "n": 2470,
+      "active": 2147,
+      "rate": 0.8692307692307693,
+      "mean": 1.422686298076923
+    },
+    "7": {
+      "n": 2391,
+      "active": 2117,
+      "rate": 0.8854035968214137,
+      "mean": 1.461210333019657
+    },
+    "8": {
+      "n": 2326,
+      "active": 2071,
+      "rate": 0.8903697334479793,
+      "mean": 1.4765591412295787
+    },
+    "9": {
+      "n": 2244,
+      "active": 2015,
+      "rate": 0.8979500891265597,
+      "mean": 1.5004926331327986
+    },
+    "10": {
+      "n": 2188,
+      "active": 1982,
+      "rate": 0.9058500914076782,
+      "mean": 1.5162248628884827
+    },
+    "11": {
+      "n": 2129,
+      "active": 1915,
+      "rate": 0.8994833255049319,
+      "mean": 1.5009228951385627
+    }
+  },
+  "token_stats": [
+    {
+      "token": "!",
+      "n": 65,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "0",
+      "n": 175,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "1",
+      "n": 294,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "4",
+      "n": 105,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "6",
+      "n": 58,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "8",
+      "n": 59,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": ":",
+      "n": 321,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "?",
+      "n": 166,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": " ",
+      "n": 470,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "\n\n",
+      "n": 141,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": " (",
+      "n": 63,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": " \"",
+      "n": 75,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": ".\n\n",
+      "n": 451,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": " [",
+      "n": 54,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": ".\n",
+      "n": 95,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "user",
+      "n": 189,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": ":\n\n",
+      "n": 88,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "assistant",
+      "n": 181,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "<|im_start|>",
+      "n": 370,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "<|im_end|>",
+      "n": 332,
+      "active": 0,
+      "rate": 0.0,
+      "mean": 0.0
+    },
+    {
+      "token": "\n",
+      "n": 819,
+      "active": 1,
+      "rate": 0.001221001221001221,
+      "mean": 0.0008251297313797314
+    },
+    {
+      "token": ".",
+      "n": 1745,
+      "active": 7,
+      "rate": 0.0040114613180515755,
+      "mean": 0.0034115329512893985
+    },
+    {
+      "token": "3",
+      "n": 133,
+      "active": 1,
+      "rate": 0.007518796992481203,
+      "mean": 0.006020911654135338
+    },
+    {
+      "token": "5",
+      "n": 109,
+      "active": 1,
+      "rate": 0.009174311926605505,
+      "mean": 0.006952408256880734
+    },
+    {
+      "token": "2",
+      "n": 210,
+      "active": 2,
+      "rate": 0.009523809523809525,
+      "mean": 0.007998511904761904
+    },
+    {
+      "token": "7",
+      "n": 73,
+      "active": 1,
+      "rate": 0.0136986301369863,
+      "mean": 0.011504708904109588
+    },
+    {
+      "token": "-",
+      "n": 141,
+      "active": 2,
+      "rate": 0.014184397163120567,
+      "mean": 0.011303191489361703
+    },
+    {
+      "token": " -",
+      "n": 74,
+      "active": 2,
+      "rate": 0.02702702702702703,
+      "mean": 0.020798141891891893
+    },
+    {
+      "token": "9",
+      "n": 62,
+      "active": 2,
+      "rate": 0.03225806451612903,
+      "mean": 0.03295110887096774
+    },
+    {
+      "token": " such",
+      "n": 82,
+      "active": 10,
+      "rate": 0.12195121951219512,
+      "mean": 0.18497522865853658
+    },
+    {
+      "token": ")",
+      "n": 52,
+      "active": 15,
+      "rate": 0.28846153846153844,
+      "mean": 0.31295072115384615
+    },
+    {
+      "token": " you",
+      "n": 271,
+      "active": 147,
+      "rate": 0.5424354243542435,
+      "mean": 0.7947128690036901
+    },
+    {
+      "token": "The",
+      "n": 80,
+      "active": 48,
+      "rate": 0.6,
+      "mean": 0.749853515625
+    },
+    {
+      "token": " provide",
+      "n": 76,
+      "active": 46,
+      "rate": 0.6052631578947368,
+      "mean": 0.8907277960526315
+    },
+    {
+      "token": " me",
+      "n": 79,
+      "active": 55,
+      "rate": 0.6962025316455697,
+      "mean": 1.0705597310126582
+    },
+    {
+      "token": " I",
+      "n": 216,
+      "active": 162,
+      "rate": 0.75,
+      "mean": 1.0223705150462963
+    },
+    {
+      "token": " are",
+      "n": 214,
+      "active": 167,
+      "rate": 0.780373831775701,
+      "mean": 1.2905592873831775
+    },
+    {
+      "token": " there",
+      "n": 56,
+      "active": 44,
+      "rate": 0.7857142857142857,
+      "mean": 1.0328543526785714
+    },
+    {
+      "token": "'s",
+      "n": 287,
+      "active": 240,
+      "rate": 0.8362369337979094,
+      "mean": 1.3559859538327526
+    },
+    {
+      "token": " some",
+      "n": 111,
+      "active": 93,
+      "rate": 0.8378378378378378,
+      "mean": 1.1269355292792793
+    },
+    {
+      "token": " more",
+      "n": 175,
+      "active": 148,
+      "rate": 0.8457142857142858,
+      "mean": 1.3170982142857144
+    },
+    {
+      "token": " not",
+      "n": 71,
+      "active": 61,
+      "rate": 0.8591549295774648,
+      "mean": 1.4415713028169015
+    },
+    {
+      "token": " any",
+      "n": 71,
+      "active": 62,
+      "rate": 0.8732394366197183,
+      "mean": 1.2671654929577465
+    },
+    {
+      "token": " It",
+      "n": 56,
+      "active": 49,
+      "rate": 0.875,
+      "mean": 1.3140345982142858
+    },
+    {
+      "token": " up",
+      "n": 57,
+      "active": 50,
+      "rate": 0.8771929824561403,
+      "mean": 1.491639254385965
+    },
+    {
+      "token": " one",
+      "n": 74,
+      "active": 65,
+      "rate": 0.8783783783783784,
+      "mean": 1.3045291385135136
+    },
+    {
+      "token": ",",
+      "n": 2372,
+      "active": 2110,
+      "rate": 0.8895446880269815,
+      "mean": 1.3117161150927488
+    },
+    {
+      "token": " but",
+      "n": 63,
+      "active": 57,
+      "rate": 0.9047619047619048,
+      "mean": 1.316530257936508
+    },
+    {
+      "token": " at",
+      "n": 98,
+      "active": 89,
+      "rate": 0.9081632653061225,
+      "mean": 1.5428491709183674
+    },
+    {
+      "token": " an",
+      "n": 126,
+      "active": 115,
+      "rate": 0.9126984126984127,
+      "mean": 1.4659288194444444
+    },
+    {
+      "token": " other",
+      "n": 94,
+      "active": 86,
+      "rate": 0.9148936170212766,
+      "mean": 1.4854138962765957
+    },
+    {
+      "token": " the",
+      "n": 2209,
+      "active": 2035,
+      "rate": 0.9212313263920326,
+      "mean": 1.5106489078768675
+    },
+    {
+      "token": " a",
+      "n": 981,
+      "active": 904,
+      "rate": 0.9215086646279307,
+      "mean": 1.5212155963302751
+    },
+    {
+      "token": " have",
+      "n": 201,
+      "active": 186,
+      "rate": 0.9253731343283582,
+      "mean": 1.5933030161691542
+    },
+    {
+      "token": " this",
+      "n": 102,
+      "active": 95,
+      "rate": 0.9313725490196079,
+      "mean": 1.4922257965686274
+    },
+    {
+      "token": " The",
+      "n": 192,
+      "active": 180,
+      "rate": 0.9375,
+      "mean": 1.454833984375
+    },
+    {
+      "token": " sleep",
+      "n": 58,
+      "active": 55,
+      "rate": 0.9482758620689655,
+      "mean": 1.5495689655172413
+    },
+    {
+      "token": " for",
+      "n": 449,
+      "active": 428,
+      "rate": 0.9532293986636972,
+      "mean": 1.6119588669265033
+    },
+    {
+      "token": " them",
+      "n": 86,
+      "active": 82,
+      "rate": 0.9534883720930233,
+      "mean": 1.6062863372093024
+    },
+    {
+      "token": " high",
+      "n": 69,
+      "active": 66,
+      "rate": 0.9565217391304348,
+      "mean": 1.6827445652173914
+    },
+    {
+      "token": " This",
+      "n": 98,
+      "active": 94,
+      "rate": 0.9591836734693877,
+      "mean": 1.4101961096938775
+    },
+    {
+      "token": " also",
+      "n": 102,
+      "active": 98,
+      "rate": 0.9607843137254902,
+      "mean": 1.5742570465686274
+    },
+    {
+      "token": " it",
+      "n": 258,
+      "active": 249,
+      "rate": 0.9651162790697675,
+      "mean": 1.598655523255814
+    },
+    {
+      "token": " help",
+      "n": 59,
+      "active": 57,
+      "rate": 0.9661016949152542,
+      "mean": 1.6204978813559323
+    },
+    {
+      "token": " be",
+      "n": 153,
+      "active": 148,
+      "rate": 0.9673202614379085,
+      "mean": 1.6069240196078431
+    },
+    {
+      "token": " had",
+      "n": 62,
+      "active": 60,
+      "rate": 0.967741935483871,
+      "mean": 1.5516003024193548
+    },
+    {
+      "token": " is",
+      "n": 335,
+      "active": 325,
+      "rate": 0.9701492537313433,
+      "mean": 1.6283465485074626
+    },
+    {
+      "token": " your",
+      "n": 169,
+      "active": 164,
+      "rate": 0.9704142011834319,
+      "mean": 1.6446005917159763
+    },
+    {
+      "token": " on",
+      "n": 306,
+      "active": 297,
+      "rate": 0.9705882352941176,
+      "mean": 1.5852481617647058
+    },
+    {
+      "token": " of",
+      "n": 1164,
+      "active": 1132,
+      "rate": 0.9725085910652921,
+      "mean": 1.634936775128866
+    },
+    {
+      "token": " to",
+      "n": 1301,
+      "active": 1266,
+      "rate": 0.973097617217525,
+      "mean": 1.63745135953113
+    },
+    {
+      "token": " make",
+      "n": 82,
+      "active": 80,
+      "rate": 0.975609756097561,
+      "mean": 1.6996951219512195
+    },
+    {
+      "token": " we",
+      "n": 84,
+      "active": 82,
+      "rate": 0.9761904761904762,
+      "mean": 1.6392764136904763
+    },
+    {
+      "token": " can",
+      "n": 296,
+      "active": 289,
+      "rate": 0.9763513513513513,
+      "mean": 1.615603885135135
+    },
+    {
+      "token": " with",
+      "n": 401,
+      "active": 392,
+      "rate": 0.9775561097256857,
+      "mean": 1.66536783042394
+    },
+    {
+      "token": " that",
+      "n": 454,
+      "active": 445,
+      "rate": 0.9801762114537445,
+      "mean": 1.6566715996696035
+    },
+    {
+      "token": " like",
+      "n": 52,
+      "active": 51,
+      "rate": 0.9807692307692307,
+      "mean": 1.6409254807692308
+    },
+    {
+      "token": " was",
+      "n": 172,
+      "active": 169,
+      "rate": 0.9825581395348837,
+      "mean": 1.7130041787790697
+    },
+    {
+      "token": " how",
+      "n": 127,
+      "active": 125,
+      "rate": 0.984251968503937,
+      "mean": 1.4994771161417322
+    },
+    {
+      "token": " in",
+      "n": 757,
+      "active": 746,
+      "rate": 0.9854689564068693,
+      "mean": 1.7266347424042272
+    },
+    {
+      "token": " her",
+      "n": 73,
+      "active": 72,
+      "rate": 0.9863013698630136,
+      "mean": 1.7429366438356164
+    },
+    {
+      "token": " will",
+      "n": 81,
+      "active": 80,
+      "rate": 0.9876543209876543,
+      "mean": 1.6642554012345678
+    },
+    {
+      "token": " our",
+      "n": 81,
+      "active": 80,
+      "rate": 0.9876543209876543,
+      "mean": 1.779706790123457
+    },
+    {
+      "token": " as",
+      "n": 254,
+      "active": 251,
+      "rate": 0.9881889763779528,
+      "mean": 1.6573111466535433
+    },
+    {
+      "token": " my",
+      "n": 93,
+      "active": 92,
+      "rate": 0.989247311827957,
+      "mean": 1.6304183467741935
+    },
+    {
+      "token": " about",
+      "n": 103,
+      "active": 102,
+      "rate": 0.9902912621359223,
+      "mean": 1.529808859223301
+    },
+    {
+      "token": " they",
+      "n": 120,
+      "active": 119,
+      "rate": 0.9916666666666667,
+      "mean": 1.7063151041666667
+    },
+    {
+      "token": " and",
+      "n": 1756,
+      "active": 1743,
+      "rate": 0.9925968109339408,
+      "mean": 1.6847282531321184
+    },
+    {
+      "token": " by",
+      "n": 168,
+      "active": 167,
+      "rate": 0.9940476190476191,
+      "mean": 1.6274181547619047
+    },
+    {
+      "token": " or",
+      "n": 220,
+      "active": 219,
+      "rate": 0.9954545454545455,
+      "mean": 1.6659801136363637
+    },
+    {
+      "token": " new",
+      "n": 58,
+      "active": 58,
+      "rate": 1.0,
+      "mean": 1.8032058189655173
+    },
+    {
+      "token": " from",
+      "n": 161,
+      "active": 161,
+      "rate": 1.0,
+      "mean": 1.6771642080745341
+    },
+    {
+      "token": " all",
+      "n": 77,
+      "active": 77,
+      "rate": 1.0,
+      "mean": 1.6491477272727273
+    },
+    {
+      "token": " out",
+      "n": 51,
+      "active": 51,
+      "rate": 1.0,
+      "mean": 1.6905637254901962
+    },
+    {
+      "token": " has",
+      "n": 124,
+      "active": 124,
+      "rate": 1.0,
+      "mean": 1.7649004536290323
+    },
+    {
+      "token": " his",
+      "n": 50,
+      "active": 50,
+      "rate": 1.0,
+      "mean": 1.6853125
+    },
+    {
+      "token": " their",
+      "n": 208,
+      "active": 208,
+      "rate": 1.0,
+      "mean": 1.7867713341346154
+    },
+    {
+      "token": " who",
+      "n": 72,
+      "active": 72,
+      "rate": 1.0,
+      "mean": 1.7496744791666667
+    },
+    {
+      "token": " time",
+      "n": 71,
+      "active": 71,
+      "rate": 1.0,
+      "mean": 1.6443111795774648
+    },
+    {
+      "token": " which",
+      "n": 107,
+      "active": 107,
+      "rate": 1.0,
+      "mean": 1.7483206775700935
+    },
+    {
+      "token": " use",
+      "n": 77,
+      "active": 77,
+      "rate": 1.0,
+      "mean": 1.711140422077922
+    },
+    {
+      "token": " were",
+      "n": 73,
+      "active": 73,
+      "rate": 1.0,
+      "mean": 1.7369970034246576
+    },
+    {
+      "token": " its",
+      "n": 70,
+      "active": 70,
+      "rate": 1.0,
+      "mean": 1.81328125
+    },
+    {
+      "token": " different",
+      "n": 69,
+      "active": 69,
+      "rate": 1.0,
+      "mean": 1.774909420289855
+    },
+    {
+      "token": " including",
+      "n": 60,
+      "active": 60,
+      "rate": 1.0,
+      "mean": 1.6834635416666666
+    }
+  ],
+  "conversation_rates": [
+    {
+      "conversation": 0,
+      "n": 340,
+      "active": 254,
+      "rate": 0.7470588235294118,
+      "mean": 1.1107536764705883
+    },
+    {
+      "conversation": 1,
+      "n": 1024,
+      "active": 175,
+      "rate": 0.1708984375,
+      "mean": 0.20191192626953125
+    },
+    {
+      "conversation": 2,
+      "n": 643,
+      "active": 522,
+      "rate": 0.8118195956454122,
+      "mean": 1.3912021286936236
+    },
+    {
+      "conversation": 3,
+      "n": 1024,
+      "active": 711,
+      "rate": 0.6943359375,
+      "mean": 1.0118827819824219
+    },
+    {
+      "conversation": 4,
+      "n": 1024,
+      "active": 910,
+      "rate": 0.888671875,
+      "mean": 1.4340324401855469
+    },
+    {
+      "conversation": 5,
+      "n": 658,
+      "active": 538,
+      "rate": 0.817629179331307,
+      "mean": 1.3495500094984803
+    },
+    {
+      "conversation": 6,
+      "n": 477,
+      "active": 385,
+      "rate": 0.8071278825995807,
+      "mean": 1.3167747641509433
+    },
+    {
+      "conversation": 7,
+      "n": 1024,
+      "active": 863,
+      "rate": 0.8427734375,
+      "mean": 1.4742317199707031
+    },
+    {
+      "conversation": 8,
+      "n": 1024,
+      "active": 890,
+      "rate": 0.869140625,
+      "mean": 1.475372314453125
+    },
+    {
+      "conversation": 9,
+      "n": 1024,
+      "active": 861,
+      "rate": 0.8408203125,
+      "mean": 1.3433265686035156
+    },
+    {
+      "conversation": 10,
+      "n": 828,
+      "active": 734,
+      "rate": 0.8864734299516909,
+      "mean": 1.4713541666666667
+    },
+    {
+      "conversation": 11,
+      "n": 1024,
+      "active": 790,
+      "rate": 0.771484375,
+      "mean": 1.3153305053710938
+    },
+    {
+      "conversation": 12,
+      "n": 711,
+      "active": 534,
+      "rate": 0.7510548523206751,
+      "mean": 1.2319301599859354
+    },
+    {
+      "conversation": 13,
+      "n": 678,
+      "active": 508,
+      "rate": 0.7492625368731564,
+      "mean": 1.277775857300885
+    },
+    {
+      "conversation": 14,
+      "n": 1024,
+      "active": 918,
+      "rate": 0.896484375,
+      "mean": 1.4286727905273438
+    },
+    {
+      "conversation": 15,
+      "n": 1024,
+      "active": 747,
+      "rate": 0.7294921875,
+      "mean": 1.1767044067382812
+    },
+    {
+      "conversation": 16,
+      "n": 482,
+      "active": 372,
+      "rate": 0.7717842323651453,
+      "mean": 1.2260519320539418
+    },
+    {
+      "conversation": 17,
+      "n": 1024,
+      "active": 374,
+      "rate": 0.365234375,
+      "mean": 0.5384140014648438
+    },
+    {
+      "conversation": 18,
+      "n": 817,
+      "active": 665,
+      "rate": 0.813953488372093,
+      "mean": 1.3716053396572827
+    },
+    {
+      "conversation": 19,
+      "n": 1024,
+      "active": 834,
+      "rate": 0.814453125,
+      "mean": 1.3295631408691406
+    },
+    {
+      "conversation": 20,
+      "n": 814,
+      "active": 614,
+      "rate": 0.7542997542997543,
+      "mean": 1.218606035012285
+    },
+    {
+      "conversation": 21,
+      "n": 1024,
+      "active": 871,
+      "rate": 0.8505859375,
+      "mean": 1.398651123046875
+    },
+    {
+      "conversation": 22,
+      "n": 965,
+      "active": 797,
+      "rate": 0.8259067357512954,
+      "mean": 1.356051651554404
+    },
+    {
+      "conversation": 23,
+      "n": 407,
+      "active": 257,
+      "rate": 0.6314496314496314,
+      "mean": 0.9380566646191646
+    },
+    {
+      "conversation": 24,
+      "n": 1024,
+      "active": 828,
+      "rate": 0.80859375,
+      "mean": 1.332916259765625
+    },
+    {
+      "conversation": 25,
+      "n": 527,
+      "active": 447,
+      "rate": 0.8481973434535104,
+      "mean": 1.4094224383301708
+    },
+    {
+      "conversation": 26,
+      "n": 858,
+      "active": 690,
+      "rate": 0.8041958041958042,
+      "mean": 1.2708105696386947
+    },
+    {
+      "conversation": 27,
+      "n": 1024,
+      "active": 761,
+      "rate": 0.7431640625,
+      "mean": 1.1024055480957031
+    },
+    {
+      "conversation": 28,
+      "n": 674,
+      "active": 519,
+      "rate": 0.7700296735905044,
+      "mean": 1.1567484235905046
+    },
+    {
+      "conversation": 29,
+      "n": 823,
+      "active": 683,
+      "rate": 0.8298906439854192,
+      "mean": 1.3661100774605104
+    },
+    {
+      "conversation": 30,
+      "n": 1024,
+      "active": 801,
+      "rate": 0.7822265625,
+      "mean": 1.3073005676269531
+    },
+    {
+      "conversation": 31,
+      "n": 1024,
+      "active": 868,
+      "rate": 0.84765625,
+      "mean": 1.431243896484375
+    },
+    {
+      "conversation": 32,
+      "n": 1024,
+      "active": 484,
+      "rate": 0.47265625,
+      "mean": 0.7221603393554688
+    },
+    {
+      "conversation": 33,
+      "n": 707,
+      "active": 591,
+      "rate": 0.8359264497878359,
+      "mean": 1.4034929720650637
+    },
+    {
+      "conversation": 34,
+      "n": 1024,
+      "active": 871,
+      "rate": 0.8505859375,
+      "mean": 1.4241790771484375
+    },
+    {
+      "conversation": 35,
+      "n": 1024,
+      "active": 823,
+      "rate": 0.8037109375,
+      "mean": 1.3188629150390625
+    },
+    {
+      "conversation": 36,
+      "n": 1024,
+      "active": 894,
+      "rate": 0.873046875,
+      "mean": 1.4277801513671875
+    },
+    {
+      "conversation": 37,
+      "n": 614,
+      "active": 471,
+      "rate": 0.7671009771986971,
+      "mean": 1.2087108102605864
+    },
+    {
+      "conversation": 38,
+      "n": 886,
+      "active": 702,
+      "rate": 0.7923250564334086,
+      "mean": 1.2712859762979685
+    },
+    {
+      "conversation": 39,
+      "n": 1024,
+      "active": 734,
+      "rate": 0.716796875,
+      "mean": 1.0984573364257812
+    },
+    {
+      "conversation": 40,
+      "n": 653,
+      "active": 563,
+      "rate": 0.8621745788667687,
+      "mean": 1.468426971669219
+    },
+    {
+      "conversation": 41,
+      "n": 1024,
+      "active": 904,
+      "rate": 0.8828125,
+      "mean": 1.4424285888671875
+    },
+    {
+      "conversation": 42,
+      "n": 1024,
+      "active": 786,
+      "rate": 0.767578125,
+      "mean": 1.2812690734863281
+    },
+    {
+      "conversation": 43,
+      "n": 1024,
+      "active": 870,
+      "rate": 0.849609375,
+      "mean": 1.3965301513671875
+    },
+    {
+      "conversation": 44,
+      "n": 1024,
+      "active": 722,
+      "rate": 0.705078125,
+      "mean": 1.1240959167480469
+    },
+    {
+      "conversation": 45,
+      "n": 1024,
+      "active": 840,
+      "rate": 0.8203125,
+      "mean": 1.3775482177734375
+    },
+    {
+      "conversation": 46,
+      "n": 896,
+      "active": 722,
+      "rate": 0.8058035714285714,
+      "mean": 1.3002973284040178
+    },
+    {
+      "conversation": 47,
+      "n": 1024,
+      "active": 888,
+      "rate": 0.8671875,
+      "mean": 1.4362564086914062
+    },
+    {
+      "conversation": 48,
+      "n": 984,
+      "active": 750,
+      "rate": 0.7621951219512195,
+      "mean": 1.2216002921747968
+    },
+    {
+      "conversation": 49,
+      "n": 581,
+      "active": 476,
+      "rate": 0.8192771084337349,
+      "mean": 1.3744150709982788
+    },
+    {
+      "conversation": 50,
+      "n": 835,
+      "active": 665,
+      "rate": 0.7964071856287425,
+      "mean": 1.322127619760479
+    },
+    {
+      "conversation": 51,
+      "n": 1024,
+      "active": 760,
+      "rate": 0.7421875,
+      "mean": 1.1827011108398438
+    },
+    {
+      "conversation": 52,
+      "n": 1024,
+      "active": 898,
+      "rate": 0.876953125,
+      "mean": 1.46649169921875
+    },
+    {
+      "conversation": 53,
+      "n": 1024,
+      "active": 861,
+      "rate": 0.8408203125,
+      "mean": 1.4389839172363281
+    },
+    {
+      "conversation": 54,
+      "n": 1024,
+      "active": 904,
+      "rate": 0.8828125,
+      "mean": 1.5088958740234375
+    },
+    {
+      "conversation": 55,
+      "n": 1024,
+      "active": 857,
+      "rate": 0.8369140625,
+      "mean": 1.4036750793457031
+    },
+    {
+      "conversation": 56,
+      "n": 1024,
+      "active": 862,
+      "rate": 0.841796875,
+      "mean": 1.389129638671875
+    },
+    {
+      "conversation": 57,
+      "n": 1024,
+      "active": 754,
+      "rate": 0.736328125,
+      "mean": 1.1697807312011719
+    },
+    {
+      "conversation": 58,
+      "n": 1024,
+      "active": 856,
+      "rate": 0.8359375,
+      "mean": 1.3381080627441406
+    },
+    {
+      "conversation": 59,
+      "n": 950,
+      "active": 777,
+      "rate": 0.8178947368421052,
+      "mean": 1.3212870065789473
+    },
+    {
+      "conversation": 60,
+      "n": 1024,
+      "active": 898,
+      "rate": 0.876953125,
+      "mean": 1.5013198852539062
+    },
+    {
+      "conversation": 61,
+      "n": 1024,
+      "active": 858,
+      "rate": 0.837890625,
+      "mean": 1.4194259643554688
+    },
+    {
+      "conversation": 62,
+      "n": 1024,
+      "active": 822,
+      "rate": 0.802734375,
+      "mean": 1.3291206359863281
+    },
+    {
+      "conversation": 63,
+      "n": 1024,
+      "active": 906,
+      "rate": 0.884765625,
+      "mean": 1.4778060913085938
+    }
+  ],
+  "examples": {
+    "inactive_words": [
+      {
+        "conversation": 3,
+        "position": 657,
+        "token": " problem",
+        "gate": 0.0,
+        "context": " Additionally, I possess excellent communication, organizational, and【 problem】-solving skills, which have helped me succeed in diverse"
+      },
+      {
+        "conversation": 3,
+        "position": 724,
+        "token": " impact",
+        "gate": 0.0,
+        "context": " [accomplishments], which resulted in [positive【 impact】]. For instance, I was responsible for streamlining"
+      },
+      {
+        "conversation": 3,
+        "position": 929,
+        "token": " S",
+        "gate": 0.0,
+        "context": ". I look forward to discussing my qualifications further.【 S】incerely,\n\n[Your Name]<|im_end|>\n<|im_start|>user"
+      },
+      {
+        "conversation": 6,
+        "position": 307,
+        "token": " really",
+        "gate": 0.0,
+        "context": ".<|im_end|>\n<|im_start|>user\nWow, that's【 really】 interesting. I had no idea there was so much"
+      },
+      {
+        "conversation": 11,
+        "position": 117,
+        "token": "er",
+        "gate": 0.0,
+        "context": " the conversation.<|im_end|>\n<|im_start|>assistant\nCowork【er】 1: Hey, have you ever thought about"
+      },
+      {
+        "conversation": 11,
+        "position": 775,
+        "token": "I",
+        "gate": 0.0,
+        "context": " motivation, and productivity.<|im_end|>\n<|im_start|>user\n【I】 liked the cooking competition idea, but I'm wondering"
+      },
+      {
+        "conversation": 19,
+        "position": 591,
+        "token": "M",
+        "gate": 0.0,
+        "context": " together with composer Michael Kamen and producer Robert '【M】utt' Lange. The song was based on orchest"
+      },
+      {
+        "conversation": 24,
+        "position": 268,
+        "token": " modern",
+        "gate": 0.0,
+        "context": ".\n\ngraphics:\n\nthe graphics in call of duty:【 modern】 warfare are stunning, with attention to detail and added"
+      },
+      {
+        "conversation": 24,
+        "position": 575,
+        "token": " can",
+        "gate": 0.0,
+        "context": " call of duty: modern warfare is informative, but【 can】 you add more information on the multiplayer modes and the"
+      },
+      {
+        "conversation": 25,
+        "position": 185,
+        "token": " How",
+        "gate": 0.0,
+        "context": " had no idea the conductor had so many responsibilities.【 How】 do they communicate with the musicians during a performance?"
+      },
+      {
+        "conversation": 28,
+        "position": 432,
+        "token": " provide",
+        "gate": 0.0,
+        "context": " these contexts.<|im_end|>\n<|im_start|>user\nCan you【 provide】 some examples from the book on how the PAW"
+      },
+      {
+        "conversation": 29,
+        "position": 739,
+        "token": "C",
+        "gate": 0.0,
+        "context": " patients. \n\n3. AiCure: Ai【C】ure is a drug adherence platform that uses AI and"
+      },
+      {
+        "conversation": 31,
+        "position": 4,
+        "token": " a",
+        "gate": 0.0,
+        "context": "<|im_start|>user\nCreate【 a】 drama about a group of people dealing with the aftermath"
+      },
+      {
+        "conversation": 37,
+        "position": 361,
+        "token": " Cons",
+        "gate": 0.0,
+        "context": "'s upcoming earnings report is higher than the Zacks【 Cons】ensus Estimate, indicating that analysts have become more optimistic"
+      },
+      {
+        "conversation": 41,
+        "position": 201,
+        "token": " For",
+        "gate": 0.0,
+        "context": " making them more targeted, relevant, and timely.【 For】 example, a travel company may use email automation to"
+      },
+      {
+        "conversation": 42,
+        "position": 599,
+        "token": " Here",
+        "gate": 0.0,
+        "context": " wheelchair-friendly, and that your friend might enjoy.【 Here】 are a few examples:\n\n1. Tidal Wave"
+      },
+      {
+        "conversation": 43,
+        "position": 659,
+        "token": "Once",
+        "gate": 0.0,
+        "context": " the magic of the kingdom and defeat Queen Raven:\n\n【Once】 upon a time, in a magical kingdom far away"
+      },
+      {
+        "conversation": 44,
+        "position": 881,
+        "token": " are",
+        "gate": 0.0,
+        "context": " if you're making thin-crust pizza.\n\nHere【 are】 some different types of pizza crusts and their characteristics"
+      },
+      {
+        "conversation": 45,
+        "position": 901,
+        "token": " the",
+        "gate": 0.0,
+        "context": " on the referral program and the community events mentioned in【 the】 marketing strategy section? I'm curious about how those"
+      },
+      {
+        "conversation": 46,
+        "position": 478,
+        "token": "ura",
+        "gate": 0.0,
+        "context": " Cummins.\n\nCompared to normal silicone, D【ura】Core™ technology offers several benefits. Firstly, it"
+      },
+      {
+        "conversation": 46,
+        "position": 604,
+        "token": " Could",
+        "gate": 0.0,
+        "context": ".<|im_end|>\n<|im_start|>user\nThat sounds impressive!【 Could】 you recommend other Mishimoto products that also use the"
+      },
+      {
+        "conversation": 51,
+        "position": 460,
+        "token": " an",
+        "gate": 0.0,
+        "context": "\nSure, I can do that. Here's【 an】 additional dialogue between John and Sarah that includes information about"
+      },
+      {
+        "conversation": 51,
+        "position": 947,
+        "token": " Yeah",
+        "gate": 0.0,
+        "context": " it so much easier to stay organized.\n\nJohn:【 Yeah】, I know what you mean. I also appreciate"
+      },
+      {
+        "conversation": 58,
+        "position": 3,
+        "token": "Ex",
+        "gate": 0.0,
+        "context": "<|im_start|>user\n【Ex】plain how implementing secure containerization can benefit an organization"
+      },
+      {
+        "conversation": 61,
+        "position": 981,
+        "token": "ag",
+        "gate": 0.0,
+        "context": ", Brazil: Rio is another great place to par【ag】lide over the stunning coastline, with views of the"
+      }
+    ],
+    "active_words": [
+      {
+        "conversation": 7,
+        "position": 533,
+        "token": " or",
+        "gate": 1.6796875,
+        "context": ".\"\n\nPost 5: \nClose with an image【 or】 video that showcases the finished product: a bottle of"
+      },
+      {
+        "conversation": 7,
+        "position": 716,
+        "token": " and",
+        "gate": 1.921875,
+        "context": " includes more information about the types of grapes we grow【 and】 how they contribute to the unique flavor profile of our"
+      },
+      {
+        "conversation": 7,
+        "position": 977,
+        "token": "stones",
+        "gate": 1.984375,
+        "context": "ernet sauvignon grapes are one of the corner【stones】 of our vineyard. These deep, ruby grapes"
+      },
+      {
+        "conversation": 9,
+        "position": 740,
+        "token": " better",
+        "gate": 1.84375,
+        "context": " informed choices. Through reason and reflection, we can【 better】 understand the boundaries of God's plan and how we"
+      },
+      {
+        "conversation": 13,
+        "position": 255,
+        "token": "ium",
+        "gate": 1.8671875,
+        "context": "chatronics, and medical systems.\n\n2. Lith【ium】 werks: a battery technology company that develops and"
+      },
+      {
+        "conversation": 14,
+        "position": 606,
+        "token": " straight",
+        "gate": 1.3828125,
+        "context": "aining, one simply assumes that the arm will stay【 straight】, come what may, because of the flow of"
+      },
+      {
+        "conversation": 26,
+        "position": 691,
+        "token": " and",
+        "gate": 1.8125,
+        "context": " The cockroach serves as a symbol of the Other【 and】 the unknown, and G.H.'s encounter with"
+      },
+      {
+        "conversation": 30,
+        "position": 926,
+        "token": " Hiro",
+        "gate": 1.4765625,
+        "context": " the outside and soft on the inside.\n\n3.【 Hiro】shima - Okonomiyaki: a savory panc"
+      },
+      {
+        "conversation": 31,
+        "position": 228,
+        "token": "ensions",
+        "gate": 1.8671875,
+        "context": " gymnasium, sharing space and resources. T【ensions】 start to rise as they share their stories of survival"
+      },
+      {
+        "conversation": 31,
+        "position": 846,
+        "token": " John",
+        "gate": 1.5390625,
+        "context": " of gardening expertise to help make it a success.【 John】 and Mr. Brown's band gains a following in"
+      },
+      {
+        "conversation": 35,
+        "position": 236,
+        "token": " therapy",
+        "gate": 1.5859375,
+        "context": " replacing negative thoughts with positive ones.\n\n8. Light【 therapy】 – using bright light exposure to reset the circadian"
+      },
+      {
+        "conversation": 35,
+        "position": 960,
+        "token": " calming",
+        "gate": 1.7734375,
+        "context": " an hour before bed. 2. Set a【 calming】 bedtime routine: Establishing a consistent bedtime routine can"
+      },
+      {
+        "conversation": 36,
+        "position": 633,
+        "token": " appear",
+        "gate": 1.6328125,
+        "context": " match the look and feel of the platform where they【 appear】, making them feel more natural and less intrusive."
+      },
+      {
+        "conversation": 44,
+        "position": 599,
+        "token": " into",
+        "gate": 1.671875,
+        "context": " it with your finger.\n\n7. Shape the dough【 into】 a ball, place it in an oiled bowl"
+      },
+      {
+        "conversation": 47,
+        "position": 79,
+        "token": " the",
+        "gate": 1.734375,
+        "context": " ancient Egyptian religion. For example, the image of【 the】 god Ra, who was associated with the sun,"
+      },
+      {
+        "conversation": 48,
+        "position": 141,
+        "token": " at",
+        "gate": 1.7734375,
+        "context": " the Soviet Union had won the women's team competition【 at】 the Olympics.\n\n3. Soviet gymnast Ludm"
+      },
+      {
+        "conversation": 49,
+        "position": 213,
+        "token": " of",
+        "gate": 1.734375,
+        "context": " subsidized rate. This measure aims to increase the number【 of】 affordable rental units available in cities.\n\n5. Enc"
+      },
+      {
+        "conversation": 51,
+        "position": 235,
+        "token": " I",
+        "gate": 1.1171875,
+        "context": " process.\n\nSarah: Yes, that's true.【 I】 make sure to communicate with you regularly to provide updates"
+      },
+      {
+        "conversation": 51,
+        "position": 987,
+        "token": " delays",
+        "gate": 1.7734375,
+        "context": " sense of how everything is moving along and if any【 delays】 are occurring.\n\nSarah: Absolutely. I think it"
+      },
+      {
+        "conversation": 52,
+        "position": 392,
+        "token": " prolonged",
+        "gate": 1.703125,
+        "context": " taking breaks can increase general well-being. Sitting for【 prolonged】 periods of time has been linked to various health disorders"
+      },
+      {
+        "conversation": 52,
+        "position": 609,
+        "token": " Employ",
+        "gate": 1.71875,
+        "context": ", reduced stress, and improved overall well-being.【 Employ】ers should prioritize breaks in their workplace culture, and"
+      },
+      {
+        "conversation": 55,
+        "position": 381,
+        "token": " The",
+        "gate": 1.6484375,
+        "context": " as timber, furs, and agricultural products.【 The】 voyageurs, who were skilled boatmen, transported"
+      },
+      {
+        "conversation": 56,
+        "position": 362,
+        "token": " silk",
+        "gate": 1.7265625,
+        "context": " made with materials such as leather, wood, and【 silk】 and ranged from one to two inches in height.\n\n"
+      },
+      {
+        "conversation": 60,
+        "position": 179,
+        "token": " had",
+        "gate": 1.796875,
+        "context": " overall mental well-being.\n\nOne major effect acne has【 had】 on my mental health is a lack of self-esteem"
+      },
+      {
+        "conversation": 62,
+        "position": 753,
+        "token": " safety",
+        "gate": 1.59375,
+        "context": " while they're playing with these toys to ensure their【 safety】.<|im_end|>\n<|im_start|>user\nCan you add more"
+      }
+    ],
+    "active_punctuation": [
+      {
+        "conversation": 5,
+        "position": 611,
+        "token": ",",
+        "gate": 1.2421875,
+        "context": "obo using all available ISBNs. By doing so【,】 it allows you to better understand your book's positioning"
+      },
+      {
+        "conversation": 6,
+        "position": 204,
+        "token": "'",
+        "gate": 1.2265625,
+        "context": "arte, while Napoleon III was the son of Louis【'】 older brother, Napoleon Bonaparte. Despite this"
+      },
+      {
+        "conversation": 6,
+        "position": 453,
+        "token": ",",
+        "gate": 1.671875,
+        "context": " towards the end of his reign. Despite their differences【,】 Jérôme was one of Napoleon III's closest"
+      },
+      {
+        "conversation": 8,
+        "position": 989,
+        "token": ",",
+        "gate": 1.6796875,
+        "context": " The lighting consisted mostly of deep red and blue tones【,】 with occasional bursts of bright white light to highlight key"
+      },
+      {
+        "conversation": 12,
+        "position": 240,
+        "token": ",",
+        "gate": 1.3046875,
+        "context": ", proteases, and lipid transporters. Additionally【,】 some proteins associated with stress responses, such as heat"
+      },
+      {
+        "conversation": 13,
+        "position": 510,
+        "token": ",",
+        "gate": 0.890625,
+        "context": " culture of twente, and hosts exhibitions, workshops【,】 and events.\n\n2. Tetem: an artistic"
+      },
+      {
+        "conversation": 24,
+        "position": 646,
+        "token": ",",
+        "gate": 1.4453125,
+        "context": " modes, including traditional modes such as Team Deathmatch【,】 Domination, and Headquarters, as well as new"
+      },
+      {
+        "conversation": 27,
+        "position": 794,
+        "token": ",",
+        "gate": 0.98828125,
+        "context": "angyin, Meng Haoran, Han Yu【,】 Du Mu, Bai Juyi, Liu Chang"
+      },
+      {
+        "conversation": 28,
+        "position": 18,
+        "token": ",",
+        "gate": 1.0390625,
+        "context": " main idea behind the PAW (Personal, Academic【,】 Workplace) approach to teaching writing skills in the book"
+      },
+      {
+        "conversation": 29,
+        "position": 53,
+        "token": ",",
+        "gate": 1.65625,
+        "context": ": AI algorithms can analyze medical images, identify patterns【,】 and recognize potential issues earlier than humans, improving the"
+      },
+      {
+        "conversation": 32,
+        "position": 886,
+        "token": ",",
+        "gate": 1.4140625,
+        "context": " you're training the Markov chain on multiple datasets【,】 you can adjust the weights of the transition probabilities depending"
+      },
+      {
+        "conversation": 33,
+        "position": 326,
+        "token": ",",
+        "gate": 1.328125,
+        "context": " edible parts. So while monkeys are versatile eaters【,】 they still have limitations and need to be careful about"
+      },
+      {
+        "conversation": 34,
+        "position": 276,
+        "token": ",",
+        "gate": 1.640625,
+        "context": " Silk Road journey facilitated the exchange of knowledge and learning【,】 leading to the translation of texts and the creation of"
+      },
+      {
+        "conversation": 42,
+        "position": 986,
+        "token": ",",
+        "gate": 1.7421875,
+        "context": " park offers fresh fruit and vegetables at their food stands【,】 which are a great option for guests looking for a"
+      },
+      {
+        "conversation": 45,
+        "position": 389,
+        "token": ",",
+        "gate": 1.328125,
+        "context": " a range of classes, including yoga, Pilates【,】 and Zumba.\n\nStaffing Plan\n\nOur highly"
+      },
+      {
+        "conversation": 46,
+        "position": 696,
+        "token": ",",
+        "gate": 1.796875,
+        "context": " offer superior heat resistance, pressure resistance, and durability【,】 ensuring reliable performance in extreme conditions.\n\n2. Int"
+      },
+      {
+        "conversation": 47,
+        "position": 548,
+        "token": ",",
+        "gate": 1.015625,
+        "context": " horns\" that represented his godly form. Additionally【,】 in the Late Period, when the god Osiris"
+      },
+      {
+        "conversation": 48,
+        "position": 914,
+        "token": "),",
+        "gate": 1.359375,
+        "context": " 15 Olympic medals (including 7 gold【),】 and 12 World Championship medals (including "
+      },
+      {
+        "conversation": 50,
+        "position": 60,
+        "token": ",",
+        "gate": 1.953125,
+        "context": " range of content, including current and past TV shows【,】 movies, and original programming from a variety of broadcasters"
+      },
+      {
+        "conversation": 51,
+        "position": 564,
+        "token": ",",
+        "gate": 1.0546875,
+        "context": " got it. That's a bit of a surprise【,】 but let's see what we can do to accommodate"
+      },
+      {
+        "conversation": 52,
+        "position": 25,
+        "token": ",",
+        "gate": 1.109375,
+        "context": " taking breaks during the workday. In your introduction【,】 provide a thesis statement that clearly outlines the main benefits"
+      },
+      {
+        "conversation": 54,
+        "position": 764,
+        "token": ",",
+        "gate": 1.65625,
+        "context": " and frustrated. When she learned she could pause time【,】 it became her go-to solution for everything, making"
+      },
+      {
+        "conversation": 55,
+        "position": 444,
+        "token": ",",
+        "gate": 1.6875,
+        "context": " in turn encouraged the growth of industries such as mining【,】 forestry, and manufacturing. \n\nAdditionally, the development"
+      },
+      {
+        "conversation": 60,
+        "position": 197,
+        "token": ",",
+        "gate": 1.8671875,
+        "context": " of self-esteem. I often feel unattractive【,】 and as a result, I frequently avoid social situations"
+      },
+      {
+        "conversation": 62,
+        "position": 295,
+        "token": ",",
+        "gate": 1.421875,
+        "context": "2. Interactive games - Games like hide and seek【,】 fetch, tug of war, and tag can help"
+      }
+    ]
+  }
+}

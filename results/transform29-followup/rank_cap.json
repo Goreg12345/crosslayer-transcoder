@@ -1,0 +1,66 @@
+{
+  "n": 7134,
+  "conversations": [
+    7239,
+    22018,
+    15014,
+    4741,
+    8869,
+    12887,
+    14780,
+    5186
+  ],
+  "method": "Truncate SVD of learned V29 U29 in standardized output coordinates; preserve gate; no retraining",
+  "baseline_mse": 0.2639178507863423,
+  "full_rank_replay_error": -8.478530956756991e-07,
+  "caps": [
+    {
+      "rank": 0,
+      "mse": 0.48442105442193634,
+      "mse_increase": 0.22050320363559406,
+      "retained_output_energy": 0.0
+    },
+    {
+      "rank": 1,
+      "mse": 0.4836476806435292,
+      "mse_increase": 0.21972982985718692,
+      "retained_output_energy": 0.0034131309830164177
+    },
+    {
+      "rank": 8,
+      "mse": 0.47451574669386914,
+      "mse_increase": 0.21059789590752687,
+      "retained_output_energy": 0.04504463734184837
+    },
+    {
+      "rank": 32,
+      "mse": 0.45212520067852885,
+      "mse_increase": 0.18820734989218657,
+      "retained_output_energy": 0.1456767046322458
+    },
+    {
+      "rank": 64,
+      "mse": 0.42494424531731845,
+      "mse_increase": 0.16102639453097617,
+      "retained_output_energy": 0.2690301012495881
+    },
+    {
+      "rank": 128,
+      "mse": 0.38596867977620375,
+      "mse_increase": 0.12205082898986147,
+      "retained_output_energy": 0.44589102289314814
+    },
+    {
+      "rank": 256,
+      "mse": 0.33373347208350856,
+      "mse_increase": 0.06981562129716629,
+      "retained_output_energy": 0.683572969839841
+    },
+    {
+      "rank": 512,
+      "mse": 0.2639170029332466,
+      "mse_increase": -8.478530956756991e-07,
+      "retained_output_energy": 1.0
+    }
+  ]
+}

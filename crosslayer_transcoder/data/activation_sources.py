@@ -46,8 +46,76 @@ class ActivationComputer(ActivationSource):
     Pure computation - takes model + tokens, returns activations.
     """
 
-    def __init__(self, n_layers: int):
+    def __init__(
+        self,
+        n_layers: int,
+        model_arch: str = "gpt2",
+        input_location: str = "pre_norm",
+        output_location: str = "post_norm",
+        zero_dimensions: Optional[list[int]] = None,
+        layer: Optional[int] = None,
+    ):
         self.n_layers = n_layers
+        self.layers = range(n_layers) if layer is None else [layer]
+        if layer is not None and (n_layers != 1 or layer < 0):
+            raise ValueError("Single-layer extraction requires n_layers=1 and layer>=0")
+        if model_arch not in ("gpt2", "gemma3", "qwen3"):
+            raise ValueError(
+                f"Unsupported model_arch {model_arch!r}; expected 'gpt2', 'gemma3', or 'qwen3'"
+            )
+        self.model_arch = model_arch
+        if input_location not in ("pre_norm", "post_norm"):
+            raise ValueError("input_location must be 'pre_norm' or 'post_norm'")
+        if output_location not in ("raw", "post_norm"):
+            raise ValueError("output_location must be 'raw' or 'post_norm'")
+        if model_arch == "gpt2" and output_location == "post_norm":
+            # GPT-2 has no post-MLP norm, so these locations coincide.
+            output_location = "raw"
+        self.input_location = input_location
+        self.output_location = output_location
+        self.zero_dimensions = tuple(zero_dimensions or ())
+        self._gemma3_multimodal: Optional[bool] = None
+
+    def _detect_gemma3_layout(self, model: Any) -> bool:
+        if self._gemma3_multimodal is None:
+            underlying = (
+                getattr(model, "_model", None)
+                or getattr(model, "local_model", None)
+                or model
+            )
+            self._gemma3_multimodal = hasattr(underlying, "language_model")
+        return self._gemma3_multimodal
+
+    def _layer_handles(self, model: Any, layer_index: int):
+        if self.model_arch == "gpt2":
+            layer = model.transformer.h[layer_index]
+            mlp_in = layer.ln_2.input if self.input_location == "pre_norm" else layer.ln_2.output
+            return mlp_in, layer.mlp.output
+
+        if self.model_arch == "qwen3":
+            layer = model.model.layers[layer_index]
+            mlp_in = (
+                layer.post_attention_layernorm.input
+                if self.input_location == "pre_norm"
+                else layer.post_attention_layernorm.output
+            )
+            return mlp_in, layer.mlp.output
+
+        if self._detect_gemma3_layout(model):
+            layer = model.model.language_model.layers[layer_index]
+        else:
+            layer = model.model.layers[layer_index]
+        mlp_in = (
+            layer.pre_feedforward_layernorm.input
+            if self.input_location == "pre_norm"
+            else layer.pre_feedforward_layernorm.output
+        )
+        mlp_out = (
+            layer.mlp.output
+            if self.output_location == "raw"
+            else layer.post_feedforward_layernorm.output
+        )
+        return mlp_in, mlp_out
 
     def get_next_batch(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -67,7 +135,7 @@ class ActivationComputer(ActivationSource):
     def _extract_activations(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Extract MLP input/output activations using nnsight tracing.
-        EXACT COPY of existing method - no changes to functionality!
+        Save only the requested layers.
 
         Args:
             model: nnsight LanguageModel to run inference on
@@ -81,15 +149,10 @@ class ActivationComputer(ActivationSource):
         mlp_outs = []
         with model.trace(tokens) as tracer:
 
-            # Extract from all transformer layers
-            for i in range(self.n_layers):
-                # MLP input (after layer norm)
-                mlp_in = model.transformer.h[i].ln_2.input.save()
-                mlp_ins.append(mlp_in)
-
-                # MLP output
-                mlp_out = model.transformer.h[i].mlp.output.save()
-                mlp_outs.append(mlp_out)
+            for i in self.layers:
+                mlp_in, mlp_out = self._layer_handles(model, i)
+                mlp_ins.append(mlp_in.save())
+                mlp_outs.append(mlp_out.save())
 
         mlp_ins = torch.stack(mlp_ins, dim=0)
         mlp_outs = torch.stack(mlp_outs, dim=0)
@@ -99,6 +162,14 @@ class ActivationComputer(ActivationSource):
         )
         mask = einops.rearrange(mask, "batch seq -> (batch seq)").bool()
         mlp_acts = mlp_acts[mask]
+        if self.zero_dimensions:
+            invalid = [index for index in self.zero_dimensions if not 0 <= index < mlp_acts.shape[-1]]
+            if invalid:
+                raise ValueError(
+                    f"zero_dimensions contains indices outside activation dimension "
+                    f"{mlp_acts.shape[-1]}: {invalid}"
+                )
+            mlp_acts[..., list(self.zero_dimensions)] = 0
         return mlp_acts
 
     def is_available(self) -> bool:

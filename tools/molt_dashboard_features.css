@@ -1,0 +1,9 @@
+/* Responsive layout overrides for SAE-Vis's fixed-width default. */
+.grid-container{font-family:ui-monospace,monospace;box-sizing:border-box;width:100%;height:auto!important;grid-template-columns:300px minmax(0,1fr);grid-auto-flow:row;gap:22px;margin:20px 0;padding:20px;box-shadow:none;white-space:normal;overflow:visible}
+.grid-column{width:auto!important;min-width:0;margin:0;padding:0;overflow:visible}
+.seq-group{overflow:visible}.seq{white-space:normal;line-height:1.8;margin-bottom:16px}.token{font-size:13px}.plotly-hist{width:100%}h4{font:600 14px system-ui;line-height:1.5}
+@media(max-width:850px){.grid-container{grid-template-columns:minmax(0,1fr)}.plotly-hist{max-width:400px}}
+.projection-controls{background:#f3f7fa;border:1px solid #dbe5ed;border-radius:6px;padding:14px;margin:16px 0;font:14px system-ui}.projection-controls label{display:block;font-weight:650;margin-bottom:8px}.projection-controls select{font:14px system-ui;max-width:100%;width:100%;padding:8px}.projection-controls p{font-size:13px;line-height:1.5;color:#526576}.logitsTable{margin-top:24px}.logitsTable .negative,.logitsTable .positive{float:none;width:100%;margin:16px 0}.logitsTable td:first-child{overflow-wrap:anywhere;white-space:pre-wrap;max-width:200px}.logitsTable td:last-child{white-space:nowrap}
+.seq.selected-projection{outline:2px solid #158d79;outline-offset:4px;border-radius:3px}
+
+.logitsTable{min-width:0;display:block;overflow:visible;width:100%}.logitsTable > div.positive,.logitsTable > div.negative{width:100%;margin-right:0}

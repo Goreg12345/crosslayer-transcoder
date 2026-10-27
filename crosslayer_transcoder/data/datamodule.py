@@ -39,6 +39,7 @@ class ActivationDataModule(L.LightningDataModule):
         # Dataset settings
         dataset_name: str = "Skylion007/openwebtext",
         dataset_split: str = "train",
+        dataset_text_field: str = "text",
         max_sequence_length: int = 1024,
         # Generation settings
         generation_batch_size: int = 32,
@@ -60,6 +61,12 @@ class ActivationDataModule(L.LightningDataModule):
         device_map: str = "auto",
         # Deployment policy
         deployment_policy: str = "dynamic",  # CPU/GPU deployment policy: "cpu_only", "gpu_only", or "dynamic"
+        # Activation extraction architecture: "gpt2" or "gemma3".
+        model_arch: str = "gpt2",
+        activation_input_location: str = "pre_norm",
+        activation_output_location: str = "post_norm",
+        zero_activation_dimensions: Optional[list[int]] = None,
+        activation_layer: Optional[int] = None,
         # WandB logging configuration
         wandb_logging: Optional[dict] = None,
         **kwargs,
@@ -71,7 +78,8 @@ class ActivationDataModule(L.LightningDataModule):
             # Buffer settings
             buffer_size: Number of activation samples in buffer
             n_in_out: Number of input/output activations per layer (usually 2)
-            n_layers: Number of model layers
+            n_layers: Number of stored layers; use 1 with activation_layer
+            activation_layer: Extract only this model layer when set
             activation_dim: Dimension of activation vectors
             dtype: Data type ("float16" or "float32")
             max_batch_size: Maximum batch size for high-throughput clients
@@ -132,6 +140,7 @@ class ActivationDataModule(L.LightningDataModule):
         # Dataset settings
         self.dataset_name = dataset_name
         self.dataset_split = dataset_split
+        self.dataset_text_field = dataset_text_field
         self.max_sequence_length = max_sequence_length
 
         # Generation settings
@@ -156,6 +165,13 @@ class ActivationDataModule(L.LightningDataModule):
         # Advanced settings
         self.use_shared_memory = use_shared_memory
         self.deployment_policy = DeploymentPolicy.from_string(deployment_policy)
+        self.model_arch = model_arch
+        self.activation_input_location = activation_input_location
+        self.activation_output_location = activation_output_location
+        self.zero_activation_dimensions = zero_activation_dimensions or []
+        self.activation_layer = activation_layer
+        if activation_layer is not None and (n_layers != 1 or activation_layer < 0):
+            raise ValueError("Single-layer extraction requires n_layers=1 and activation_layer>=0")
 
         # WandB configuration
         self.wandb_logging = wandb_logging or {}
@@ -263,6 +279,7 @@ class ActivationDataModule(L.LightningDataModule):
             model_dtype=self.model_torch_dtype,
             dataset_name=self.dataset_name,
             dataset_split=self.dataset_split,
+            dataset_text_field=self.dataset_text_field,
             max_sequence_length=self.max_sequence_length,
             generation_batch_size=self.generation_batch_size,
             refresh_interval=self.refresh_interval,
@@ -270,6 +287,11 @@ class ActivationDataModule(L.LightningDataModule):
             init_file=self.init_file,
             device_map=self.device_map,
             wandb_logging=self.wandb_logging,
+            model_arch=self.model_arch,
+            activation_input_location=self.activation_input_location,
+            activation_output_location=self.activation_output_location,
+            zero_activation_dimensions=self.zero_activation_dimensions,
+            activation_layer=self.activation_layer,
         )
 
         # 3. Start the data generator process
@@ -336,20 +358,28 @@ class ActivationDataModule(L.LightningDataModule):
         """Clean up resources."""
         logger.info("Cleaning up activation data loader...")
 
-        if self.data_loader and hasattr(self.data_loader, "cleanup"):
+        # DataLoader truthiness calls len(dataset). SharedActivationBuffer is an
+        # IterableDataset without __len__, so that check used to raise during
+        # teardown and leave the generator/GPU processes alive after max_steps.
+        if self.data_loader is not None and hasattr(self.data_loader, "cleanup"):
             self.data_loader.cleanup()
 
-        if self.data_generator and self.data_generator.is_alive():
-            logger.info("Terminating data generator process...")
-            self.data_generator.terminate()
-            self.data_generator.join(timeout=5.0)
+        if self.data_generator is not None and self.data_generator.is_alive():
+            logger.info("Stopping data generator process...")
+            self.data_generator.request_stop()
+            self.data_generator.join(timeout=30.0)
+
+            if self.data_generator.is_alive():
+                logger.warning("Terminating unresponsive data generator process...")
+                self.data_generator.terminate()
+                self.data_generator.join(timeout=5.0)
 
             if self.data_generator.is_alive():
                 logger.warning("Force killing data generator process...")
                 self.data_generator.kill()
                 self.data_generator.join()
 
-        if self.shared_buffer:
+        if self.shared_buffer is not None:
             self.shared_buffer.cleanup()
 
         logger.info("Cleanup complete")

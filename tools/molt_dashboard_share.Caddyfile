@@ -1,0 +1,37 @@
+# Render __PASSWORD_HASH__ into a private config outside the served directory.
+# Tailscale Funnel terminates HTTPS and forwards to this loopback-only listener.
+{
+	admin off
+	auto_https off
+}
+
+http://:8786 {
+	bind 127.0.0.1
+	encode zstd gzip
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy same-origin
+		Cache-Control "private, no-cache"
+	}
+	route {
+		basic_auth bcrypt "MOLT dashboard" {
+			friends __PASSWORD_HASH__
+		}
+		# These are extraction/worker artifacts, not dashboard resources.
+		@internal path */.* *.npz *.ckpt *.pt *.safetensors */collection/* */cache/* */llm-cache/*
+		respond @internal "Not found" 404
+		request_body {
+			max_size 128KB
+		}
+		reverse_proxy 100.76.58.1:8765 {
+			# Preserve Host and Origin so the steering API's origin check still works.
+			header_up -Authorization
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 120s
+			}
+		}
+	}
+}

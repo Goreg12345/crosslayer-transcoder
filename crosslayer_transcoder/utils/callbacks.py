@@ -3,6 +3,8 @@ Simple Lightning callbacks for CrossLayer Transcoder training.
 """
 
 import logging
+import os
+import time
 from functools import partial
 from pathlib import Path
 from typing import List
@@ -55,6 +57,48 @@ class EndOfTrainingCheckpointCallback(L.Callback):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.checkpoint_dir / "clt.ckpt"
         trainer.save_checkpoint(checkpoint_path)
+
+
+class TimedCheckpointCallback(L.Callback):
+    """Atomically overwrite one checkpoint at a fixed wall-clock interval."""
+
+    def __init__(
+        self,
+        checkpoint_dir: str = "checkpoints",
+        interval_minutes: float = 90.0,
+        filename: str = "clt.ckpt",
+    ):
+        super().__init__()
+        if interval_minutes <= 0:
+            raise ValueError("interval_minutes must be positive")
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.interval_seconds = interval_minutes * 60
+        self.filename = filename
+        self._last_checkpoint_time = None
+
+    def on_train_start(self, trainer, pl_module):
+        self._last_checkpoint_time = time.monotonic()
+
+    def _save(self, trainer):
+        if not trainer.is_global_zero:
+            return
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = self.checkpoint_dir / self.filename
+        temporary_path = checkpoint_path.with_suffix(checkpoint_path.suffix + ".tmp")
+        trainer.save_checkpoint(temporary_path)
+        os.replace(temporary_path, checkpoint_path)
+        self._last_checkpoint_time = time.monotonic()
+        logger.info("Saved timed checkpoint to %s", checkpoint_path)
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        now = time.monotonic()
+        if self._last_checkpoint_time is None:
+            self._last_checkpoint_time = now
+        if now - self._last_checkpoint_time >= self.interval_seconds:
+            self._save(trainer)
+
+    def on_train_end(self, trainer, pl_module):
+        self._save(trainer)
 
 
 class SaveModelCallback(L.Callback):
