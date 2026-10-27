@@ -56,17 +56,25 @@ def render(root):
         for row in features.values()
     )
     pending = sum(
-        not row.get("explanation") and row["status"] != "not_observed"
+        not row.get("explanation") and row["status"] not in ("not_observed", "discarded")
         for row in features.values()
     )
     totals = manifest["preparation_counts"]
-    body = f'<header><div class="eyebrow">MOLT · QWEN3-4B · LAYER {layer} · FULL LAYER</div><h1>All {len(selected):,} transforms</h1><p>{metadata["tokens"]:,} tokens · {metadata["conversations"]:,} conversations · checkpoint step {metadata["global_step"]:,}<br><strong>{run["explained"]:,}/{totals["observed"]:,} observed transforms explained · {scored:,} with all four scores</strong><br>{counts["not_observed"]:,} unobserved · {totals["limited_evidence_budget"]} with limited sample sizes · {pending:,} explanations pending</p><p><span class="status">{esc(run["state"])} · {esc(run["phase"])}</span> · Updated {esc(run["updated_at"])} · 32 concurrent endpoint requests</p><nav><a href="../">Activation explorer</a>{pilot_link}<a href="/layers/">All layers</a><a href="manifest.json">Methods and provenance</a><a href="summary.json">Live progress JSON</a><button data-export>Export your reviews</button></nav></header><main>'
+    concurrency = summary.get("usage", {}).get("concurrency_limit", 32)
+    backend_names = [row["name"] for row in summary.get("usage", {}).get("backends", [])]
+    serving = f"{concurrency} concurrent endpoint requests"
+    if backend_names:
+        serving += " across " + ", ".join(backend_names)
+    body = f'<header><div class="eyebrow">MOLT · QWEN3-4B · LAYER {layer} · FULL LAYER</div><h1>All {len(selected):,} transforms</h1><p>{metadata["tokens"]:,} tokens · {metadata["conversations"]:,} conversations · checkpoint step {metadata["global_step"]:,}<br><strong>{run["explained"]:,}/{totals["observed"]:,} observed transforms explained · {scored:,} with all four scores</strong><br>{counts["not_observed"]:,} unobserved · {totals["limited_evidence_budget"]} with limited sample sizes · {pending:,} explanations pending</p><p><span class="status">{esc(run["state"])} · {esc(run["phase"])}</span> · Updated {esc(run["updated_at"])} · {esc(serving)}</p><nav><a href="../">Activation explorer</a>{pilot_link}<a href="/layers/">All layers</a><a href="manifest.json">Methods and provenance</a><a href="summary.json">Live progress JSON</a><button data-export>Export your reviews</button></nav></header><main>'
     body += "<p>Titles and explanations are generated first, then detection, fuzzing, active fuzzing, and intruder scores. This run does not request simulation. Rare transforms show actual sample sizes; transforms without evidence have no inferred explanation. Click a title to inspect the evidence and every scored case.</p>"
+    if counts["discarded"]:
+        body += f'<p>{counts["discarded"]:,} transforms have discarded work after repeated output-limit failures. Completed scores and audit records are preserved.</p>'
     body += '<div class="toolbar"><input id="search" placeholder="Find ID, title, or explanation" aria-label="Find transform"><label>Rank <select id="rank"><option value="">All</option><option>512</option><option>256</option><option>128</option><option>64</option><option>32</option></select></label><label>Show <select id="status"><option value="observed">Observed transforms</option><option value="all">All transforms</option><option value="explained">Explained</option><option value="scored">Four scores complete</option><option value="limited">Limited evidence</option><option value="not_observed">Unobserved</option><option value="incomplete">Errors / incomplete</option></select></label><span id="visible-count"></span></div>'
     body += '<p class="compact">Detection and fuzzing chance: 50%; intruder chance: 20%. Intruder measures feature coherence without the explanation. The same model explains and judges. Peak-ending windows and upstream intruder highlighting can introduce position cues. Confidence intervals are approximate for paired or reused contexts.</p><div class="table-wrap"><table><thead><tr><th>Transform / rank</th><th>Firing rate</th><th>Title</th><th>Detection</th><th>Fuzz</th><th>Active fuzz</th><th>Intruder</th><th>Your verdict</th></tr></thead><tbody>'
     renderer_mtime = max(
         Path(__file__).stat().st_mtime,
         Path(__file__).with_name("render_molt_pilot.py").stat().st_mtime,
+        Path(__file__).with_name("molt_review_scorer_input.py").stat().st_mtime,
     )
     for stat in selected:
         feature = stat["id"]

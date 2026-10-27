@@ -117,6 +117,7 @@ class Inventory:
                     review_page=(root / "autointerp-layer" / "index.html").exists(),
                     api_state=summary.get("run", {}).get("state", "pending"),
                     api_phase=summary.get("run", {}).get("phase"),
+                    endpoint_backends=summary.get("usage", {}).get("backends", []),
                     interpretation_fingerprint=summary.get("fingerprint"),
                     api_retry_after=retry.get("retry_after"),
                     api_retry_reason=retry.get("reason"),

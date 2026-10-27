@@ -4,7 +4,7 @@
 import argparse
 import asyncio
 from collections import Counter
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
@@ -38,9 +38,18 @@ from crosslayer_transcoder.dashboard.token_display import (
 
 
 class Endpoint(Client):
-    def __init__(self, model, base_url, key, concurrency, context_limit=10000):
+    def __init__(
+        self,
+        model,
+        base_url,
+        key,
+        concurrency,
+        context_limit=10000,
+        *,
+        request_base_url=None,
+    ):
         super().__init__(model)
-        self.url = base_url.rstrip("/") + "/chat/completions"
+        self.url = (request_base_url or base_url).rstrip("/") + "/chat/completions"
         self.client = httpx.AsyncClient(
             headers={"Authorization": "Bearer " + key},
             timeout=httpx.Timeout(600, connect=30, pool=30),
@@ -56,6 +65,7 @@ class Endpoint(Client):
         self.started_at = time.monotonic()
         self._in_flight_updated_at = self.started_at
         self._in_flight_seconds = 0.0
+        self.on_in_flight_change = None
         self.usage = dict(
             requests=0,
             prompt_tokens=0,
@@ -103,6 +113,11 @@ class Endpoint(Client):
         self._in_flight_seconds += (now - self._in_flight_updated_at) * self.in_flight
         self._in_flight_updated_at = now
         self.in_flight += delta
+        if self.on_in_flight_change is not None:
+            self.on_in_flight_change()
+
+    async def aclose(self):
+        await self.client.aclose()
 
     async def _request(self, body):
         started_at = time.monotonic()
@@ -174,7 +189,28 @@ class Endpoint(Client):
             max_tokens=kwargs.get("max_tokens", 384),
             chat_template_kwargs={"enable_thinking": False},
         )
-        async with self.request_slot():
+        output_limits = kwargs.get("output_limits")
+        request_key = response_key(task, prompt, body["max_tokens"])
+
+        def record_attempt(**values):
+            row = dict(
+                endpoint_url=self.url,
+                model=self.model,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                task=task,
+                request_key=request_key,
+                messages=prompt,
+                max_tokens=body["max_tokens"],
+                **values,
+            )
+            if kwargs.get("audit_path"):
+                with Path(kwargs["audit_path"]).open("a") as audit:
+                    audit.write(json.dumps(row, ensure_ascii=False) + "\n")
+            if output_limits is not None:
+                output_limits.observe(row)
+
+        guard = output_limits.lock(request_key) if output_limits else nullcontext()
+        async with guard, self.request_slot():
             for attempt in range(4):
                 cache_key = response_key(task, prompt, body["max_tokens"])
                 cached = kwargs.get("response_cache", {}).get(cache_key)
@@ -185,6 +221,9 @@ class Endpoint(Client):
                     response = Response(text=cached)
                     response.cache_key = cache_key
                     return response
+                if output_limits is not None:
+                    output_limits.check(request_key)
+                recorded = False
                 try:
                     # UTF-8 byte count is a conservative bound for byte-level BPE.
                     # Reserve additional room for chat framing and the completion.
@@ -205,22 +244,14 @@ class Endpoint(Client):
                     result = await self._request(body)
                     choice = result["choices"][0]
                     text = choice["message"].get("content")
-                    if kwargs.get("audit_path"):
-                        with Path(kwargs["audit_path"]).open("a") as audit:
-                            audit.write(
-                                json.dumps(
-                                    dict(
-                                        task=task,
-                                        messages=prompt,
-                                        max_tokens=body["max_tokens"],
-                                        response=text,
-                                        finish_reason=choice.get("finish_reason"),
-                                        usage=result.get("usage", {}),
-                                    ),
-                                    ensure_ascii=False,
-                                )
-                                + "\n"
-                            )
+                    record_attempt(
+                        response=text,
+                        finish_reason=choice.get("finish_reason"),
+                        usage=result.get("usage", {}),
+                    )
+                    recorded = True
+                    if output_limits is not None:
+                        output_limits.check(request_key)
                     if not text or choice.get("finish_reason") == "length":
                         raise IncompleteCompletionError("Empty or truncated completion")
                     if scoring and text.strip() not in ("[0]", "[1]"):
@@ -230,7 +261,26 @@ class Endpoint(Client):
                     response = Response(text=text)
                     response.cache_key = cache_key
                     return response
+                except ContextLimitError as exc:
+                    record_attempt(
+                        response=None, finish_reason=None, error=type(exc).__name__,
+                        failure_reason="context_length", error_message=str(exc),
+                    )
+                    if output_limits is not None:
+                        output_limits.check(request_key)
+                    raise
                 except (httpx.HTTPError, ValueError, KeyError) as exc:
+                    if not recorded:
+                        context_error = is_context_length_error(exc)
+                        failure = "context_length" if context_error else (
+                            "invalid_response" if isinstance(exc, (ValueError, KeyError)) else None
+                        )
+                        record_attempt(
+                            response=None, finish_reason=None, error=type(exc).__name__,
+                            failure_reason=failure,
+                        )
+                        if output_limits is not None:
+                            output_limits.check(request_key)
                     if isinstance(exc, httpx.HTTPStatusError):
                         status = exc.response.status_code
                         if 400 <= status < 500 and status not in (408, 429):
@@ -258,6 +308,20 @@ class Endpoint(Client):
 
 class ContextLimitError(RuntimeError):
     pass
+
+
+def is_context_length_error(exc):
+    """Recognize explicit token/context rejections without counting other 4xxs."""
+    if not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code not in (400, 413, 422):
+        return False
+    message = exc.response.text.lower()
+    return any(marker in message for marker in (
+        "context_length_exceeded",
+        "maximum context length",
+        "exceeds the model's maximum",
+        "exceeds the maximum model length",
+        "longer than the maximum model length",
+    ))
 
 
 class IncompleteCompletionError(ValueError):

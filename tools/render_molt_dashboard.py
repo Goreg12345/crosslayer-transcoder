@@ -90,6 +90,8 @@ def write_index(root, meta, stats):
             },
         )
         meta["layer_review_url"] = "autointerp-layer/"
+    (root / "assets").mkdir(exist_ok=True)
+    shutil.copyfile(Path(__file__).with_name("molt_corrected_run.js"), root / "assets" / "molt-corrected-run.js")
     template = Path(__file__).with_name("molt_dashboard_index.html").read_text()
     template = (
         template.replace("__METADATA__", safe_json(meta))

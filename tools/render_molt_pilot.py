@@ -6,7 +6,11 @@ from collections import Counter
 import html
 import json
 from pathlib import Path
+import sys
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.molt_review_scorer_input import audit_index, saved_input
 
 
 def esc(value):
@@ -60,6 +64,8 @@ def metric_cell(method):
         return '<span class="empty">Pending</span>'
     metrics = method.get("metrics", {})
     status = method.get("status", "pending")
+    if status == "discarded":
+        return '<span class="empty">Discarded</span><span class="sub">Output-limit retries exhausted</span>'
     if "pearson" in metrics:
         score = (
             "undefined" if metrics["pearson"] is None else f"{metrics['pearson']:.2f}"
@@ -107,6 +113,7 @@ DESCRIPTIONS = {
 
 def render_feature(root, output, row, selected, config):
     feature = row["id"]
+    scorer_audit = audit_index(output / 'audit' / f'{feature}.jsonl')
     methods = row.get("methods", {})
     method_names = config.get("methods", list(DESCRIPTIONS))
     full_layer = config.get("scope") == "layer"
@@ -123,6 +130,8 @@ def render_feature(root, output, row, selected, config):
     audience = "TRANSFORM" if full_layer else "PILOT TRANSFORM"
     header = f'<header><div class="eyebrow">MOLT · LAYER {layer} · {audience} {feature}</div><h1>{esc(row.get("label", f"Transform {feature}"))}</h1><nav><a href="../">All {len(selected):,} transforms</a><a href="{ids[(index - 1) % len(ids)]}.html">← Previous</a><a href="{ids[(index + 1) % len(ids)]}.html">Next →</a><a href="../../features/{feature}.html">Activation dashboard</a>{steer_link}<a href="{feature}.json">Raw results</a><a href="../audit/{feature}.jsonl">Prompt audit</a></nav><p>Rank {row["rank"]} · fires on {100 * row["frequency"]:.4f}% of 10M tokens · {row["count"]:,} active observations · <span class="status">{esc(row.get("status", "pending"))}</span></p></header>'
     body = header + "<main>"
+    if row.get("discarded_stage"):
+        body += f'<p class="method-note">{esc(row["reason"])}</p>'
     body += f'<section class="card"><h2>Gate-activation hypothesis</h2><p class="explanation">{esc(row.get("explanation") or ("No activation evidence in this sample." if row.get("status") == "not_observed" else "Explanation pending."))}</p><p class="compact">Describes when the gate fires. It does not establish the transform’s causal output effect.</p></section>'
     body += f'<section class="card review"><h2>Your assessment</h2><div class="toolbar">{verdict(feature)}<button data-export>Export all reviews</button></div><p class="compact">Saved in this browser. {"Completed campaign layers are queued for interpretation." if full_layer else "The archived 32-transform pilot."}</p><textarea aria-label="Review notes" placeholder="Does the hypothesis fit the examples? What does it miss?" data-review-id="{feature}" data-field="notes"></textarea></section>'
     body += (
@@ -153,7 +162,7 @@ def render_feature(root, output, row, selected, config):
             body += f"<p>Scoring error: {esc(method['error'])}</p>"
         rows = method.get("rows", [])
         if name in ("detection", "fuzz", "active_fuzz"):
-            body += '<p class="legend">Errors first. Orange = measured gate; blue outline = tokens judged by the fuzzing scorer.</p>'
+            body += '<p class="legend">Errors first. Exact scorer text is read from saved requests. The separate annotated view adds orange measured gates for inspection; these colors were not sent to the scorer. Blue outlines indicate fuzzing selections. Positive windows end at an active token because of the MOLT sampler.</p>'
             for i, case in sorted(
                 enumerate(rows), key=lambda item: (item[1]["correct"] is True, item[0])
             ):
@@ -164,14 +173,27 @@ def render_feature(root, output, row, selected, config):
                 )
                 expected = "yes" if case["activating"] else "no"
                 question = "Gate present?" if name == "detection" else "Marks correct?"
+                submitted = saved_input(scorer_audit, row.get('explanation') or '', case)
+                if submitted:
+                    scorer_view = (
+                        '<h4>Exact example text sent to scorer</h4><pre class="exact-scorer-example"><span>'
+                        + esc(submitted['example_text']).replace('\r', '&#13;') + '</span></pre><p class="compact">Saved prompt audit, line '
+                        + str(submitted['line']) + '. Whitespace and literal scoring markers are preserved.</p>'
+                        + '<details><summary>Complete saved scorer messages</summary><pre class="exact-scorer-messages">'
+                        + esc(json.dumps(submitted['messages'], ensure_ascii=False, indent=2)) + '</pre></details>'
+                    )
+                else:
+                    scorer_view = '<p class="compact">An exact saved scorer request could not be matched to this result. The annotated evidence below is not claimed as a captured request.</p>'
                 body += (
                     f'<details class="{"right" if case["correct"] else "wrong"}"><summary>Case {i + 1} · {question} Expected {expected}; predicted {prediction}</summary>'
+                    + scorer_view
+                    + '<details><summary>Annotated evidence · activation overlay</summary>'
                     + tokens_html(
                         case["str_tokens"],
                         case["activations"],
                         case.get("highlighted_positions", []),
                     )
-                    + "</details>"
+                    + "</details></details>"
                 )
         elif name == "intruder":
             for i, case in sorted(
@@ -258,6 +280,7 @@ def render(root):
             not page.exists()
             or max(
                 Path(__file__).stat().st_mtime,
+                Path(__file__).with_name("molt_review_scorer_input.py").stat().st_mtime,
                 result_path.stat().st_mtime if result_path.exists() else 0,
             )
             > page.stat().st_mtime

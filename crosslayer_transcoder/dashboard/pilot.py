@@ -178,7 +178,22 @@ def response_key(task, messages, max_tokens):
     ).hexdigest()
 
 
-def load_response_cache(path):
+def validate_response(task, text, messages):
+    """Use the same answer contract for live requests and saved audit replay."""
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("Empty response")
+    if task == "binary" and text.strip() not in ("[0]", "[1]"):
+        raise ValueError("Expected exactly one binary detection decision")
+    if task == "explanation" and not re.search(r"\[EXPLANATION\]:\s*\S", text):
+        raise ValueError("Missing explanation marker")
+    if task == "intruder" and not re.fullmatch(r"\s*\[RESPONSE\]:\s*[0-4]\s*", text):
+        raise ValueError("Invalid intruder response")
+    if task == "simulation":
+        document = json.JSONDecoder().raw_decode(messages[-1]["content"])[0]
+        parse_simulation(text, [entry["token"] for entry in document["activations"]])
+
+
+def load_response_cache(path, *, output_limits=None):
     """Replay only validated responses for exactly the same scored prompt."""
     cache = {}
     if not path.exists():
@@ -186,24 +201,12 @@ def load_response_cache(path):
     for line in path.read_text().splitlines():
         try:
             row = json.loads(line)
+            if output_limits is not None:
+                output_limits.observe(row)
             task, text = row["task"], row["response"]
-            if row["finish_reason"] != "stop" or not text:
+            if row["finish_reason"] != "stop":
                 continue
-            if task == "binary" and text.strip() not in ("[0]", "[1]"):
-                continue
-            if task == "explanation" and not re.search(r"\[EXPLANATION\]:\s*\S", text):
-                continue
-            if task == "intruder" and not re.fullmatch(
-                r"\s*\[RESPONSE\]:\s*[0-4]\s*", text
-            ):
-                continue
-            if task == "simulation":
-                document = json.JSONDecoder().raw_decode(
-                    row["messages"][-1]["content"]
-                )[0]
-                parse_simulation(
-                    text, [entry["token"] for entry in document["activations"]]
-                )
+            validate_response(task, text, row["messages"])
             key = response_key(task, row["messages"], row["max_tokens"])
             cache.setdefault(key, text)
         except (ValueError, KeyError, TypeError):

@@ -5,7 +5,7 @@ import copy
 from .pilot import spread, unique_examples
 
 METHODS = ("detection", "fuzz", "active_fuzz", "intruder")
-TERMINAL = ("complete", "limited_evidence", "not_observed")
+TERMINAL = ("complete", "limited_evidence", "not_observed", "discarded")
 
 
 def unique_with_fallback(examples, excluded=(), positive=False, target=50):
@@ -88,11 +88,15 @@ def compact_result(result):
 def result_status(result):
     if result.get("status") == "not_observed":
         return "not_observed"
+    if result.get("discarded_stage"):
+        return "discarded"
     if not result.get("explanation") or not result.get("title"):
         return "incomplete"
     statuses = [result.get("methods", {}).get(m, {}).get("status") for m in METHODS]
-    if any(s not in ("complete", "unavailable") for s in statuses):
+    if any(s not in ("complete", "unavailable", "discarded") for s in statuses):
         return "incomplete"
+    if "discarded" in statuses:
+        return "discarded"
     if "unavailable" in statuses or not result.get("evidence_counts", {}).get(
         "full_budget"
     ):

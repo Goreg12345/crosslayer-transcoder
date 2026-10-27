@@ -11,7 +11,9 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 import torch
 
@@ -19,14 +21,26 @@ from crosslayer_transcoder.dashboard.steering import SteeringEngine
 
 
 class Application:
-    def __init__(self, engine):
+    def __init__(self, engine, additional_engines=()):
         self.engine = engine
+        self.engines = {item.layer: item for item in (engine, *additional_engines)}
         self.jobs = {}
         self.guard = threading.RLock()
         self.worker = ThreadPoolExecutor(max_workers=1)
 
-    def submit(self, config):
-        if not self.engine.lock.acquire(blocking=False):
+    def engine_for(self, layer=None):
+        if layer is None:
+            return self.engine
+        try:
+            if isinstance(layer, bool) or str(int(layer)) != str(layer):
+                raise ValueError
+            return self.engines[int(layer)]
+        except (ValueError, TypeError, KeyError):
+            raise ValueError("Unsupported steering layer") from None
+
+    def submit(self, config, engine=None):
+        engine = engine or self.engine
+        if not engine.lock.acquire(blocking=False):
             raise BlockingIOError("GPU is busy. Wait for the current run or cancel it.")
         identifier = uuid.uuid4().hex
         event = threading.Event()
@@ -57,7 +71,7 @@ class Application:
                             phase=branch, tokens=count, **{branch: text}
                         )
 
-                result = self.engine.compare(config, event, progress)
+                result = engine.compare(config, event, progress)
                 with self.guard:
                     self.jobs[identifier].update(
                         result=result, state="cancelled" if event.is_set() else "done"
@@ -67,7 +81,7 @@ class Application:
                 with self.guard:
                     self.jobs[identifier].update(state="error", error=str(exc))
             finally:
-                self.engine.lock.release()
+                engine.lock.release()
 
         self.worker.submit(run)
         return {"id": identifier}
@@ -93,17 +107,55 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def tool_proxy(self, suffix, body=None):
+        # Fixed loopback target, never a client-supplied URL. The CPU sidecar owns
+        # MCP dependencies and isolated manual state, not this GPU process.
+        if suffix not in ('tools', 'call') and not suffix.startswith('history?feature='):
+            return self.send_json({"error": "Unknown tool endpoint"}, 404)
+        request = Request("http://127.0.0.1:8006/" + suffix,
+                          data=json.dumps(body).encode() if body is not None else None,
+                          headers={"Content-Type": "application/json"})
+        try:
+            with urlopen(request, timeout=3600 if body is not None else 15) as response:
+                return self.send_json(json.load(response), response.status)
+        except HTTPError as exc:
+            try: error = json.load(exc)
+            except ValueError: error = {"error": "Tool service rejected the request"}
+            return self.send_json(error, exc.code)
+        except (URLError, TimeoutError, OSError) as exc:
+            return self.send_json({"error": "Manual tool service unavailable: " + str(exc)}, 503)
+
     def do_GET(self):
         path = urlsplit(self.path).path
-        if path == "/api/health":
+        if path in ("/tools", "/tools/"):
+            page = Path(__file__).with_name("molt_tool_playground.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return self.wfile.write(page)
+        if path == "/api/tools/tools":
+            return self.tool_proxy("tools")
+        if path == "/api/tools/history":
+            return self.tool_proxy("history?" + urlsplit(self.path).query)
+        if path in ("/api/health", "/api/feature-stats"):
+            try:
+                engine = self.app.engine_for(parse_qs(urlsplit(self.path).query).get("layer", [None])[0])
+            except ValueError as exc:
+                return self.send_json({"error": str(exc)}, 400)
+            if path == "/api/feature-stats":
+                return self.send_json(engine.feature_stats)
             return self.send_json(
                 {
                     "ready": True,
-                    "busy": self.app.engine.lock.locked(),
-                    "model": self.app.engine.meta["model"],
-                    "layer": self.app.engine.layer,
-                    "n_features": self.app.engine.meta["n_features"],
-                    "global_step": self.app.engine.meta["global_step"],
+                    "busy": engine.lock.locked(),
+                    "model": engine.meta["model"],
+                    "layer": engine.layer,
+                    "layers": sorted(self.app.engines),
+                    "n_features": engine.meta["n_features"],
+                    "global_step": engine.meta["global_step"],
+                    "feature_stats_url": f"/api/feature-stats?layer={engine.layer}",
                 }
             )
         if path.startswith("/api/jobs/"):
@@ -140,7 +192,9 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError("Expected a JSON object")
             path = urlsplit(self.path).path
-            engine = self.app.engine
+            if path == "/api/tools/call":
+                return self.tool_proxy("call", body)
+            engine = self.app.engine_for(parse_qs(urlsplit(self.path).query).get("layer", [body.get("layer")])[0])
             if path == "/api/tokenize":
                 return self.send_json(
                     engine.tokenize(body.get("prompt"), body.get("format", "chat"))
@@ -160,7 +214,7 @@ class Handler(SimpleHTTPRequestHandler):
                     engine.lock.release()
                 return self.send_json(result)
             if path == "/api/generate":
-                return self.send_json(self.app.submit(engine.validate(body)), 202)
+                return self.send_json(self.app.submit(engine.validate(body), engine), 202)
             if path.startswith("/api/jobs/") and path.endswith("/cancel"):
                 identifier = path.split("/")[-2]
                 with self.app.guard:
@@ -181,6 +235,8 @@ class Handler(SimpleHTTPRequestHandler):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--directory", default="results/molt-qwen-dashboard")
+    p.add_argument("--steering-directory", action="append", default=[],
+                   help="Additional collected layer to steer using the shared Qwen model")
     p.add_argument("--bind", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--device", default="cuda:0")
@@ -202,7 +258,9 @@ def main():
         )
     print("Loading Qwen and MOLT steering weights…", flush=True)
     engine = SteeringEngine(args.directory, args.device)
-    app = Application(engine)
+    additional = [SteeringEngine(directory, args.device, shared_engine=engine)
+                  for directory in args.steering_directory]
+    app = Application(engine, additional)
     server = ThreadingHTTPServer(
         (args.bind, args.port), partial(Handler, app=app, directory=args.directory)
     )

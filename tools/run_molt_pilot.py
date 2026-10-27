@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import time
 
@@ -37,12 +36,13 @@ from crosslayer_transcoder.dashboard.explanation_samples import (
 from crosslayer_transcoder.dashboard.pilot import (
     binary_metrics,
     load_response_cache,
-    parse_simulation,
     select_pilot,
     simulation_metrics,
     spread,
+    validate_response,
     wilson_interval,
 )
+from crosslayer_transcoder.dashboard.output_limits import RequestDiscarded
 from tools.explain_molt_dashboard import Endpoint, atomic_json
 
 METHODS = ("detection", "fuzz", "active_fuzz", "intruder", "simulation")
@@ -146,15 +146,19 @@ def prepare(root, output):
 
 
 class TaskClient(Client):
-    def __init__(self, endpoint, task, audit, response_cache):
+    def __init__(self, endpoint, task, audit, response_cache, *, output_limits=None):
         super().__init__(endpoint.model)
         self.endpoint, self.task, self.audit = endpoint, task, audit
         self.response_cache = response_cache
+        self.output_limits = output_limits
+        self.discarded_requests = []
 
     async def generate(self, prompt, **kwargs):
         kwargs.update(
             task=self.task, audit_path=self.audit, response_cache=self.response_cache
         )
+        if self.output_limits is not None:
+            kwargs["output_limits"] = self.output_limits
         if self.task == "explanation":
             kwargs.update(max_tokens=768, explanation_words=80)
             prompt = [dict(m) for m in prompt]
@@ -166,26 +170,19 @@ class TaskClient(Client):
         elif self.task == "intruder":
             kwargs["max_tokens"] = 64
         for attempt in range(3):
-            response = await self.endpoint.generate(prompt, **kwargs)
             try:
-                if self.task == "simulation":
-                    tokens = [
-                        e["token"]
-                        for e in json.loads(prompt[-1]["content"])["activations"]
-                    ]
-                    parse_simulation(response.text, tokens)
-                elif self.task == "intruder" and not re.fullmatch(
-                    r"\s*\[RESPONSE\]:\s*[0-4]\s*", response.text
-                ):
-                    raise ValueError("Invalid intruder response")
-                elif self.task == "explanation" and not re.search(
-                    r"\[EXPLANATION\]:\s*\S", response.text
-                ):
-                    self.response_cache.pop(response.cache_key, None)
-                    raise ValueError("Missing explanation marker")
+                response = await self.endpoint.generate(prompt, **kwargs)
+            except RequestDiscarded as exc:
+                # Delphi scorers turn client exceptions into missing predictions;
+                # retain the reason so the layer worker can finish this method.
+                self.discarded_requests.append(exc.record())
+                raise
+            try:
+                validate_response(self.task, response.text, prompt)
                 self.response_cache[response.cache_key] = response.text
                 return response
             except (ValueError, KeyError, TypeError):
+                self.response_cache.pop(response.cache_key, None)
                 if attempt == 2:
                     raise
                 self.endpoint.usage["validation_retries"] = (

@@ -39,7 +39,13 @@ from crosslayer_transcoder.dashboard.pilot import (
     wilson_interval,
 )
 from crosslayer_transcoder.dashboard.token_display import escape_vocab
+from crosslayer_transcoder.dashboard.output_limits import (
+    REQUEST_FAILURE_ATTEMPTS,
+    RequestFailureBudget,
+    RequestDiscarded,
+)
 from tools.explain_molt_dashboard import Endpoint, atomic_json
+from tools.molt_endpoint_pool import EndpointPool
 from tools.run_molt_pilot import TaskClient, digest, make_record, now, row_data
 
 
@@ -311,9 +317,10 @@ async def score_method(name, record, client, feature):
     trial, reason = scoring_record(record, name)
     if trial is None:
         return dict(status="unavailable", reason=reason)
+    scoring_client = client("intruder" if name == "intruder" else "binary")
     if name == "intruder":
         score = await IntruderScorer(
-            client("intruder"), n_examples_shown=5, cot=False, seed=42 + feature
+            scoring_client, n_examples_shown=5, cot=False, seed=42 + feature
         )(trial)
         rows = [asdict(row) for row in score.score]
         valid = [r for r in rows if r["sample"] is not None]
@@ -330,11 +337,11 @@ async def score_method(name, record, client, feature):
     else:
         if name == "detection":
             scorer = DetectionScorer(
-                client("binary"), n_examples_shown=1, max_tokens=32
+                scoring_client, n_examples_shown=1, max_tokens=32
             )
         else:
             scorer = AuditedFuzzingScorer(
-                client("binary"),
+                scoring_client,
                 n_examples_shown=1,
                 max_tokens=32,
                 fuzz_type="active" if name == "active_fuzz" else "default",
@@ -343,11 +350,20 @@ async def score_method(name, record, client, feature):
         score = await scorer(trial)
         rows = [row_data(row) for row in score.score]
         metrics = binary_metrics(rows)
-    return dict(
+    result = dict(
         status="complete" if metrics["parse_failures"] == 0 else "incomplete",
         metrics=metrics,
         rows=rows,
     )
+    if scoring_client.discarded_requests:
+        result.update(
+            discarded_requests=scoring_client.discarded_requests,
+            reason=f"Requests discarded after at least {REQUEST_FAILURE_ATTEMPTS} consecutive model/answer failures",
+        )
+        # Other failures still need retries; only exhausted cases are terminal.
+        if metrics["parse_failures"] == len(scoring_client.discarded_requests):
+            result["status"] = "discarded"
+    return result
 
 
 async def main(args):
@@ -367,13 +383,21 @@ async def main(args):
             raise ValueError("Saved feature configuration mismatch")
         features[str(row["id"])] = compact_result(row)
     order = feature_order(manifest["selected"])
-    endpoint = (
-        None
-        if args.prepare_only
-        else Endpoint(
-            args.model, args.base_url, os.environ[args.api_key_env], 32, 10000
-        )
-    )
+    endpoint = None
+    if not args.prepare_only:
+        if args.endpoint_pool:
+            endpoint = EndpointPool(
+                args.model, json.loads(args.endpoint_pool), os.environ[args.api_key_env]
+            )
+        else:
+            endpoint = Endpoint(
+                args.model,
+                args.base_url,
+                os.environ[args.api_key_env],
+                32,
+                10000,
+                request_base_url=args.request_base_url,
+            )
     start = time.monotonic()
     last_save = 0
     phase = "prepared"
@@ -395,6 +419,9 @@ async def main(args):
                 state=state,
                 phase=phase,
                 updated_at=now(),
+                endpoint_url=endpoint.url if endpoint else None,
+                endpoint_urls=(getattr(endpoint, "urls", [endpoint.url]) if endpoint else []),
+                model_revision=os.environ.get("MOLT_SERVING_MODEL_REVISION"),
                 elapsed_seconds=time.monotonic() - start,
                 total=len(features),
                 observed=len(order),
@@ -444,22 +471,26 @@ async def main(args):
         )
         return
 
-    workers = asyncio.Semaphore(32)
+    workers = {
+        "explain": asyncio.Semaphore(endpoint.concurrency_limit),
+        "score": asyncio.Semaphore(max(32, (endpoint.concurrency_limit + 1) // 2)),
+    }
 
     async def feature_job(feature, stage):
-        async with workers:
+        async with workers[stage]:
             result = json.loads((output / "features" / f"{feature}.json").read_text())
-            if stage == "explain" and result.get("explanation") and result.get("title"):
+            if result["status"] in TERMINAL:
                 return
-            if stage == "score" and result["status"] in TERMINAL:
+            if stage == "explain" and result.get("explanation") and result.get("title"):
                 return
             samples = json.loads((output / "evidence" / f"{feature}.json").read_text())
             record = make_record(settings["layer"], feature, samples)
             audit = output / "audit" / f"{feature}.jsonl"
-            cache = load_response_cache(audit)
+            output_limits = RequestFailureBudget()
+            cache = load_response_cache(audit, output_limits=output_limits)
 
             def client(task):
-                return TaskClient(endpoint, task, audit, cache)
+                return TaskClient(endpoint, task, audit, cache, output_limits=output_limits)
 
             try:
                 if stage == "explain":
@@ -502,6 +533,7 @@ async def main(args):
                         if result["methods"].get(name, {}).get("status") in (
                             "complete",
                             "unavailable",
+                            "discarded",
                         ):
                             return
                         try:
@@ -527,6 +559,15 @@ async def main(args):
 
                     await asyncio.gather(*(evaluate(name) for name in METHODS))
                     result["status"] = result_status(result)
+                result.pop("error", None)
+                result.pop("error_message", None)
+            except RequestDiscarded as exc:
+                result.update(
+                    status="discarded",
+                    discarded_stage=stage,
+                    discarded_requests=[exc.record()],
+                    reason=str(exc),
+                )
                 result.pop("error", None)
                 result.pop("error_message", None)
             except Exception as exc:
@@ -581,7 +622,7 @@ async def main(args):
     finally:
         ticker.cancel()
         await asyncio.gather(ticker, return_exceptions=True)
-        await endpoint.client.aclose()
+        await endpoint.aclose()
     if not finished:
         raise RuntimeError(
             "Some layer methods remain incomplete; rerun to resume exact cached prompts"
@@ -593,7 +634,20 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=Path)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--base-url", default="https://geor.taild80f17.ts.net/v1")
+    parser.add_argument(
+        "--request-base-url",
+        default=os.environ.get("MOLT_REQUEST_BASE_URL"),
+        help=(
+            "Alternate serving address for the same model; preserve saved method "
+            "provenance and record the actual endpoint in each new audit response"
+        ),
+    )
     parser.add_argument("--model", default="qwen3.8-27b-nvfp4")
+    parser.add_argument(
+        "--endpoint-pool",
+        default=os.environ.get("MOLT_ENDPOINT_POOL"),
+        help="JSON list of same-model backends with base_url, concurrency, and optional name; replaces the single request address",
+    )
     parser.add_argument("--api-key-env", default="vLLM_API_KEY")
     parser.add_argument(
         "--method-reference",

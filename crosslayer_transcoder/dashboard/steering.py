@@ -68,14 +68,14 @@ def integer(value, name, minimum, maximum):
 
 
 class SteeringEngine:
-    def __init__(self, directory, device="cuda:0"):
+    def __init__(self, directory, device="cuda:0", shared_engine=None):
         self.directory = Path(directory)
         self.meta = json.loads((self.directory / "metadata.json").read_text())
         self.feature_stats = json.loads(
             (self.directory / "feature_stats.json").read_text()
         )
         self.device = device
-        self.lock = threading.Lock()
+        self.lock = shared_engine.lock if shared_engine is not None else threading.Lock()
         path = Path(self.meta["checkpoint"])
         if path.stat().st_mtime != self.meta["checkpoint_mtime"]:
             raise ValueError("Checkpoint changed since dashboard collection")
@@ -92,6 +92,13 @@ class SteeringEngine:
                 "Steering supports this Qwen3 pre_norm-to-raw configuration only"
             )
         self.gates = MoltGates(self.state, self.layer).to(device).eval()
+        if shared_engine is not None:
+            if self.meta["model"] != shared_engine.meta["model"] or device != shared_engine.device:
+                raise ValueError("Steering layers must share the same model and device")
+            self.tokenizer = shared_engine.tokenizer
+            self.model = shared_engine.model
+            self.eos_ids = shared_engine.eos_ids
+            return
         self.tokenizer = AutoTokenizer.from_pretrained(self.meta["model"])
         self.model = (
             AutoModelForCausalLM.from_pretrained(

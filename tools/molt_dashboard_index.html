@@ -59,6 +59,8 @@ iframe{display:block;width:100%;height:1000px;border:0;background:white}
 <label><input id="binary" type="checkbox"> Binary activation</label>
 <a id="direct" target="_blank" rel="noopener">Open feature page</a>
 <a id="steer-link">Steer this transform →</a>
+<a id="tool-playground-link" href="/tools">Tool playground</a>
+<a href="http://100.76.58.1:8766/trajectories/">Agent trajectories</a>
 <a id="layer-review" hidden>All explanations &amp; scores</a>
 <a href="/layers/" id="layers-link">All layers</a>
 </div>
@@ -101,7 +103,7 @@ const reviewRoot=META.layer_review_url||'autointerp-layer/';
 const statusLabels={complete:'Scoring complete',limited_evidence:'Limited evidence',not_observed:'Not observed in this sample',incomplete:'Scoring incomplete',scoring:'Scoring in progress',ready_to_score:'Scores pending',explaining:'Explanation in progress',error:'Explanation or scoring needs attention',explained:'Explanation available'};
 document.title=`MOLT · Layer ${META.layer} transform gates`;
 document.querySelector('h1').textContent=`${META.model.split('/').pop()} · Layer ${META.layer} transform gates`;
-el('steer-link').hidden=META.layer!==22;
+el('steer-link').hidden=![22,29].includes(META.layer);el('tool-playground-link').hidden=META.layer!==22;
 el('layers-link').hidden=location.protocol==='file:';
 if(META.has_logit_projections===false)document.querySelector('.note').textContent='One transform = one feature. Highlight intensity shows its scalar gate. Binary mode shows whether it fired.';
 const baseSummary=`${META.n_features.toLocaleString()} transforms · step ${META.global_step.toLocaleString()} · ${META.tokens.toLocaleString()} held-out tokens · ${META.conversations.toLocaleString()} UltraChat conversations · sample L0 ${META.sample_l0.toFixed(3)}`;
@@ -170,7 +172,7 @@ function show(id){
  const changed=selected!==id;selected=id;history.replaceState(null,'','#'+id);
  const url=`features/${id}.html`+(el('binary').checked?'?binary=1':'');
  if(el('view').getAttribute('src')!==url){frameObserver?.disconnect();el('view').style.height='1000px';el('view').src=url}
- el('direct').href=url;el('steer-link').href='/steer?feature='+id;
+ el('direct').href=url;el('steer-link').href='/steer?layer='+META.layer+'&feature='+id;el('tool-playground-link').href='/tools?feature='+id;
  if(changed)el('workspace').scrollTop=0;
  list();details();
 }
@@ -203,5 +205,6 @@ async function refreshAnnotations(){
 show(selected);
 if(location.protocol!=='file:'){refreshAnnotations();setInterval(refreshAnnotations,30000)}else{syncMessage='Saved explanations and scores';details()}
 </script>
+<script src="assets/molt-corrected-run.js" defer></script>
 </body>
 </html>
