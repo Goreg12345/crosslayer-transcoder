@@ -135,6 +135,14 @@ This preserves the original Qwen MLP output and the MOLT reconstruction error. I
 
 The backend runs all subsequent Qwen layers with the intervention and maintains the altered KV cache during decoding. **What changed** shows requested gate changes, raw-vector norms, and actual first-response-token logits through all downstream layers. Those measurements differ from the feature explorer's frozen-normalization direct projections. Once completions diverge, their later token contexts differ; the UI therefore reports a paired logit comparison only for the first prediction.
 
+### Token identities in the intervention audit
+
+The **Applied gates and output changes** table includes a **Token** column beside the input position. Hovering it shows the vocabulary ID. Spaces, newlines and tabs are displayed as dots and arrows. Trace records exported in experiment JSON include `token_id` and `token_text` from the exact consumed prompt or generated token. These labels describe the token where the edit acts; its effect is on subsequent predictions. Older results without token metadata display a dash.
+
+![The Token column identifies prompt and generated tokens beside the intervention positions.](images/molt-token-column.png)
+
+UI preview using recorded benign example data; no live inference is needed for the screenshot.
+
 API: `POST /api/inspect`, `POST /api/generate`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`. Generation requests include the tokenization fingerprint returned by inspection, the transform ID, mode, strength reference, token assignments and optional generated range. Inputs are limited to 2,048 tokens without silent truncation; outputs to 256 tokens. Browser POSTs must use same-origin JSON. Completed jobs are kept only in memory, with the most recent 16 retained.
 
 Validation covers exact zero-addition generation, gate units, prompt-position isolation, generated-position alignment, hook cleanup, and the previous gate/logit calculations. Live Qwen tests additionally confirmed that `2×` the active-mean reference on a naturally closed transform changes final logits, while zero addition reproduces baseline token IDs and logits exactly.
