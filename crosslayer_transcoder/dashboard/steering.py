@@ -386,6 +386,15 @@ class SteeringEngine:
                     break
                 cursor[0] += ids.shape[1]
                 ids, cache = next_token, out.past_key_values
+        for entry in trace:
+            position = entry["position"]
+            token_id = (
+                config["ids"][position]
+                if position < len(config["ids"])
+                else produced[position - len(config["ids"])]
+            )
+            entry["token_id"] = token_id
+            entry["token_text"] = self.tokenizer.decode([token_id])
         return {
             "text": self.tokenizer.decode(produced, skip_special_tokens=True),
             "token_ids": produced,
