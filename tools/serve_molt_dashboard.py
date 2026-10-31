@@ -149,6 +149,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(
                 {
                     "ready": True,
+                    "signed_steering": True,
                     "busy": engine.lock.locked(),
                     "model": engine.meta["model"],
                     "layer": engine.layer,

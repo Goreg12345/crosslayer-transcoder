@@ -14,11 +14,12 @@ from crosslayer_transcoder.dashboard.gates import MoltGates
 from crosslayer_transcoder.dashboard.logits import transform_contribution
 
 
-def target_gate(natural, amount, mode):
+def target_gate(natural, amount, mode, allow_negative=False):
     if mode == "set":
         return torch.full_like(natural, amount)
     if mode == "add":
-        return (natural + amount).clamp_min(0)
+        target = natural + amount
+        return target if allow_negative else target.clamp_min(0)
     if mode == "multiply":
         return natural * amount
     raise ValueError("Unknown gate mode")
@@ -161,11 +162,14 @@ class SteeringEngine:
         mode = body.get("mode", "set")
         if mode not in ("set", "add", "multiply"):
             raise ValueError("Gate mode must be set, add, or multiply")
+        allow_negative = body.get("allow_negative", False)
+        if not isinstance(allow_negative, bool):
+            raise ValueError("allow_negative must be a boolean")
         reference = body.get("strength_reference", "raw")
         scale = reference_scale(
             mode, reference, self.feature_stats[feature]["mean_active"]
         )
-        minimum = -100 if mode == "add" else 0
+        minimum = -100 if mode == "add" or allow_negative else 0
         rows = body.get("assignments", [])
         if not isinstance(rows, list) or len(rows) > len(tokenized["ids"]):
             raise ValueError("Invalid prompt-token assignments")
@@ -203,6 +207,7 @@ class SteeringEngine:
             ids=tokenized["ids"],
             feature=feature,
             mode=mode,
+            allow_negative=allow_negative,
             strength_reference="natural" if mode == "multiply" else reference,
             reference_scale=scale,
             assignments=assignments,
@@ -292,7 +297,8 @@ class SteeringEngine:
             natural = self.natural_gate(selected, feature)
             target = torch.stack(
                 [
-                    target_gate(natural[i], amount, config["mode"])
+                    target_gate(natural[i], amount, config["mode"],
+                                allow_negative=config.get("allow_negative", False))
                     for i, amount in enumerate(amounts)
                 ]
             )
