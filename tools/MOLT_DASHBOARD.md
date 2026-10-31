@@ -124,6 +124,16 @@ Strength semantics:
 - **Multiply**: `1×` preserves the natural gate at this token, `2×` doubles it, and `0×` suppresses it. Multiplication cannot open a zero gate.
 - Set/add also support **raw gate units**. Transforms never observed active require raw units because no active-mean reference is available.
 
+### Signed gate targets
+
+Enable **Allow negative gates** to use negative Set/Multiply strengths or let Add cross below zero, for either selected input tokens or the generated-token range. The API option is `allow_negative: true`; it defaults to `false`, preserving nonnegative targets and the existing additive clamp. Raw units and the mean-active reference both support signed strengths.
+
+A negative gate reverses the estimated transform contribution. Multiply by -1 reverses an active contribution at the same magnitude; a naturally closed gate remains closed under Multiply. A reversed contribution does not guarantee an opposite semantic behavior.
+
+![The opt-in checkbox with a signed Set target of -1.](images/molt-negative-gates.png)
+
+UI preview using recorded benign example data; no live inference is needed for the screenshot.
+
 For each selected input position, the backend computes:
 
 ```
