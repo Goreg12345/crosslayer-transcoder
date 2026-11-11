@@ -17,7 +17,7 @@ We want to understand the “brain” of LLMs: what their representations encode
 - ✅ Crosslayer Transcoder (CLT)
 - ✅ Sparse Mixture of Linear Transforms (MOLT)
 - ⏳ Matryoshka CLTs
-- ⏳ SAEs (by tweaking the activation data extractor)
+- ✅ SAEs (matching activation locations, including individual attention heads; see [configuration](crosslayer_transcoder/data/README.md#activation-locations-and-per-head-saes))
 
 ### Nonlinearities and Loss Functions
 - ✅ ReLU and JumpReLU (via straight-through estimators)

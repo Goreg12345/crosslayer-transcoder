@@ -46,6 +46,8 @@ class ActivationComputer(ActivationSource):
     Pure computation - takes model + tokens, returns activations.
     """
 
+    HEAD_LOCATIONS = ("query", "key", "value", "head_output")
+
     def __init__(
         self,
         n_layers: int,
@@ -56,18 +58,24 @@ class ActivationComputer(ActivationSource):
         layer: Optional[int] = None,
     ):
         self.n_layers = n_layers
-        self.layers = range(n_layers) if layer is None else [layer]
-        if layer is not None and (n_layers != 1 or layer < 0):
+        per_head = any(location in self.HEAD_LOCATIONS for location in (input_location, output_location))
+        # In head mode n_layers counts (layer, head) slots, not transformer blocks.
+        self.layers = (None if per_head else range(n_layers)) if layer is None else [layer]
+        if layer is not None and (layer < 0 or (n_layers != 1 and not per_head)):
             raise ValueError("Single-layer extraction requires n_layers=1 and layer>=0")
         if model_arch not in ("gpt2", "gemma3", "qwen3"):
             raise ValueError(
                 f"Unsupported model_arch {model_arch!r}; expected 'gpt2', 'gemma3', or 'qwen3'"
             )
         self.model_arch = model_arch
-        if input_location not in ("pre_norm", "post_norm"):
-            raise ValueError("input_location must be 'pre_norm' or 'post_norm'")
-        if output_location not in ("raw", "post_norm"):
-            raise ValueError("output_location must be 'raw' or 'post_norm'")
+        for location in (input_location, output_location):
+            if location not in (
+                "pre_norm", "post_norm", "raw", *self.HEAD_LOCATIONS, "input", "output"
+            ) and not location.endswith((".input", ".output")):
+                raise ValueError(
+                    f"Invalid activation location {location!r}; use a module path "
+                    "ending in .input/.output or a named location"
+                )
         if model_arch == "gpt2" and output_location == "post_norm":
             # GPT-2 has no post-MLP norm, so these locations coincide.
             output_location = "raw"
@@ -86,36 +94,57 @@ class ActivationComputer(ActivationSource):
             self._gemma3_multimodal = hasattr(underlying, "language_model")
         return self._gemma3_multimodal
 
-    def _layer_handles(self, model: Any, layer_index: int):
+    def _layer_modules(self, model: Any):
         if self.model_arch == "gpt2":
-            layer = model.transformer.h[layer_index]
-            mlp_in = layer.ln_2.input if self.input_location == "pre_norm" else layer.ln_2.output
-            return mlp_in, layer.mlp.output
-
+            return model.transformer.h
         if self.model_arch == "qwen3":
-            layer = model.model.layers[layer_index]
-            mlp_in = (
-                layer.post_attention_layernorm.input
-                if self.input_location == "pre_norm"
-                else layer.post_attention_layernorm.output
-            )
-            return mlp_in, layer.mlp.output
-
+            return model.model.layers
         if self._detect_gemma3_layout(model):
-            layer = model.model.language_model.layers[layer_index]
-        else:
-            layer = model.model.layers[layer_index]
-        mlp_in = (
-            layer.pre_feedforward_layernorm.input
-            if self.input_location == "pre_norm"
-            else layer.pre_feedforward_layernorm.output
+            return model.model.language_model.layers
+        return model.model.layers
+
+    def _location_handle(self, layer: Any, location: str, *, output: bool = False):
+        if location in self.HEAD_LOCATIONS:
+            attention = layer.attn if self.model_arch == "gpt2" else layer.self_attn
+            if location == "head_output":
+                return (attention.c_proj if self.model_arch == "gpt2" else attention.o_proj).input
+            if self.model_arch == "gpt2":
+                return attention.c_attn.output  # Fused QKV; split after tracing.
+            projection = {"query": "q_proj", "key": "k_proj", "value": "v_proj"}[location]
+            return getattr(attention, projection).output
+
+        norm = {
+            "gpt2": "ln_2", "qwen3": "post_attention_layernorm", "gemma3": "pre_feedforward_layernorm"
+        }[self.model_arch]
+        # Keep the existing side-specific aliases for backwards compatibility.
+        aliases = {"pre_norm": f"{norm}.input", "post_norm": f"{norm}.output", "raw": "mlp.output"}
+        if output:
+            aliases["post_norm"] = (
+                "post_feedforward_layernorm.output" if self.model_arch == "gemma3" else "mlp.output"
+            )
+        handle = layer
+        for part in aliases.get(location, location).split("."):
+            handle = handle[int(part)] if part.isdecimal() else getattr(handle, part)
+        return handle
+
+    def _layer_handles(self, model: Any, layer_index: int):
+        layer = self._layer_modules(model)[layer_index]
+        return (
+            self._location_handle(layer, self.input_location),
+            self._location_handle(layer, self.output_location, output=True),
         )
-        mlp_out = (
-            layer.mlp.output
-            if self.output_location == "raw"
-            else layer.post_feedforward_layernorm.output
-        )
-        return mlp_in, mlp_out
+
+    def _activation_slots(self, activation: torch.Tensor, layer: Any, location: str) -> torch.Tensor:
+        if isinstance(activation, (tuple, list)):
+            activation = activation[0]
+        if location in self.HEAD_LOCATIONS:
+            attention = layer.attn if self.model_arch == "gpt2" else layer.self_attn
+            if self.model_arch == "gpt2" and location != "head_output":
+                activation = activation.chunk(3, dim=-1)[self.HEAD_LOCATIONS.index(location)]
+            return einops.rearrange(
+                activation, "batch seq (head dim) -> head batch seq dim", dim=attention.head_dim
+            )
+        return activation.unsqueeze(0)
 
     def get_next_batch(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -134,8 +163,7 @@ class ActivationComputer(ActivationSource):
     @torch.no_grad()
     def _extract_activations(self, model: Any, tokens: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
-        Extract MLP input/output activations using nnsight tracing.
-        Save only the requested layers.
+        Extract the selected locations. Attention heads occupy independent layer slots.
 
         Args:
             model: nnsight LanguageModel to run inference on
@@ -145,20 +173,32 @@ class ActivationComputer(ActivationSource):
         Returns:
             Activations tensor [samples, in/out, n_layer, d_model]
         """
-        mlp_ins = []
-        mlp_outs = []
+        inputs, outputs = [], []
+        layers = self._layer_modules(model)
+        layer_indices = range(len(layers)) if self.layers is None else self.layers
         with model.trace(tokens) as tracer:
 
-            for i in self.layers:
-                mlp_in, mlp_out = self._layer_handles(model, i)
-                mlp_ins.append(mlp_in.save())
-                mlp_outs.append(mlp_out.save())
+            for i in layer_indices:
+                act_in, act_out = self._layer_handles(model, i)
+                inputs.append(act_in.save())
+                outputs.append(act_out.save())
 
-        mlp_ins = torch.stack(mlp_ins, dim=0)
-        mlp_outs = torch.stack(mlp_outs, dim=0)
+        inputs = torch.cat([
+            self._activation_slots(act, layers[i], self.input_location) for i, act in zip(layer_indices, inputs)
+        ])
+        outputs = torch.cat([
+            self._activation_slots(act, layers[i], self.output_location) for i, act in zip(layer_indices, outputs)
+        ])
+        if inputs.shape != outputs.shape or inputs.shape[0] != self.n_layers:
+            raise ValueError(
+                f"Activation locations must have matching shapes and n_layers={self.n_layers} slots; "
+                f"got input {tuple(inputs.shape)} and output {tuple(outputs.shape)}. "
+                "For head locations set n_layers to selected transformer layers * heads "
+                "(Q/K/V head counts may differ with grouped-query attention)."
+            )
 
         mlp_acts = einops.rearrange(
-            [mlp_ins, mlp_outs], "iO n_layer batch seq d_model -> (batch seq) iO n_layer d_model"
+            [inputs, outputs], "iO n_layer batch seq d_model -> (batch seq) iO n_layer d_model"
         )
         mask = einops.rearrange(mask, "batch seq -> (batch seq)").bool()
         mlp_acts = mlp_acts[mask]

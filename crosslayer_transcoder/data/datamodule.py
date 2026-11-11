@@ -10,6 +10,7 @@ from typing import Optional
 import lightning as L
 import torch
 
+from crosslayer_transcoder.data.activation_sources import ActivationComputer
 from crosslayer_transcoder.data.data_generator import DataGeneratorProcess
 from crosslayer_transcoder.data.deployment_policy import DeploymentPolicy
 from crosslayer_transcoder.data.shared_memory import SharedActivationBuffer
@@ -78,7 +79,7 @@ class ActivationDataModule(L.LightningDataModule):
             # Buffer settings
             buffer_size: Number of activation samples in buffer
             n_in_out: Number of input/output activations per layer (usually 2)
-            n_layers: Number of stored layers; use 1 with activation_layer
+            n_layers: Number of stored slots (layers, or layer/head pairs for head locations)
             activation_layer: Extract only this model layer when set
             activation_dim: Dimension of activation vectors
             dtype: Data type ("float16" or "float32")
@@ -170,7 +171,11 @@ class ActivationDataModule(L.LightningDataModule):
         self.activation_output_location = activation_output_location
         self.zero_activation_dimensions = zero_activation_dimensions or []
         self.activation_layer = activation_layer
-        if activation_layer is not None and (n_layers != 1 or activation_layer < 0):
+        per_head = any(
+            location in ActivationComputer.HEAD_LOCATIONS
+            for location in (activation_input_location, activation_output_location)
+        )
+        if activation_layer is not None and (activation_layer < 0 or (n_layers != 1 and not per_head)):
             raise ValueError("Single-layer extraction requires n_layers=1 and activation_layer>=0")
 
         # WandB configuration

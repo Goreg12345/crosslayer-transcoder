@@ -19,6 +19,51 @@ Earlier versions inserted BOS after tokenization. Evaluations of checkpoints
 trained with that version need to reproduce the old preprocessing explicitly;
 new activation generation uses the native tokenizer output.
 
+## Activation locations and per-head SAEs
+
+`activation_input_location` and `activation_output_location` accept module paths
+relative to each transformer block, ending in `.input` or `.output` (for example,
+`mlp.input`, `mlp.output`, or GPT-2's `ln_2.output`). `input` and `output` select
+the block itself; tuple outputs use their first element. Set both to the same
+path to train an SAE. The existing `pre_norm`, `post_norm`, and `raw` aliases
+retain their side-specific meanings; use explicit paths for identical locations.
+
+The named locations `query`, `key`, `value`, and `head_output` automatically
+split attention vectors into individual heads on GPT-2, Qwen3, and Gemma3.
+Q/K/V are projection outputs **before Q/K normalization and rotary embeddings**;
+`head_output` is the weighted-value vector entering the attention output
+projection. Grouped-query attention uses the actual K/V head count, without
+repeating K/V heads to match query heads.
+
+For example, these data settings train query-head SAEs across all GPT-2 small layers:
+
+```yaml
+data:
+  class_path: crosslayer_transcoder.data.datamodule.ActivationDataModule
+  init_args:
+    model_name: openai-community/gpt2
+    activation_layer: null
+    activation_input_location: query
+    activation_output_location: query
+    n_layers: 144  # 12 transformer layers * 12 heads
+    activation_dim: 64
+```
+
+Each `(transformer layer, head)` occupies a separate slot on the existing
+`n_layers` axis, ordered by layer then head. Set `n_layers` to the total slot
+count and `activation_dim` to the head dimension. Omitting `activation_layer`
+extracts **all transformer blocks** in head mode (GPT-2 small: 144 slots of
+dimension 64). Inputs and targets must have matching slot counts and dimensions.
+To restrict extraction to block 6, set `activation_layer: 6` and `n_layers: 12`.
+
+Use `crosslayer_transcoder.model.clt.Decoder` for independent dictionaries,
+with the same slot count and dimension in the encoder, decoder, and standardizers.
+For BatchTopK, use `PerLayerBatchTopK(k=..., e=0.01, n_layers=...)` to give each
+head its own sparsity budget and inference threshold. The existing
+`TopKCrossLayerTranscoderModule` supplies the reconstruction and auxiliary losses.
+Set `replacement_model: null`: the existing MLP replacement metric needs a
+different intervention for SAE evaluation.
+
 ## Quick Start
 
 ### Basic Usage
