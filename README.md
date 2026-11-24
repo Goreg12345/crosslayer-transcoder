@@ -82,15 +82,16 @@ You can customize almost everything: datasets and activation extraction, model a
 ### Examples
 
 ```bash
-# Train with a config file
-python main.py fit --config ./config/default.yaml
+# Train with a config file (`clt` is the entry point installed by setup.sh;
+# equivalently: python -m crosslayer_transcoder.main fit ...)
+uv run clt fit --config ./config/default.yaml
 
 # Override anything at runtime (examples)
-python main.py fit --config ./config/default.yaml \
+uv run clt fit --config ./config/default.yaml \
   --trainer.max_epochs=10 \
   --data.num_workers=8 \
-  --model.nonlinearity=topk \
-  --model.num_features=32768
+  --model.learning_rate=5e-4 \
+  --model.lambda_sparsity=0.0004
 ```
 
 You can also switch components by editing the YAML to point to different classes and init args. A minimal schematic (names are illustrative):
